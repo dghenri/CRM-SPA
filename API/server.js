@@ -1008,6 +1008,42 @@ function serializeCoupon(coupon) {
   return { ...coupon, status: getCouponStatus(coupon) };
 }
 
+// confere se o cupom vale pra essa compra específica (applicable_to). Usado
+// tanto na pré-validação do bookingflow (/coupons/validate) quanto na hora
+// de aplicar de fato (/coupons/apply), pra manter as duas em sincronia.
+async function checkCouponScope(coupon, { userId, serviceId }) {
+  if (coupon.scope === "SpecificServices" && (!serviceId || !coupon.serviceIds.includes(serviceId))) {
+    return "Este cupom não é válido para o serviço selecionado.";
+  }
+
+  if (coupon.scope === "Category") {
+    const service = serviceId ? await prisma.service.findUnique({ where: { id: serviceId } }) : null;
+    if (!service || service.category !== coupon.category) {
+      return "Este cupom não é válido para essa categoria de serviço.";
+    }
+  }
+
+  if (coupon.scope === "FirstPurchase") {
+    const priorAppointments = await prisma.appointment.count({
+      where: { customerId: userId, status: "Completed" },
+    });
+    if (priorAppointments > 0) {
+      return "Este cupom vale só na primeira compra.";
+    }
+  }
+
+  return null;
+}
+
+function computeCouponDiscount(coupon, purchaseAmount) {
+  const amount = Number(purchaseAmount) || 0;
+  let discountAmount = coupon.discountType === "Percentage"
+    ? (amount * coupon.discountValue) / 100
+    : coupon.discountValue;
+  if (coupon.maxDiscount) discountAmount = Math.min(discountAmount, coupon.maxDiscount);
+  return discountAmount;
+}
+
 //------------------------------------------------------------- POST ROUTE (equipe cria um cupom)
 app.post('/coupons', authenticateToken, requireStaff, async (req, res) => {
   try {
@@ -1164,22 +1200,33 @@ app.get('/coupons/me', authenticateToken, requireUser, async (req, res) => {
   try {
     const now = new Date();
 
+    // só entram aqui cupons pessoais (userId = eu) ou que eu já resgatei pra
+    // carteira em algum momento — um cupom público não some do banco, mas só
+    // aparece pro cliente depois que ele digita o código em "Resgatar"
     const coupons = await prisma.coupon.findMany({
       where: {
         archivedAt: null,
-        OR: [{ userId: null }, { userId: req.user.id }],
+        OR: [
+          { userId: req.user.id },
+          { redemptions: { some: { userId: req.user.id } } },
+        ],
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    // conta, pra cada cupom, quantas vezes ESSE cliente já usou (perUserLimit)
-    const myRedemptionCounts = await prisma.couponRedemption.groupBy({
+    // conta, pra cada cupom, quantas vezes ESSE cliente já USOU de fato
+    // (usedAt preenchido) — resgate/claim sozinho não consome o limite
+    const myUsageCounts = await prisma.couponRedemption.groupBy({
       by: ['couponId'],
-      where: { userId: req.user.id, couponId: { in: coupons.map((c) => c.id) } },
+      where: {
+        userId: req.user.id,
+        usedAt: { not: null },
+        couponId: { in: coupons.map((c) => c.id) },
+      },
       _count: { _all: true },
     });
     const usageByCoupon = Object.fromEntries(
-      myRedemptionCounts.map((r) => [r.couponId, r._count._all])
+      myUsageCounts.map((r) => [r.couponId, r._count._all])
     );
 
     const withStatus = coupons.map((c) => ({
@@ -1199,22 +1246,22 @@ app.get('/coupons/me', authenticateToken, requireUser, async (req, res) => {
 app.get('/coupons/me/redemptions', authenticateToken, requireUser, async (req, res) => {
   try {
     const redemptions = await prisma.couponRedemption.findMany({
-      where: { userId: req.user.id },
+      where: { userId: req.user.id, usedAt: { not: null } },
       include: { coupon: true },
       orderBy: { usedAt: 'desc' },
     });
 
-    res.json(redemptions);
+    res.json(redemptions.map((r) => ({ ...r, coupon: serializeCoupon(r.coupon) })));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Erro ao buscar cupons usados." });
   }
 });
 
-//------------------------------------------------------------- POST ROUTE (cliente valida/resgata um cupom pelo código)
+//------------------------------------------------------------- POST ROUTE (cliente resgata um cupom pelo código - só adiciona à carteira, não consome uso)
 app.post('/coupons/redeem', authenticateToken, requireUser, async (req, res) => {
   try {
-    const { code, purchaseAmount, appointmentId, serviceId } = req.body;
+    const { code } = req.body;
 
     const coupon = await prisma.coupon.findUnique({ where: { code: code?.trim().toUpperCase() } });
 
@@ -1222,73 +1269,137 @@ app.post('/coupons/redeem', authenticateToken, requireUser, async (req, res) => 
       return res.status(404).json({ error: "Cupom não encontrado." });
     }
 
-    // applicable_to: confere se o cupom vale pra essa compra específica
-    if (coupon.scope === "SpecificServices" && (!serviceId || !coupon.serviceIds.includes(serviceId))) {
-      return res.status(400).json({ error: "Este cupom não é válido para o serviço selecionado." });
+    if (getCouponStatus(coupon) !== "active") {
+      return res.status(400).json({ error: "Este cupom não está disponível para uso." });
     }
 
-    if (coupon.scope === "Category") {
-      const service = serviceId ? await prisma.service.findUnique({ where: { id: serviceId } }) : null;
-      if (!service || service.category !== coupon.category) {
-        return res.status(400).json({ error: "Este cupom não é válido para essa categoria de serviço." });
-      }
-    }
-
-    if (coupon.scope === "FirstPurchase") {
-      const priorAppointments = await prisma.appointment.count({
-        where: { customerId: req.user.id, status: "Completed" },
+    if (coupon.perUserLimit) {
+      const timesClaimedByUser = await prisma.couponRedemption.count({
+        where: { couponId: coupon.id, userId: req.user.id },
       });
-      if (priorAppointments > 0) {
-        return res.status(400).json({ error: "Este cupom vale só na primeira compra." });
+      if (timesClaimedByUser >= coupon.perUserLimit) {
+        return res.status(400).json({ error: "Você já atingiu o limite de uso deste cupom." });
       }
+    }
+
+    // "resgatar" só guarda o cupom na carteira do cliente (usedAt fica vazio).
+    // Ele só entra pro limite global de usos e vira "usado" quando é de fato
+    // aplicado num agendamento, através de /coupons/apply.
+    const redemption = await prisma.couponRedemption.create({
+      data: {
+        coupon: { connect: { id: coupon.id } },
+        user: { connect: { id: req.user.id } },
+      },
+      include: { coupon: true },
+    });
+
+    res.status(200).json(redemption);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro ao resgatar cupom." });
+  }
+});
+
+//------------------------------------------------------------- POST ROUTE (pré-valida um cupom já resgatado contra o serviço escolhido no bookingflow, sem consumir)
+app.post('/coupons/validate', authenticateToken, requireUser, async (req, res) => {
+  try {
+    const { code, serviceId, purchaseAmount } = req.body;
+
+    const coupon = await prisma.coupon.findUnique({ where: { code: code?.trim().toUpperCase() } });
+    if (!coupon || (coupon.userId && coupon.userId !== req.user.id)) {
+      return res.status(404).json({ error: "Cupom não encontrado." });
+    }
+
+    // precisa ter sido resgatado antes (carteira) e ainda não ter sido aplicado
+    const redemption = await prisma.couponRedemption.findFirst({
+      where: { couponId: coupon.id, userId: req.user.id, usedAt: null },
+      orderBy: { claimedAt: 'asc' },
+    });
+    if (!redemption) {
+      return res.status(400).json({ error: "Resgate este cupom na aba Cupons antes de usá-lo." });
     }
 
     if (getCouponStatus(coupon) !== "active") {
-      return res.status(400).json({ error: "Este cupom não está disponível para uso." });
+      return res.status(400).json({ error: "Este cupom não está mais disponível." });
     }
 
     if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit) {
       return res.status(400).json({ error: "Este cupom atingiu o limite de usos." });
     }
 
+    const scopeError = await checkCouponScope(coupon, { userId: req.user.id, serviceId });
+    if (scopeError) return res.status(400).json({ error: scopeError });
+
     if (coupon.minPurchase && (!purchaseAmount || purchaseAmount < coupon.minPurchase)) {
       return res.status(400).json({ error: `Valor mínimo de R$ ${coupon.minPurchase.toFixed(2)} para usar este cupom.` });
     }
 
-    if (coupon.perUserLimit) {
-      const timesUsedByUser = await prisma.couponRedemption.count({
-        where: { couponId: coupon.id, userId: req.user.id },
-      });
-      if (timesUsedByUser >= coupon.perUserLimit) {
-        return res.status(400).json({ error: "Você já atingiu o limite de uso deste cupom." });
-      }
+    res.json({
+      redemptionId: redemption.id,
+      coupon,
+      discountAmount: computeCouponDiscount(coupon, purchaseAmount),
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro ao validar cupom." });
+  }
+});
+
+//------------------------------------------------------------- POST ROUTE (aplica de fato um cupom já resgatado a um agendamento - só aqui conta como usado)
+app.post('/coupons/apply', authenticateToken, requireUser, async (req, res) => {
+  try {
+    const { redemptionId, serviceId, purchaseAmount, appointmentId } = req.body;
+
+    const redemption = await prisma.couponRedemption.findUnique({
+      where: { id: redemptionId },
+      include: { coupon: true },
+    });
+
+    if (!redemption || redemption.userId !== req.user.id) {
+      return res.status(404).json({ error: "Cupom não encontrado." });
+    }
+    if (redemption.usedAt) {
+      return res.status(400).json({ error: "Este cupom já foi utilizado." });
     }
 
-    const amount = Number(purchaseAmount) || 0;
-    let discountAmount = coupon.discountType === "Percentage"
-      ? (amount * coupon.discountValue) / 100
-      : coupon.discountValue;
-    if (coupon.maxDiscount) discountAmount = Math.min(discountAmount, coupon.maxDiscount);
+    const { coupon } = redemption;
 
-    const [, redemption] = await prisma.$transaction([
+    if (getCouponStatus(coupon) !== "active") {
+      return res.status(400).json({ error: "Este cupom não está mais disponível." });
+    }
+    if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit) {
+      return res.status(400).json({ error: "Este cupom atingiu o limite de usos." });
+    }
+
+    const scopeError = await checkCouponScope(coupon, { userId: req.user.id, serviceId });
+    if (scopeError) return res.status(400).json({ error: scopeError });
+
+    if (coupon.minPurchase && (!purchaseAmount || purchaseAmount < coupon.minPurchase)) {
+      return res.status(400).json({ error: `Valor mínimo de R$ ${coupon.minPurchase.toFixed(2)} para usar este cupom.` });
+    }
+
+    const discountAmount = computeCouponDiscount(coupon, purchaseAmount);
+
+    const [, updatedRedemption] = await prisma.$transaction([
       prisma.coupon.update({
         where: { id: coupon.id },
         data: { usageCount: { increment: 1 } },
       }),
-      prisma.couponRedemption.create({
+      prisma.couponRedemption.update({
+        where: { id: redemption.id },
         data: {
-          coupon: { connect: { id: coupon.id } },
-          user: { connect: { id: req.user.id } },
-          appointment: appointmentId ? { connect: { id: appointmentId } } : undefined,
+          usedAt: new Date(),
           discountAmount,
+          appointment: appointmentId ? { connect: { id: appointmentId } } : undefined,
         },
+        include: { coupon: true },
       }),
     ]);
 
-    res.status(200).json(redemption);
+    res.status(200).json(updatedRedemption);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Erro ao resgatar cupom." });
+    res.status(500).json({ error: "Erro ao aplicar cupom." });
   }
 });
 

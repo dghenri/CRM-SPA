@@ -40,9 +40,18 @@ export default function SchedulingNewPage() {
       }
 
       toast("Agendamento realizado!", {
-        description: `${flow.selectedService.title} · ${flow.formattedDate} às ${flow.selectedSlot.label}.`,
+        description: result.discountAmount
+          ? `${flow.selectedService.title} · ${flow.formattedDate} às ${flow.selectedSlot.label} · cupom aplicado (-${result.discountAmount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}).`
+          : `${flow.selectedService.title} · ${flow.formattedDate} às ${flow.selectedSlot.label}.`,
         variant: "success",
       });
+
+      if (result.couponFailed) {
+        toast("O cupom não pôde ser aplicado", {
+          description: "Seu agendamento foi confirmado normalmente.",
+          variant: "danger",
+        });
+      }
 
       navigate("/user/scheduling", { replace: true });
     } catch (err) {

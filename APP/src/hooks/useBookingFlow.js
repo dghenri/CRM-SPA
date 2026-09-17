@@ -90,6 +90,15 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
   const [confirmedAppointment, setConfirmedAppointment] = useState(null); // guarda o agendamento criado (com o código confirmado pelo back-end)
   const [bookingCode, setBookingCode] = useState(null); // código de 6 letras já mostrado no resumo, antes de confirmar
 
+  // Cupom: primeiro é validado (/coupons/validate, não consome nada) contra o
+  // serviço escolhido; só é de fato consumido (/coupons/apply) quando o
+  // agendamento é confirmado. O cupom precisa ter sido resgatado antes na
+  // aba Cupons - aqui só reaproveitamos o resgate que já está na carteira.
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState(null); // { redemptionId, coupon, discountAmount }
+  const [couponError, setCouponError] = useState("");
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+
   const minDate = today(getLocalTimeZone());
 
   // carrega os procedimentos disponíveis pro dropdown
@@ -183,6 +192,36 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
     setBusyWindows([]);
     setBookingCode(null);
     setConfirmedAppointment(null);
+    setCouponCode("");
+    setAppliedCoupon(null);
+    setCouponError("");
+  }
+
+  /** Valida (sem consumir) o cupom digitado contra o serviço escolhido. */
+  async function applyCoupon() {
+    if (!couponCode.trim() || !selectedService) return;
+
+    setIsApplyingCoupon(true);
+    setCouponError("");
+    try {
+      const result = await api.post("/coupons/validate", {
+        code: couponCode.trim().toUpperCase(),
+        serviceId: selectedService.id,
+        purchaseAmount: selectedService.price,
+      });
+      setAppliedCoupon(result);
+    } catch (err) {
+      setAppliedCoupon(null);
+      setCouponError(err.message || "Não foi possível aplicar esse cupom.");
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  }
+
+  function removeCoupon() {
+    setAppliedCoupon(null);
+    setCouponCode("");
+    setCouponError("");
   }
 
   /** Passo 1 -> 2. Retorna { ok: false, message } se faltar o procedimento. */
@@ -252,7 +291,27 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
       // uso (colisão rara), ele mesmo sorteia outro e devolve o valor final
       setConfirmedAppointment(appointment);
 
-      return { ok: true, appointment };
+      // o agendamento já está garantido nesse ponto; se o cupom falhar por
+      // qualquer motivo (expirou/limite bateu entre a validação e agora), a
+      // gente não desfaz o agendamento - só avisa que o cupom não entrou
+      let discountAmount = null;
+      let couponFailed = false;
+      if (appliedCoupon) {
+        try {
+          const applied = await api.post("/coupons/apply", {
+            redemptionId: appliedCoupon.redemptionId,
+            serviceId: selectedService.id,
+            purchaseAmount: selectedService.price,
+            appointmentId: appointment.id,
+          });
+          discountAmount = applied.discountAmount;
+        } catch (err) {
+          couponFailed = true;
+          setCouponError(err.message || "O agendamento foi confirmado, mas o cupom não pôde ser aplicado.");
+        }
+      }
+
+      return { ok: true, appointment, discountAmount, couponFailed };
     } finally {
       setIsSubmitting(false);
     }
@@ -278,6 +337,13 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
     isSubmitting,
     confirmedAppointment,
     bookingCode,
+    couponCode,
+    setCouponCode,
+    appliedCoupon,
+    couponError,
+    isApplyingCoupon,
+    applyCoupon,
+    removeCoupon,
     goToDateTime,
     goToConfirmation,
     goBack,

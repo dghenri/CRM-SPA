@@ -1,0 +1,197 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+enum StaffStatus {
+  Active
+  Inactive
+  OnLeave
+}
+
+enum StaffRole {
+  MajorAdmin
+  Farmaceutica
+  Massoterapeuta
+}
+
+enum Gender {
+  Male
+  Female
+  Other
+  PreferNotToSay
+}
+
+enum CouponDiscountType {
+  Percentage // desconto em % sobre o valor da compra
+  Fixed      // desconto em valor fixo (R$)
+}
+
+// Equivalente ao campo `applicable_to` do rascunho: define pra que o cupom vale.
+enum CouponScope {
+  AllServices      // vale pra qualquer serviço
+  SpecificServices // vale só pros serviços em Coupon.serviceIds
+  Category         // vale só pra uma categoria (Coupon.category)
+  FirstPurchase    // vale só na primeira compra do cliente
+  SpecificCustomer // vale só pro cliente em Coupon.userId
+}
+
+enum AppointmentStatus {
+  Scheduled
+  Confirmed
+  Completed
+  Cancelled
+  NoShow
+}
+
+model Staff {
+  id        String      @id @default(auto()) @map("_id") @db.ObjectId
+  email     String      @unique
+  name      String
+  password  String
+  phone     String?
+  role      StaffRole
+  birthdate DateTime
+  status    StaffStatus  @default(Active)
+
+  // preferências pessoais da funcionária (ex: { dragAppointments: false,
+  // theme: "system" }) - campo único e genérico pra não precisar de uma
+  // migration de schema toda vez que surgir uma configuração nova.
+  // Opcional: quando ausente, o back-end aplica DEFAULT_STAFF_SETTINGS.
+  settings Json?
+
+  appointments Appointment[]
+  services     Service[]
+}
+
+model User {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String   @unique
+  name      String
+  password  String
+  gender    Gender?
+  phone     String?
+  birthdate DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relações 1-para-muitos
+  // cupons criados como exclusivos deste cliente (coupon.userId aponta pra cá)
+  exclusiveCoupons  Coupon[]
+  couponRedemptions CouponRedemption[]
+  appointments      Appointment[]
+
+  // relação muitos-para-muitos (favoritos) — padrão MongoDB do Prisma:
+  // cada lado guarda seu próprio array de ObjectIds
+  favoriteServiceIds String[] @db.ObjectId
+  favoriteServices   Service[] @relation(fields: [favoriteServiceIds], references: [id])
+}
+
+model Coupon {
+  id            String             @id @default(auto()) @map("_id") @db.ObjectId
+  code          String             @unique // código que o cliente digita, ex: BEMVINDO10
+  description   String? // descrição interna, só pra equipe (não aparece pro cliente)
+  discountType  CouponDiscountType
+  discountValue Float // percentual (ex: 10) ou valor fixo em R$ (ex: 20), conforme discountType
+
+  minPurchase Float? // valor mínimo da compra pra poder usar o cupom
+  maxDiscount Float? // teto do desconto (útil sobretudo em cupons percentuais)
+
+  startsAt  DateTime? // se vazio, já vale imediatamente
+  expiresAt DateTime? // se vazio, não expira
+
+  usageLimit   Int? // limite total de usos (todos os clientes somados); vazio = ilimitado
+  usageCount   Int  @default(0) // contador de quantas vezes já foi usado
+  perUserLimit Int? @default(1) // limite de uso por cliente; vazio = ilimitado
+
+  archivedAt DateTime? // presente = cupom arquivado (some das listas ativas)
+
+  // applicable_to: pra que o cupom vale. O campo usado depende de `scope`:
+  // - AllServices / FirstPurchase: nenhum campo extra é necessário
+  // - SpecificServices: usa `serviceIds`
+  // - Category: usa `category` (texto livre, o Service ainda não tem campo de categoria)
+  // - SpecificCustomer: usa `userId` (abaixo)
+  scope      CouponScope @default(AllServices)
+  serviceIds String[]    @db.ObjectId // ids de Service; sem relação formal (evita escrita multi-documento/transação no Mongo)
+  category   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // opcional: cupom exclusivo pra um cliente específico. Se vazio, vale pra qualquer cliente.
+  userId String? @db.ObjectId
+  user   User?   @relation(fields: [userId], references: [id])
+
+  redemptions CouponRedemption[]
+}
+
+// Registro de cada uso de um cupom (equivalente à tabela "coupon_usages" do rascunho)
+model CouponRedemption {
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
+  couponId String @db.ObjectId
+  coupon   Coupon @relation(fields: [couponId], references: [id])
+
+  userId String @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id])
+
+  appointmentId String?      @db.ObjectId
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+
+  discountAmount Float // valor efetivamente descontado nessa utilização
+  usedAt         DateTime @default(now())
+}
+
+model Appointment {
+  id        String            @id @default(auto()) @map("_id") @db.ObjectId
+  code      String            @unique // código de 6 letras mostrado ao cliente (não é o _id do Mongo)
+  title     String
+  date      DateTime // início
+  endDate   DateTime // término
+  color     String            @default("blue")
+  status    AppointmentStatus @default(Scheduled)
+  notes     String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  // opcionais: a agenda permite criar um evento avulso sem vincular a um
+  // cliente/serviço cadastrado (ex: "Almoço com equipe")
+  customerId String? @db.ObjectId
+  customer   User?   @relation(fields: [customerId], references: [id])
+
+  serviceId String?  @db.ObjectId
+  service   Service? @relation(fields: [serviceId], references: [id])
+
+  // profissional responsável pela sessão - opcional pra não quebrar
+  // agendamentos avulsos sem ninguém definido ainda
+  professionalId String? @db.ObjectId
+  professional   Staff?  @relation(fields: [professionalId], references: [id])
+
+  couponRedemptions CouponRedemption[]
+}
+
+model Service {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  description String
+  duration    Int
+  price       Float
+  image       String
+  available   Boolean  @default(true)
+  category    String? // usado pelo escopo "Category" dos cupons (Coupon.scope = Category)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  appointments Appointment[]
+
+  favoritedByIds String[] @db.ObjectId
+  favoritedBy    User[]   @relation(fields: [favoritedByIds], references: [id])
+
+  // profissional responsável pelo procedimento - opcional pra não quebrar
+  // procedimentos já cadastrados sem ninguém definido ainda
+  professionalId String? @db.ObjectId
+  professional   Staff?  @relation(fields: [professionalId], references: [id])
+}

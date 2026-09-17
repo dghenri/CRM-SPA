@@ -1,0 +1,229 @@
+import React from 'react'
+import { useNavigate } from "react-router-dom";
+import MobileNav from '../../../components/MobileNav'
+import { BadgePercent, HeartCrack, Ticket } from 'lucide-react';
+import { Button, Tabs, Input, TextField, Form } from "@heroui/react";
+
+import api from '../../../api/api';
+
+const DISCOUNT_LABEL = {
+  Percentage: (coupon) => `${coupon.discountValue}% de desconto`,
+  Fixed: (coupon) => `R$ ${coupon.discountValue.toFixed(2)} de desconto`,
+};
+
+function formatDate(iso) {
+  if (!iso) return null;
+  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+// Cupom no formato de ticket: ícone à esquerda, linha de corte com mordidas em
+// meia-lua no meio, código + validade à direita (mesma referência visual do
+// painel de cupons da equipe).
+function CouponTicket({ coupon, footerLabel, faded = false }) {
+  return (
+    <div
+      className={`relative flex items-stretch justify-between gap-4 overflow-visible rounded-xl border border-default bg-overlay ${faded ? 'opacity-60 grayscale' : ''
+        }`}
+    >
+      <div className="flex min-w-0 flex-1 items-stretch">
+        <div className="flex shrink-0 items-center py-4 pl-8">
+          <div className="flex size-12 items-center justify-center rounded-lg bg-accent-soft text-accent">
+            <BadgePercent />
+          </div>
+        </div>
+      </div>
+
+      {/* linha de corte, com as mordidas em meia-lua nas pontas (efeito de ticket picotado) */}
+      <div className="relative w-px shrink-0 self-stretch">
+        <div className="absolute inset-y-3 left-1/2 -translate-x-1/2 border-l-2 border-dashed border-border" />
+        <span className="absolute left-1/2 top-0 size-8 -translate-x-1/2 -translate-y-1/2 rounded-full bg-background border-b" />
+        <span className="absolute bottom-0 left-1/2 size-8 -translate-x-1/2 translate-y-1/2 rounded-full bg-background border-t" />
+      </div>
+
+      <div className="flex min-w-0 flex-[2] flex-col justify-center gap-1.5 py-4 pr-8">
+        <span className="block text-pretty text-sm text-muted font-medium">
+          {coupon.description || DISCOUNT_LABEL[coupon.discountType]?.(coupon) || coupon.discountValue}
+        </span>
+        <span className="inline-block w-fit rounded-md border border-dashed border-border px-2 py-1 font-mono font-bold tracking-wide">
+          {coupon.code}
+        </span>
+        <span className="text-xs text-muted font-medium">
+          {footerLabel ?? (coupon.expiresAt ? `Válido até ${formatDate(coupon.expiresAt)}` : 'Sem data de expiração')}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+const EmptyState = ({ icon: Icon = HeartCrack, text = 'Nenhum cupom por aqui.' }) => {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+      <div className="flex items-center justify-center size-16 bg-danger-soft text-danger rounded-full">
+        <Icon className="size-8" />
+      </div>
+      <p className="text-sm text-muted font-medium">{text}</p>
+    </div>
+  )
+}
+
+function CouponListSection({ isLoading, items, emptyIcon, emptyText, renderItem }) {
+  if (isLoading) {
+    return <p className="text-sm text-muted text-center font-medium py-10">Carregando cupons...</p>;
+  }
+
+  if (items.length === 0) {
+    return <EmptyState icon={emptyIcon} text={emptyText} />;
+  }
+
+  return <div className="flex flex-col gap-3">{items.map(renderItem)}</div>;
+}
+
+export default function Coupons() {
+  const navigate = useNavigate();
+
+  const [coupons, setCoupons] = React.useState([]);
+  const [redemptions, setRedemptions] = React.useState([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [errorMessage, setErrorMessage] = React.useState('');
+
+  const [code, setCode] = React.useState('');
+  const [isRedeeming, setIsRedeeming] = React.useState(false);
+  const [redeemError, setRedeemError] = React.useState('');
+
+  async function loadData() {
+    setIsLoading(true);
+    setErrorMessage('');
+    try {
+      const [couponsData, redemptionsData] = await Promise.all([
+        api.get('/coupons/me'),
+        api.get('/coupons/me/redemptions'),
+      ]);
+      setCoupons(couponsData);
+      setRedemptions(redemptionsData);
+    } catch (error) {
+      setErrorMessage(error.message || 'Não foi possível carregar seus cupons.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  React.useEffect(() => {
+    loadData();
+  }, []);
+
+  async function handleRedeem(event) {
+    event.preventDefault();
+    if (!code.trim() || isRedeeming) return;
+
+    setIsRedeeming(true);
+    setRedeemError('');
+    try {
+      await api.post('/coupons/redeem', { code: code.trim().toUpperCase() });
+      setCode('');
+      loadData();
+    } catch (error) {
+      setRedeemError(error.message || 'Não foi possível resgatar esse cupom.');
+    } finally {
+      setIsRedeeming(false);
+    }
+  }
+
+  // um cupom só conta como "usado" se existir um registro de resgate; "expirado"
+  // é só quem passou da validade sem nunca ter sido usado (senão ele já aparece
+  // em Usados)
+  const available = coupons.filter(
+    (c) =>
+      c.status === 'active' &&
+      (!c.usageLimit || c.usageCount < c.usageLimit) &&
+      (!c.perUserLimit || c.myUsageCount < c.perUserLimit)
+  );
+  const expired = coupons.filter((c) => c.status === 'expired' && c.myUsageCount === 0);
+
+  return (
+    <div>
+      <MobileNav onBack={() => navigate(-1)} title={"Cupons"} />
+
+      <main className="flex-1 overflow-y-auto pt-24 px-4">
+        <Form onSubmit={handleRedeem} className="flex items-start gap-4 mb-4">
+          <TextField aria-label="Código do cupom" className="w-full" value={code} onChange={setCode} isDisabled={isRedeeming}>
+            <Input className="w-full border border-default rounded-xl" placeholder="Digite o código do cupom" />
+          </TextField>
+          <Button
+            type="submit"
+            variant="outline"
+            className="bg-overlay py-6 rounded-xl shrink-0"
+            isPending={isRedeeming}
+          >
+            Resgatar
+          </Button>
+        </Form>
+
+        {!!redeemError && <p className="mb-4 text-sm text-danger">{redeemError}</p>}
+        {!!errorMessage && <p className="mb-4 text-sm text-danger">{errorMessage}</p>}
+
+        <Tabs className="w-full max-w-md h-120" defaultSelectedKey="available">
+          <Tabs.ListContainer>
+            <Tabs.List aria-label="Options">
+              <Tabs.Tab id="available" className="flex">
+                Disponíveis ({available.length})
+                <Tabs.Indicator />
+              </Tabs.Tab>
+              <Tabs.Tab id="used">
+                Usados ({redemptions.length})
+                <Tabs.Indicator />
+              </Tabs.Tab>
+              <Tabs.Tab id="expired">
+                Expirados ({expired.length})
+                <Tabs.Indicator />
+              </Tabs.Tab>
+            </Tabs.List>
+          </Tabs.ListContainer>
+
+          <Tabs.Panel className="pt-4" id="available">
+            <CouponListSection
+              isLoading={isLoading}
+              items={available}
+              emptyIcon={Ticket}
+              emptyText="Nenhum cupom disponível ainda."
+              renderItem={(coupon) => <CouponTicket key={coupon.id} coupon={coupon} />}
+            />
+          </Tabs.Panel>
+
+          <Tabs.Panel className="pt-4" id="used">
+            <CouponListSection
+              isLoading={isLoading}
+              items={redemptions}
+              emptyIcon={HeartCrack}
+              emptyText="Nenhum cupom resgatado ainda."
+              renderItem={(redemption) => (
+                <CouponTicket
+                  key={redemption.id}
+                  coupon={redemption.coupon}
+                  footerLabel={`Usado em ${formatDate(redemption.usedAt)}`}
+                  faded
+                />
+              )}
+            />
+          </Tabs.Panel>
+
+          <Tabs.Panel className="pt-4" id="expired">
+            <CouponListSection
+              isLoading={isLoading}
+              items={expired}
+              emptyIcon={HeartCrack}
+              emptyText="Nenhum cupom expirado."
+              renderItem={(coupon) => (
+                <CouponTicket
+                  key={coupon.id}
+                  coupon={coupon}
+                  footerLabel={`Expirou em ${formatDate(coupon.expiresAt)}`}
+                  faded
+                />
+              )}
+            />
+          </Tabs.Panel>
+        </Tabs>
+      </main>
+    </div>
+  )
+}

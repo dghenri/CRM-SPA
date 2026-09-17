@@ -1,0 +1,254 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@theme {
+  --color-brand: var(--brand);
+  --color-live-clock-bg: var(--live-clock-bg);
+  --color-live-clock-dot-on: var(--live-clock-dot-on);
+  --color-live-clock-dot-off: var(--live-clock-dot-off);
+}
+
+:root {
+  --spacing: 0.2rem;
+  --brand: oklch(59.814% 0.13522 152.343);
+  --live-clock-bg: #010101;
+  --live-clock-dot-on: #ffffff;
+  --live-clock-dot-off: #ffffff14; /* #ffffff14 */
+  
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+/*------------------------------------------------------------- TABLET MODE */
+/* Reverte o spacing para o padrão */
+.staff-tablet-mode {
+  --spacing: 0.25rem;
+}
+
+:root,
+.light,
+.default,
+[data-theme="light"],
+[data-theme="default"] {
+  /* Theme Colors (Light Mode) */
+  --accent: oklch(62.04% 0.1950 253.83);
+  --accent-foreground: oklch(99.11% 0 0);
+  --background: oklch(97.02% 0.0000 253.83);
+  --border: oklch(90.00% 0.0000 253.83);
+  --danger: oklch(65.32% 0.2328 25.74);
+  --danger-foreground: oklch(99.11% 0 0);
+  --default: oklch(94.00% 0.0000 253.83);
+  --default-foreground: oklch(21.03% 0.0059 253.83);
+  --field-background: oklch(100.00% 0.0000 253.83);
+  --field-border: transparent;
+  --field-foreground: oklch(20.904% 0.00002 271.152);
+  --field-placeholder: oklch(55.17% 0.0000 253.83);
+  --focus: oklch(62.041% 0.19513 253.843);
+  --foreground: oklch(21.03% 0.0000 253.83);
+  --muted: oklch(55.208% 0.00006 271.152);
+  --overlay: oklch(100% 0.00011 271.152);
+  --overlay-foreground: oklch(21.03% 0.0000 253.83);
+  --scrollbar: oklch(87.10% 0.0000 253.83);
+  --segment: oklch(100.00% 0.0000 253.83);
+  --segment-foreground: oklch(21.03% 0.0000 253.83);
+  --separator: oklch(92.00% 0.0000 253.83);
+  --success: oklch(73.296% 0.19344 150.836);
+  --success-foreground: oklch(21.03% 0.0059 150.81);
+  --surface: oklch(100.00% 0.0000 253.83);
+  --surface-foreground: oklch(21.03% 0.0000 253.83);
+  --surface-secondary: oklch(95.24% 0.0000 253.83);
+  --surface-secondary-foreground: oklch(21.03% 0.0000 253.83);
+  --surface-tertiary: oklch(93.73% 0.0000 253.83);
+  --surface-tertiary-foreground: oklch(20.904% 0.00002 271.152);
+  --warning: oklch(78.19% 0.1585 72.33);
+  --warning-foreground: oklch(21.03% 0.0059 72.33);
+
+  /* Border Radius */
+  --radius: 0.5rem;
+  --field-radius: 0.75rem;
+
+  /* Font Family */
+  /* Make sure to load Inter font in your app */
+  --font-sans: var(--font-inter);
+}
+
+.dark,
+[data-theme="dark"] {
+  color-scheme: dark;
+  /* Theme Colors (Dark Mode) */
+  --accent: oklch(62.04% 0.1950 253.83);
+  --accent-foreground: oklch(99.11% 0 0);
+  --background: oklch(12.00% 0.0000 253.83);
+  --border: oklch(28.00% 0.0000 253.83);
+  --danger: oklch(59.40% 0.1967 24.63);
+  --danger-foreground: oklch(99.11% 0 0);
+  --default: oklch(27.40% 0.0000 253.83);
+  --default-foreground: oklch(99.11% 0 0);
+  --field-background: oklch(21.03% 0.0000 253.83);
+  --field-border: transparent;
+  --field-foreground: oklch(99.11% 0.0000 253.83);
+  --field-placeholder: oklch(70.50% 0.0000 253.83);
+  --focus: #0485f7;
+  --foreground: oklch(99.11% 0.0000 253.83);
+  --muted: oklch(70.50% 0.0000 253.83);
+  --overlay: oklch(20.904% 0.00002 271.152);
+  --overlay-foreground: oklch(99.11% 0.0000 253.83);
+  --scrollbar: oklch(70.50% 0.0000 253.83);
+  --segment: #474747;
+  --segment-foreground: oklch(99.11% 0.0000 253.83);
+  --separator: #222222;
+  --success: oklch(73.29% 0.1935 150.81);
+  --success-foreground: oklch(21.03% 0.0059 150.81);
+  --surface: oklch(21.03% 0.0000 253.83);
+  --surface-foreground: oklch(99.11% 0.0000 253.83);
+  --surface-secondary: oklch(25.70% 0.0000 253.83);
+  --surface-secondary-foreground: oklch(99.11% 0.0000 253.83);
+  --surface-tertiary: oklch(27.21% 0.0000 253.83);
+  --surface-tertiary-foreground: oklch(99.11% 0.0000 253.83);
+  --warning: oklch(82.03% 0.1388 76.34);
+  --warning-foreground: oklch(21.03% 0.0059 76.34);
+}
+
+/*------------------------------------------------------------------ SCROLL */
+html {
+  scroll-behavior: smooth;
+}
+
+html.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+html.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar) transparent;
+}
+
+/* Chrome, Edge, Safari */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted);
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE e Edge antigo */
+  scrollbar-width: none;     /* Firefox */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;             /* Chrome, Edge, Safari */
+}
+
+.scrollbar {
+  background-color: var(--success);
+  background-color: #4bbe77;
+}
+
+/*-------------------------------------------------------------- ANIMATIONS */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/*--------------------------------------------------------------- Tumbleweed */
+.container {
+  width: 300px;
+  height: 130px;
+  overflow: hidden;
+  background: url('./Sand.png') no-repeat;
+  background-size: 100%;
+}
+
+.tumbleweed{
+  position: relative;
+  top: 50px;
+  width: 30px;
+  height: 30px;
+  background: url('./tumbleweed.png') no-repeat;
+  background-size: 100%;
+}
+
+.tumbleweed{
+  animation: tumbleweed linear 9s;
+  animation-iteration-count: infinite;
+
+}
+
+@keyframes tumbleweed {
+  0% {
+    transform: translate(-20px,45px) rotate(0deg);
+  }
+  30% {
+    transform: translate(140px,50px) rotate(180deg);
+  }
+  60% {
+    transform: translate(280px,45px) rotate(360deg);
+  }
+  90% {
+    transform: translate(420px,15px) rotate(540deg);
+  }
+  100% {
+    transform: translate(560px,45px) rotate(720deg);
+  }
+}

@@ -1,0 +1,10 @@
+COMANDOS
+
+Rodar server
+    node server.js
+
+Rodar server com autoupdate 
+    npm run watch
+
+Prisma interface
+    npx prisma studio

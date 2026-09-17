@@ -1,14 +1,17 @@
 import { useState, useEffect } from "react";
-import { Button, toast, Card, Spinner } from "@heroui/react";
-import { Clock, Tag, Heart, CircleAlert, OctagonAlert  } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Button, Card, Spinner } from "@heroui/react";
+import { Clock, CircleAlert, OctagonAlert  } from "lucide-react";
 import { fetchServices } from "../api/services";
 
-function ClientServiceCard({ service, favorited, onToggleFavorite, onBook }) {
+function ClientServiceCard({ service }) {
+  const navigate = useNavigate();
+
   return (
     <div className="group pb-2">
       {/* Bezel branco em volta de toda a foto/infos, como uma moldura */}
-      <div className="rounded-[28px] bg-white p-[6px] shadow-lg ring-1 ring-black/5 transition-shadow duration-300 group-hover:shadow-2xl transition-transform duration-500 ease-out group-hover:scale-105">
-        <Card className="relative h-[420px] overflow-hidden rounded-[22px] border-none">
+      <div className="rounded-[28px] bg-white p-1.5 shadow-lg ring-1 ring-black/5 group-hover:shadow-2xl transition-transform duration-500 ease-out group-hover:scale-105">
+        <Card className="relative h-150 overflow-hidden rounded-[22px] border-none">
           {/* Foto de fundo — ocupa o card inteiro como um background */}
           <img
             src={service.image}
@@ -16,29 +19,9 @@ function ClientServiceCard({ service, favorited, onToggleFavorite, onBook }) {
             className="absolute inset-0 h-full w-full object-cover"
           />
 
-          {/* favorite button */}
-          <Button
-            isIconOnly
-            size="lg"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleFavorite(service.id);
-            }}
-            aria-label="Favorite"
-            className={`absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full backdrop-blur-sm transition-colors ${
-              favorited
-                ? "bg-danger text-white"
-                : "bg-transparent text-white hover:bg-white/40"
-            }`}
-          >
-            <Heart className="size-5" fill={favorited ? "currentColor" : "none"} />
-          </Button>
-
-          {/* Máscara de blur/gradiente atrás do texto — só na parte de baixo da foto.
-              Sem o transform 3D do tilt antigo atrapalhando, o backdrop-blur volta
-              a funcionar normalmente aqui. */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] h-[54%] overflow-hidden rounded-b-[22px] backdrop-blur-md [mask-image:linear-gradient(to_top,black_35%,transparent_100%)]">
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent" />
+          {/* Máscara de blur/gradiente atrás do texto — só na parte de baixo da foto. */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-5 h-[54%] overflow-hidden rounded-b-[22px] backdrop-blur-md mask-[linear-gradient(to_top,black_35%,transparent_100%)]">
+            <div className="absolute inset-0 bg-linear-to-t from-black/85 via-black/45 to-transparent" />
           </div>
 
           {/* Conteúdo textual */}
@@ -64,7 +47,7 @@ function ClientServiceCard({ service, favorited, onToggleFavorite, onBook }) {
             <Button
               variant="light"
               className="mt-1 w-full justify-center rounded-full bg-white font-semibold text-foreground shadow-lg hover:bg-white/90"
-              onPress={() => onBook(service)}
+              onPress={() => navigate("/register")}
             >
               Agendar
             </Button>
@@ -78,8 +61,8 @@ function ClientServiceCard({ service, favorited, onToggleFavorite, onBook }) {
 function MoreServicesTile({ count }) {
   return (
     <div className="group pb-2">
-      <div className="rounded-[28px] bg-white p-[6px] shadow-lg ring-1 ring-black/5">
-        <Card className="flex h-[420px] items-center justify-center rounded-[22px] border-none bg-primary-50">
+      <div className="rounded-[28px] bg-white p-1.5 shadow-lg ring-1 ring-black/5">
+        <Card className="flex h-150 items-center justify-center rounded-[22px] border-none bg-primary-50">
           <div className="flex flex-col items-center gap-1 text-center">
             <p className="font-serif text-2xl font-bold text-foreground">E mais...</p>
             <p className="text-sm text-default-500">
@@ -93,19 +76,10 @@ function MoreServicesTile({ count }) {
 }
 
 // -----------------------------------------------------------------------
-// Página do cliente
-//
-// Em produção, troque INITIAL_SERVICES por dados vindos da sua API (os
-// mesmos que o admin edita), filtrando por `available: true` no backend.
-//
-// Requer <Toast.Provider /> montado uma vez na raiz do app (ex: App.jsx)
-// para o toast() funcionar.
-// -----------------------------------------------------------------------
 export default function ClientServicesPage() {
   const [services, setServices] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [favorites, setFavorites] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,19 +99,6 @@ export default function ClientServicesPage() {
       cancelled = true;
     };
   }, []);
-
-  const toggleFavorite = (id) => {
-    setFavorites((prev) =>
-      prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]
-    );
-  };
-
-  const handleBook = (service) => {
-    toast("Agendamento iniciado", {
-      description: service.title,
-      variant: "success",
-    });
-  };
 
   const visibleServices = services.filter((s) => s.available);
 
@@ -176,9 +137,6 @@ export default function ClientServicesPage() {
             <ClientServiceCard
               key={service.id}
               service={service}
-              favorited={favorites.includes(service.id)}
-              onToggleFavorite={toggleFavorite}
-              onBook={handleBook}
             />
           ))}
           {hiddenCount > 0 && <MoreServicesTile count={hiddenCount} />}

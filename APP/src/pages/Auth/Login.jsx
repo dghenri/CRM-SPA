@@ -7,7 +7,6 @@ import { decodeToken } from "../../utils/jwt";
 import Carousel from "../../components/Carousel";
 
 import {
-  Avatar,
   Card,
   Button,
   InputGroup,
@@ -28,6 +27,7 @@ import {
   EyeOff,
   Mail,
   SquareArrowOutUpRight as BlankIcon,
+  ChevronLeft,
 } from 'lucide-react';
 
 export default function Login() {
@@ -43,6 +43,12 @@ export default function Login() {
 
   useEffect(() => {
     document.title = "Login | Viva Bem SPA";
+    document.body.style.backgroundColor = 'var(--overlay)'; 
+
+    // limpa a cor ao sair da página
+    return () => {
+      document.body.style.backgroundColor = ''; 
+    };
   }, []);
 
   // Se já existir uma sessão válida, redireciona direto para a área
@@ -106,16 +112,23 @@ export default function Login() {
           <h1 className="text-2xl font-bold text-brand">Viva Bem SPA</h1>
         </div>
         <div className="hidden md:col-span-2 md:block md:h-full">
-          
           <Card className="relative h-full overflow-hidden rounded-3xl p-0">
             <Carousel />
           </Card>
         </div>
 
         {/* Right column */}
-        <div className="col-span-2 flex items-center justify-center overflow-y-auto rounded-3xl mt-10">
-          <div className="w-full max-w-sm space-y-6">
+        <div className="relative col-span-2 flex items-center justify-center overflow-y-auto rounded-3xl">
 
+          {/* Voltar */}
+          <Link
+            to="/"
+            className="hidden md:flex absolute top-6 left-8 items-center gap-2 text-sm font-semibold text-field-placeholder hover:text-foreground hover:underline transition-colors"
+          >
+            <ChevronLeft size={16} /> Voltar
+          </Link>
+
+          <div className="w-full max-w-sm space-y-6 mt-10">
             {/* Header */}
             <div className="space-y-2 text-center mb-10 md:mb-18">
               <h1 className="text-2xl font-bold sm:text-3xl">Sign in to Spa</h1>

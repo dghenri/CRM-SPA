@@ -107,7 +107,17 @@ export default function Login() {
       <div className="h-dvh bg-overlay overflow-hidden justify-center gap-2 p-4 md:grid md:grid-cols-4">
 
         {/* Left column */}
-        <div className="flex justify-center items-center gap-2 md:hidden">
+        <div className="md:hidden">
+          {/* Voltar */}
+          <Link
+            to="/"
+            className="flex absolute top-6 left-8 items-center gap-2 text-sm font-semibold text-field-placeholder hover:text-foreground hover:underline transition-colors"
+          >
+            <ChevronLeft size={16} /> Voltar
+          </Link>
+        </div>
+
+        <div className="flex justify-center items-center gap-2 md:hidden mt-10">
           <img className="size-25" src="/LotusIcon.svg" alt="" />
           <h1 className="text-2xl font-bold text-brand">Viva Bem SPA</h1>
         </div>
@@ -259,7 +269,7 @@ export default function Login() {
                     <Label>Email</Label>
                     <Input
                       className="w-full text-base md:text-sm font-medium bg-surface-secondary hover:bg-surface-tertiary p-4" 
-                      placeholder="name@email.com" 
+                      placeholder="nome@email.com" 
                       onChange={(e) => setEmail(e.target.value)} />
                     <FieldError />
                   </TextField>
@@ -336,9 +346,6 @@ export default function Login() {
                       "Entrar"
                     )}
                   </Button>
-                  <div className="flex justify-center font-semibold text-sm lg:text-base">
-                    
-                  </div>
                 </div>
               </Tabs.Panel>
             </Tabs>

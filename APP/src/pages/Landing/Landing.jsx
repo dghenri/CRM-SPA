@@ -1,12 +1,12 @@
 import { useEffect } from "react";
-import { Button, Chip, Separator, toast, } from "@heroui/react";
+import { Button, Separator, } from "@heroui/react";
 import { Sparkles, CalendarCheck, ShieldCheck, ArrowRight, Copyright, } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../../components/Navbar";
 import ClientServicesPage from "../../components/LandingServices";
 import SpecularButton from "../../components/SpecularButton"
 
-
+/* Adicionar uma banner de aviso de cupom para as primeiras sessões aqui */
 const HIGHLIGHTS = [
   {
     icon: Sparkles,
@@ -28,11 +28,11 @@ const HIGHLIGHTS = [
 const FOOTER_LINKS = ["Sobre", "Blog", "Vagas", "Imprensa", "Acessibilidade", "Parceiros"];
 
 const SOCIAL_LINKS = [
-  { icon: "fa-facebook", label: "Facebook", href: "#" },
-  { icon: "fa-instagram", label: "Instagram", href: "#" },
+  { icon: "fa-facebook",  label: "Facebook",    href: "#" },
+  { icon: "fa-instagram", label: "Instagram",   href: "#" },
   { icon: "fa-x-twitter", label: "X (Twitter)", href: "#" },
-  { icon: "fa-github", label: "Github", href: "#" },
-  { icon: "fa-youtube", label: "Youtube", href: "#" },
+  { icon: "fa-github",    label: "Github",      href: "#" },
+  { icon: "fa-youtube",   label: "Youtube",     href: "#" },
 ];
 
 export default function Landing() {
@@ -52,7 +52,7 @@ export default function Landing() {
 
       <main className="flex bg-white flex-col items-center">
         {/* Hero */}
-        <section id="hero" className="relative isolate w-full h-screen h-dvh overflow-hidden">
+        <section id="hero" className="relative isolate w-full h-screen overflow-hidden">
           {/* Camada de imagem + overlays, isolada em um wrapper com overflow-hidden */}
           <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden bg-default">
             <img

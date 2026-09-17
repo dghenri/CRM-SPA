@@ -117,7 +117,7 @@ export default function Login() {
           </Link>
         </div>
 
-        <div className="flex justify-center items-center gap-2 md:hidden mt-10">
+        <div className="flex justify-center items-center gap-2 md:hidden mt-20">
           <img className="size-25" src="/LotusIcon.svg" alt="" />
           <h1 className="text-2xl font-bold text-brand">Viva Bem SPA</h1>
         </div>

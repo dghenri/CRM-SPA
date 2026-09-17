@@ -128,14 +128,22 @@ export default function Login() {
             <ChevronLeft size={16} /> Voltar
           </Link>
 
-          <div className="w-full max-w-sm space-y-6 mt-10">
+          <div className="w-full max-w-sm space-y-6 mt-20">
             {/* Header */}
             <div className="space-y-2 text-center mb-10 md:mb-18">
-              <h1 className="text-2xl font-bold sm:text-3xl">Sign in to Spa</h1>
+              <h1 className="text-2xl font-bold sm:text-3xl">Entre no SPA</h1>
 
-              <p className="text-xs md:text-sm font-semibold text-field-placeholder">
-                Enter your credentials to access your account
-              </p>
+              {/* Register link */}
+              <span
+              className="flex justify-center font-semibold text-sm lg:text-base text-field-placeholder gap-2"
+              > Não tem uma conta?
+                <Link
+                  to="/register"
+                  className="text-brand hover:underline"
+                >
+                  Criar agora
+                </Link>
+              </span>
             </div>
 
             <Tabs className="w-full max-w-md p-2" selectedKey={accountType} onSelectionChange={setAccountType}>
@@ -161,7 +169,7 @@ export default function Login() {
                     <Label>Email</Label>
                     <Input
                       className="w-full text-base md:text-sm font-medium bg-surface-secondary hover:bg-surface-tertiary p-4" 
-                      placeholder="name@email.com" 
+                      placeholder="nome@email.com" 
                       onChange={(e) => setEmail(e.target.value)} />
                     <FieldError />
                   </TextField>
@@ -172,11 +180,11 @@ export default function Login() {
                     type="password"
                     className="md:font-medium"
                   >
-                    <Label>Password</Label>
+                    <Label>Senha</Label>
                     <InputGroup className="bg-surface-secondary hover:bg-surface-tertiary p-2">
                       <InputGroup.Input 
                         type={isVisible ? "text" : "password"}
-                        placeholder="Enter your password"
+                        placeholder="••••••••••••"
                         onChange={(e) => setPassword(e.target.value)}
                         className="text-base md:text-sm font-medium"
                       />
@@ -203,7 +211,7 @@ export default function Login() {
                         <Checkbox.Control className="size-5 bg-surface-secondary border">
                           <Checkbox.Indicator />
                         </Checkbox.Control>
-                        Remember me
+                        Lembre-se de mim
                       </Checkbox.Content>
                     </Checkbox>
 
@@ -212,7 +220,7 @@ export default function Login() {
                       to="/recovery"
                       className="group flex items-center gap-1 text-sm font-semibold text-field-placeholder hover:underline"
                     >
-                      Forgot password?
+                      Esqueceu a senha?
                       <BlankIcon className="size-4
                         opacity-0
                         -translate-x-1
@@ -235,21 +243,10 @@ export default function Login() {
                     {isLoading ? (
                       <Spinner className="size-6 text-white" />
                     ) : (
-                      "Sign In"
+                      "Entrar"
                     )}
                   </Button>
 
-                  {/* Register link */}
-                  <span
-                  className="flex justify-center font-semibold text-sm lg:text-base text-field-placeholder gap-2"
-                  > Don't have an account?
-                    <Link
-                      to="/register"
-                      className="text-orange-500 hover:underline"
-                    >
-                      Sign Up now
-                    </Link>
-                  </span>
                 </div>
               </Tabs.Panel>
               <Tabs.Panel className="pt-4" id="colaborador">
@@ -273,11 +270,11 @@ export default function Login() {
                     type="password"
                     className="font-medium"
                   >
-                    <Label>Password</Label>
+                    <Label>Senha</Label>
                     <InputGroup className="bg-surface-secondary hover:bg-surface-tertiary p-2">
                       <InputGroup.Input 
                         type={isVisible ? "text" : "password"}
-                        placeholder="Enter your password"
+                        placeholder="••••••••••••"
                         onChange={(e) => setPassword(e.target.value)}
                         className="text-base md:text-sm font-medium"
                       />
@@ -304,10 +301,25 @@ export default function Login() {
                         <Checkbox.Control className="size-5 bg-surface-secondary border">
                           <Checkbox.Indicator />
                         </Checkbox.Control>
-                        Remember me
+                        Lembre-se de mim
                       </Checkbox.Content>
                     </Checkbox>
 
+                    <Link 
+                      target="_blank"
+                      to="/recovery"
+                      className="group flex items-center gap-1 text-sm font-semibold text-field-placeholder hover:underline"
+                    >
+                      Esqueceu a senha?
+                      <BlankIcon className="size-4
+                        opacity-0
+                        -translate-x-1
+                        transition-all
+                        duration-200
+                        group-hover:opacity-100
+                        group-hover:translate-x-0" 
+                      />
+                    </Link>
                   </div>
 
                   {/* Submit */}       
@@ -321,25 +333,11 @@ export default function Login() {
                     {isLoading ? (
                       <Spinner className="size-6 text-white" />
                     ) : (
-                      "Sign In"
+                      "Entrar"
                     )}
                   </Button>
                   <div className="flex justify-center font-semibold text-sm lg:text-base">
-                    <Link 
-                      target="_blank"
-                      to="/recovery"
-                      className="group flex items-center gap-1 text-sm font-semibold text-field-placeholder hover:underline mb-1.5"
-                    >
-                      Forgot password?
-                      <BlankIcon className="size-4
-                        opacity-0
-                        -translate-x-1
-                        transition-all
-                        duration-200
-                        group-hover:opacity-100
-                        group-hover:translate-x-0" 
-                      />
-                    </Link>
+                    
                   </div>
                 </div>
               </Tabs.Panel>

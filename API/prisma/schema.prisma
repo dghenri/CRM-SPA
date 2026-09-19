@@ -141,8 +141,12 @@ model CouponRedemption {
   appointmentId String?      @db.ObjectId
   appointment   Appointment? @relation(fields: [appointmentId], references: [id])
 
-  discountAmount Float // valor efetivamente descontado nessa utilização
-  usedAt         DateTime @default(now())
+  // "resgatar" só adiciona o cupom à carteira do cliente (claim). Ele só passa
+  // a valer como uso de verdade (usedAt preenchido) quando é aplicado de fato
+  // num agendamento - é isso que decide se aparece em Disponíveis ou Usados.
+  claimedAt      DateTime  @default(now())
+  usedAt         DateTime?
+  discountAmount Float? // só é definido quando o cupom é aplicado (usedAt preenchido)
 }
 
 model Appointment {

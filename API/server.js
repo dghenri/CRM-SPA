@@ -1200,34 +1200,43 @@ app.get('/coupons/me', authenticateToken, requireUser, async (req, res) => {
   try {
     const now = new Date();
 
+    // ids de todo cupom que esse cliente já resgatou (claim ou uso, tanto faz)
+    const myRedemptions = await prisma.couponRedemption.findMany({
+      where: { userId: req.user.id },
+      select: { couponId: true },
+    });
+    const claimedIds = [...new Set(myRedemptions.map((r) => r.couponId))];
+
     // só entram aqui cupons pessoais (userId = eu) ou que eu já resgatei pra
     // carteira em algum momento — um cupom público não some do banco, mas só
     // aparece pro cliente depois que ele digita o código em "Resgatar"
-    const coupons = await prisma.coupon.findMany({
-      where: {
-        archivedAt: null,
-        OR: [
-          { userId: req.user.id },
-          { redemptions: { some: { userId: req.user.id } } },
-        ],
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    // busca em duas partes bem simples e junta em JS. O filtro de arquivado
+    // é aplicado aqui em JS também: o Prisma/Mongo não está resolvendo
+    // "archivedAt: null" corretamente no where (bug conhecido do conector
+    // Mongo pra campos DateTime opcionais), então filtramos depois de buscar.
+    const [personalCoupons, claimedCoupons] = await Promise.all([
+      prisma.coupon.findMany({ where: { userId: req.user.id } }),
+      prisma.coupon.findMany({ where: { id: { in: claimedIds } } }),
+    ]);
+
+    const couponsById = new Map();
+    for (const c of [...personalCoupons, ...claimedCoupons]) {
+      if (!c.archivedAt) couponsById.set(c.id, c);
+    }
+    const coupons = [...couponsById.values()].sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
 
     // conta, pra cada cupom, quantas vezes ESSE cliente já USOU de fato
-    // (usedAt preenchido) — resgate/claim sozinho não consome o limite
-    const myUsageCounts = await prisma.couponRedemption.groupBy({
-      by: ['couponId'],
-      where: {
-        userId: req.user.id,
-        usedAt: { not: null },
-        couponId: { in: coupons.map((c) => c.id) },
-      },
-      _count: { _all: true },
+    // (usedAt preenchido) — resgate/claim sozinho não consome o limite.
+    // Filtramos "usedAt não nulo" em JS pelo mesmo motivo do archivedAt acima.
+    const myRedemptionsForCoupons = await prisma.couponRedemption.findMany({
+      where: { userId: req.user.id, couponId: { in: coupons.map((c) => c.id) } },
     });
-    const usageByCoupon = Object.fromEntries(
-      myUsageCounts.map((r) => [r.couponId, r._count._all])
-    );
+    const usageByCoupon = {};
+    for (const r of myRedemptionsForCoupons) {
+      if (r.usedAt) usageByCoupon[r.couponId] = (usageByCoupon[r.couponId] ?? 0) + 1;
+    }
 
     const withStatus = coupons.map((c) => ({
       ...c,
@@ -1245,11 +1254,14 @@ app.get('/coupons/me', authenticateToken, requireUser, async (req, res) => {
 //------------------------------------------------------------- GET ROUTE (histórico de cupons já usados pelo cliente logado)
 app.get('/coupons/me/redemptions', authenticateToken, requireUser, async (req, res) => {
   try {
-    const redemptions = await prisma.couponRedemption.findMany({
-      where: { userId: req.user.id, usedAt: { not: null } },
+    const allRedemptions = await prisma.couponRedemption.findMany({
+      where: { userId: req.user.id },
       include: { coupon: true },
-      orderBy: { usedAt: 'desc' },
     });
+
+    const redemptions = allRedemptions
+      .filter((r) => r.usedAt)
+      .sort((a, b) => new Date(b.usedAt) - new Date(a.usedAt));
 
     res.json(redemptions.map((r) => ({ ...r, coupon: serializeCoupon(r.coupon) })));
   } catch (error) {
@@ -1311,10 +1323,12 @@ app.post('/coupons/validate', authenticateToken, requireUser, async (req, res) =
     }
 
     // precisa ter sido resgatado antes (carteira) e ainda não ter sido aplicado
-    const redemption = await prisma.couponRedemption.findFirst({
-      where: { couponId: coupon.id, userId: req.user.id, usedAt: null },
-      orderBy: { claimedAt: 'asc' },
+    const myRedemptionsForCoupon = await prisma.couponRedemption.findMany({
+      where: { couponId: coupon.id, userId: req.user.id },
     });
+    const redemption = myRedemptionsForCoupon
+      .filter((r) => !r.usedAt)
+      .sort((a, b) => new Date(a.claimedAt) - new Date(b.claimedAt))[0];
     if (!redemption) {
       return res.status(400).json({ error: "Resgate este cupom na aba Cupons antes de usá-lo." });
     }

@@ -89,6 +89,7 @@ export default function Coupons() {
   const [code, setCode] = React.useState('');
   const [isRedeeming, setIsRedeeming] = React.useState(false);
   const [redeemError, setRedeemError] = React.useState('');
+  const [redeemSuccess, setRedeemSuccess] = React.useState('');
 
   async function loadData() {
     setIsLoading(true);
@@ -117,10 +118,12 @@ export default function Coupons() {
 
     setIsRedeeming(true);
     setRedeemError('');
+    setRedeemSuccess('');
     try {
-      await api.post('/coupons/redeem', { code: code.trim().toUpperCase() });
+      const redemption = await api.post('/coupons/redeem', { code: code.trim().toUpperCase() });
       setCode('');
-      loadData();
+      setRedeemSuccess(`Cupom ${redemption.coupon?.code ?? ''} adicionado à sua carteira!`);
+      await loadData();
     } catch (error) {
       setRedeemError(error.message || 'Não foi possível resgatar esse cupom.');
     } finally {
@@ -130,10 +133,11 @@ export default function Coupons() {
 
   // um cupom só conta como "usado" se existir um registro de resgate; "expirado"
   // é só quem passou da validade sem nunca ter sido usado (senão ele já aparece
-  // em Usados)
+  // em Usados). "Agendado" entra em Disponíveis também - já está na carteira,
+  // só ainda não começou a valer.
   const available = coupons.filter(
     (c) =>
-      c.status === 'active' &&
+      (c.status === 'active' || c.status === 'scheduled') &&
       (!c.usageLimit || c.usageCount < c.usageLimit) &&
       (!c.perUserLimit || c.myUsageCount < c.perUserLimit)
   );
@@ -158,21 +162,22 @@ export default function Coupons() {
           </Button>
         </Form>
 
+        {!!redeemSuccess && <p className="mb-4 text-sm font-medium text-success">{redeemSuccess}</p>}
         {!!redeemError && <p className="mb-4 text-sm text-danger">{redeemError}</p>}
         {!!errorMessage && <p className="mb-4 text-sm text-danger">{errorMessage}</p>}
 
         <Tabs className="w-full max-w-md h-120" defaultSelectedKey="available">
           <Tabs.ListContainer>
             <Tabs.List aria-label="Options">
-              <Tabs.Tab id="available" className="flex">
+              <Tabs.Tab id="available" className="py-6">
                 Disponíveis ({available.length})
                 <Tabs.Indicator />
               </Tabs.Tab>
-              <Tabs.Tab id="used">
+              <Tabs.Tab id="used" className="py-6">
                 Usados ({redemptions.length})
                 <Tabs.Indicator />
               </Tabs.Tab>
-              <Tabs.Tab id="expired">
+              <Tabs.Tab id="expired" className="py-6">
                 Expirados ({expired.length})
                 <Tabs.Indicator />
               </Tabs.Tab>
@@ -185,7 +190,17 @@ export default function Coupons() {
               items={available}
               emptyIcon={Ticket}
               emptyText="Nenhum cupom disponível ainda."
-              renderItem={(coupon) => <CouponTicket key={coupon.id} coupon={coupon} />}
+              renderItem={(coupon) => (
+                <CouponTicket
+                  key={coupon.id}
+                  coupon={coupon}
+                  footerLabel={
+                    coupon.status === 'scheduled'
+                      ? `Disponível a partir de ${formatDate(coupon.startsAt)}`
+                      : undefined
+                  }
+                />
+              )}
             />
           </Tabs.Panel>
 

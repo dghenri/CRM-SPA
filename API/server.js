@@ -1167,6 +1167,13 @@ app.delete('/coupons/:id', authenticateToken, requireStaff, async (req, res) => 
     if (error.code === "P2025") {
       return res.status(404).json({ error: "Cupom não encontrado." });
     }
+    // P2003/P2014: já existe resgate (CouponRedemption) referenciando esse
+    // cupom - o Prisma bloqueia a exclusão pra não deixar histórico órfão.
+    if (error.code === "P2003" || error.code === "P2014") {
+      return res.status(409).json({
+        error: "Esse cupom já foi resgatado por algum cliente, então não pode ser excluído (isso apagaria o histórico de uso dele). Arquive o cupom em vez de excluir.",
+      });
+    }
     console.error(error);
     res.status(500).json({ error: "Erro ao remover cupom." });
   }

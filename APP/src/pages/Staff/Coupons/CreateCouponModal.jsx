@@ -253,11 +253,11 @@ export default function CreatCuponModal({ isOpen, onOpenChange, coupon, onSaved 
                   maxValue={form.discountType === 'Percentage' ? 100 : undefined}
                   value={form.discountValue}
                   onChange={(value) => updateField('discountValue', value)}
-                  formatOptions={{
-                    currency: "BRL",
-                    currencySign: "accounting",
-                    style: form.discountType === 'Percentage' ? "percent" : "currency",
-                  }}
+                  formatOptions={
+                    form.discountType === 'Percentage'
+                      ? undefined
+                      : { currency: "BRL", currencySign: "accounting", style: "currency" }
+                  }
                   className="w-full"
                 >
                   <Label>
@@ -265,7 +265,10 @@ export default function CreatCuponModal({ isOpen, onOpenChange, coupon, onSaved 
                   </Label>
                   <NumberField.Group className="flex w-50 h-10 items-stretch overflow-hidden rounded-lg border border-default">
                     <NumberField.DecrementButton className="flex w-10 shrink-0 items-center justify-center" />
-                    <NumberField.Input prefix='teste' className="min-w-0 flex-1 border-0 px-3 py-0 leading-none focus:outline-none" />
+                    <NumberField.Input className="min-w-0 flex-1 border-0 px-3 py-0 leading-none focus:outline-none" />
+                    {form.discountType === 'Percentage' && (
+                      <span className="flex shrink-0 items-center pr-1 text-sm font-medium text-muted">%</span>
+                    )}
                     <NumberField.IncrementButton className="flex w-10 shrink-0 items-center justify-center" />
                   </NumberField.Group>
                 </NumberField>

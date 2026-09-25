@@ -22,7 +22,9 @@ async function request(path, { method = "GET", body } = {}) {
   const data = await res.json().catch(() => null);
 
   if (!res.ok) {
-    throw new Error(data?.error || `Erro ${res.status} ao acessar ${path}`);
+    const error = new Error(data?.error || `Erro ${res.status} ao acessar ${path}`);
+    error.status = res.status;
+    throw error;
   }
 
   return data;

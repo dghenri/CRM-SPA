@@ -1,11 +1,8 @@
 import React from 'react'
 
-import { Tabs, Button, Chip, AlertDialog } from '@heroui/react';
+import { Tabs, Button, Chip, AlertDialog, Tooltip, toast } from '@heroui/react';
 
-import { TicketPercent, Plus, Pencil, Archive, ArchiveRestore, Trash2 } from 'lucide-react';
-import { RiDiscountPercentFill } from "react-icons/ri";
-import { LuBadgeDollarSign } from "react-icons/lu";
-import { BiSolidBadgeDollar } from "react-icons/bi";
+import { TicketPercent, Plus, Pencil, Archive, ArchiveRestore, Trash2, Calendar, RefreshCw, BadgePercent, BadgeDollarSign } from 'lucide-react';
 
 import api from '../../../api/api';
 import CreateCuponModal from './CreateCouponModal';
@@ -44,6 +41,11 @@ const STATUS_COLOR = {
   expired: 'danger',
   archived: 'default',
 };
+
+function formatDate(iso) {
+  if (!iso) return null;
+  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+}
 
 export default function Coupons() {
   const [coupons, setCoupons] = React.useState([]);
@@ -100,6 +102,20 @@ export default function Coupons() {
       await api.delete(`/coupons/${coupon.id}`);
       setCoupons((prev) => prev.filter((c) => c.id !== coupon.id));
     } catch (error) {
+      // 409 = o backend bloqueou porque esse cupom já tem resgate/uso associado
+      // (CouponRedemption). Nesse caso específico, oferece arquivar direto no toast.
+      if (error.status === 409) {
+        toast.warning('Não foi possível excluir esse cupom', {
+          description: 'Cupom já resgatado. Você pode arquivá-lo em vez de excluir.',
+          actionProps: {
+            children: 'Arquivar',
+            className:
+              'inline-flex items-center justify-center self-center bg-warning text-warning-foreground',
+            onPress: () => handleToggleArchive(coupon),
+          },
+        });
+        return;
+      }
       setErrorMessage(error.message || 'Não foi possível remover o cupom.');
     }
   }
@@ -194,7 +210,7 @@ function CouponList({ coupons, isLoading, onCreate, onEdit, onToggleArchive, onD
           <div className="flex min-w-0 flex-1 items-stretch gap-8">
             <div className="flex shrink-0 items-center py-4 pl-8">
               <div className={`flex size-12 items-center justify-center rounded-lg ${coupon.discountType === 'Percentage' ? "bg-accent-soft text-accent" : "bg-danger-soft text-danger"}`}>
-                {coupon.discountType === 'Percentage' ? <RiDiscountPercentFill className="size-7" /> : <LuBadgeDollarSign  className="size-7" />}
+                {coupon.discountType === 'Percentage' ? <BadgePercent className="size-7" /> : <BadgeDollarSign className="size-7" />}
                 
               </div>
             </div>
@@ -202,8 +218,8 @@ function CouponList({ coupons, isLoading, onCreate, onEdit, onToggleArchive, onD
             {/* linha de corte, com as mordidas em meia-lua nas pontas (efeito de ticket picotado) */}
             <div className="relative w-px shrink-0 self-stretch">
               <div className="absolute inset-y-3 left-1/2 -translate-x-1/2 border-l-2 border-dashed border-border" />
-              <span className="absolute left-1/2 top-0 size-8 -translate-x-1/2 -translate-y-1/2 rounded-full bg-surface border-b" />
-              <span className="absolute bottom-0 left-1/2 size-8 -translate-x-1/2 translate-y-1/2 rounded-full bg-surface border-t" />
+              <span className="absolute left-1/2 top-0 size-6 -translate-x-1/2 -translate-y-1/2 rounded-full bg-surface border-b" />
+              <span className="absolute bottom-0 left-1/2 size-6 -translate-x-1/2 translate-y-1/2 rounded-full bg-surface border-t" />
             </div>
 
             <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-4">
@@ -213,6 +229,10 @@ function CouponList({ coupons, isLoading, onCreate, onEdit, onToggleArchive, onD
                   {STATUS_LABEL[coupon.status] ?? coupon.status}
                 </Chip>
               </div>
+              <div className="block truncate text-sm font-medium mt-0">
+                <span className="text-foreground">Descrição: </span>
+                <span className="text-muted">{coupon.description || 'Sem descrição'}</span>
+              </div>
               <div className="text-sm text-muted font-medium">
                 <span>
                   {DISCOUNT_LABEL[coupon.discountType]?.(coupon) ?? coupon.discountValue}
@@ -220,57 +240,88 @@ function CouponList({ coupons, isLoading, onCreate, onEdit, onToggleArchive, onD
                   {SCOPE_LABEL[coupon.scope] ?? coupon.scope}
                 </span>
               </div>
-              <span className="block truncate text-sm text-muted font-medium">
-                {coupon.description ? ` ${coupon.description}` : ''}
-              </span>
+              <div className="flex items-center gap-4 text-xs text-muted font-medium mt-3">
+                <span className="flex items-center gap-1">
+                  <Calendar size={13} />
+                  {coupon.expiresAt ? `Válido até ${formatDate(coupon.expiresAt)}` : 'Sem data de expiração'}
+                </span>
+                <span className="flex items-center gap-1">
+                  <RefreshCw size={13} />
+                  {coupon.usageLimit ? `${coupon.usageCount}/${coupon.usageLimit} usos` : 'Uso ilimitado'}
+                </span>
+              </div>
             </div>
           </div>
 
           <div className="flex shrink-0 items-center gap-1 py-4 pr-8">
-            <Button variant="ghost" isIconOnly aria-label="Editar cupom" onPress={() => onEdit(coupon)} className="hover:bg-accent-soft hover:text-accent transition-all duration-180">
-              <Pencil className="size-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              isIconOnly
-              aria-label={coupon.status === 'archived' ? 'Desarquivar cupom' : 'Arquivar cupom'}
-              onPress={() => onToggleArchive(coupon)}
-              className="hover:bg-warning-soft hover:text-warning transition-all duration-180"
-            >
-              {coupon.status === 'archived' ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
-            </Button>
-            <AlertDialog>
-              <Button
-                variant="ghost"
-                isIconOnly
-                aria-label="Remover cupom"
-                className="hover:bg-danger-soft hover:text-danger transition-all duration-180"
-              >
-                <Trash2 className="size-4" />
-              </Button>
-              <AlertDialog.Backdrop>
-                <AlertDialog.Container>
-                  <AlertDialog.Dialog className="sm:max-w-130">
-                    <AlertDialog.Header>
-                      <AlertDialog.Icon status="danger" />
-                      <AlertDialog.Heading>Remover cupom "{coupon.code}"?</AlertDialog.Heading>
-                    </AlertDialog.Header>
-                    <AlertDialog.Body>
-                      <p>
-                        Essa ação não pode ser desfeita. O cupom será removido definitivamente,
-                        junto com a referência ao seu histórico de uso.
-                      </p>
-                    </AlertDialog.Body>
-                    <AlertDialog.Footer>
-                      <Button slot="close" variant="tertiary">Cancelar</Button>
-                      <Button slot="close" variant="danger" onPress={() => onDelete(coupon)}>
-                        Remover
+            <Tooltip delay={0}>
+              <Tooltip.Trigger>
+                <Button variant="ghost" isIconOnly aria-label="Editar cupom" onPress={() => onEdit(coupon)} className="hover:bg-accent-soft hover:text-accent transition-all duration-180">
+                  <Pencil className="size-4" />
+                </Button>
+              </Tooltip.Trigger>
+              <Tooltip.Content>
+                <Tooltip.Arrow />
+                Editar
+              </Tooltip.Content>
+            </Tooltip>
+            <Tooltip delay={0}>
+              <Tooltip.Trigger>
+                <Button
+                  variant="ghost"
+                  isIconOnly
+                  aria-label={coupon.status === 'archived' ? 'Desarquivar cupom' : 'Arquivar cupom'}
+                  onPress={() => onToggleArchive(coupon)}
+                  className="hover:bg-warning-soft hover:text-warning transition-all duration-180"
+                >
+                  {coupon.status === 'archived' ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
+                </Button>
+              </Tooltip.Trigger>
+              <Tooltip.Content>
+                <Tooltip.Arrow />
+                {coupon.status !== 'archived' ? "Arquivar" : "Desarquivar"}
+              </Tooltip.Content>
+            </Tooltip>
+                <AlertDialog>
+                  <Tooltip delay={0}>
+                    <Tooltip.Trigger>
+                      <Button
+                        variant="ghost"
+                        isIconOnly
+                        aria-label="Remover cupom"
+                        className="hover:bg-danger-soft hover:text-danger transition-all duration-180"
+                      >
+                        <Trash2 className="size-4" />
                       </Button>
-                    </AlertDialog.Footer>
-                  </AlertDialog.Dialog>
-                </AlertDialog.Container>
-              </AlertDialog.Backdrop>
-            </AlertDialog>
+                    </Tooltip.Trigger>
+                    <Tooltip.Content>
+                      <Tooltip.Arrow />
+                      Excluir
+                    </Tooltip.Content>
+                  </Tooltip>
+                  <AlertDialog.Backdrop>
+                    <AlertDialog.Container>
+                      <AlertDialog.Dialog className="sm:max-w-130">
+                        <AlertDialog.Header>
+                          <AlertDialog.Icon status="danger"> <Trash2 size={20} /> </AlertDialog.Icon>
+                          <AlertDialog.Heading>Remover cupom "{coupon.code}"?</AlertDialog.Heading>
+                        </AlertDialog.Header>
+                        <AlertDialog.Body>
+                          <p>
+                            Essa ação não pode ser desfeita. O cupom será removido definitivamente,
+                            junto com a referência ao seu histórico de uso.
+                          </p>
+                        </AlertDialog.Body>
+                        <AlertDialog.Footer>
+                          <Button slot="close" variant="tertiary">Cancelar</Button>
+                          <Button slot="close" variant="danger" onPress={() => onDelete(coupon)}>
+                            Remover
+                          </Button>
+                        </AlertDialog.Footer>
+                      </AlertDialog.Dialog>
+                    </AlertDialog.Container>
+                  </AlertDialog.Backdrop>
+                </AlertDialog>
           </div>
         </div>
       ))}

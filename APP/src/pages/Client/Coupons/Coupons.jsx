@@ -52,41 +52,35 @@ function CouponTicket({ coupon, footerLabel, faded = false }) {
       className={`relative flex items-stretch justify-between gap-4 overflow-visible rounded-xl border border-default bg-overlay ${faded ? 'opacity-60 grayscale' : ''
         }`}
     >
-      {/* <div className="flex min-w-0 flex-1 items-stretch"> */}
-        <div className="flex shrink-0 items-center py-4 pl-8 pr-6">
-          <div className="flex size-12 items-center justify-center rounded-lg bg-accent-soft text-accent">
-            <BadgePercent />
-          </div>
-        </div>
-      {/* </div> */}
+      {/* esquerda: informações do cupom */}
+      <div className="flex min-w-0 flex-1 flex-col justify-between gap-3 py-4 pl-6 pr-4">
+        <span className="block text-pretty text-sm text-muted font-medium">
+          {coupon.description || DISCOUNT_LABEL[coupon.discountType]?.(coupon) || coupon.discountValue}
+        </span>
+
+        <span className="text-xs text-muted font-medium">
+          {footerLabel ?? (coupon.expiresAt ? `Válido até ${formatDate(coupon.expiresAt)}` : 'Sem data de expiração')}
+        </span>
+      </div>
 
       {/* linha de corte, com as mordidas em meia-lua nas pontas (efeito de ticket picotado) */}
       <div className="relative w-px shrink-0 self-stretch">
         <div className="absolute inset-y-3 left-1/2 -translate-x-1/2 border-l-2 border-dashed border-border" />
-        <span className="absolute left-1/2 top-0 size-8 -translate-x-1/2 -translate-y-1/2 rounded-full bg-background border-b" />
-        <span className="absolute bottom-0 left-1/2 size-8 -translate-x-1/2 translate-y-1/2 rounded-full bg-background border-t" />
+        <span className="absolute left-1/2 top-0 size-6 -translate-x-1/2 -translate-y-1/2 rounded-full bg-background border-b" />
+        <span className="absolute bottom-0 left-1/2 size-6 -translate-x-1/2 translate-y-1/2 rounded-full bg-background border-t" />
       </div>
 
-      <div className="flex min-w-0 flex-2 flex-col justify-between gap-3 py-4 pr-5">
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="block text-pretty text-sm text-muted font-medium">
-            {coupon.description || DISCOUNT_LABEL[coupon.discountType]?.(coupon) || coupon.discountValue}
-          </span>
-
-          <Button
-            variant="ghost"
-            onPress={handleCopyCode}
-            aria-label={`Copiar código ${coupon.code}`}
-            className="w-fit gap-1.5 rounded-md border border-dashed border-border px-2 py-1 font-mono font-bold tracking-wide"
-          >
-            {coupon.code}
-            {copied ? <Check size={14} className="text-success" /> : <Copy size={14} className="text-muted" />}
-          </Button>
-        </div>
-
-        <span className="self-end text-right text-xs text-muted font-medium">
-          {footerLabel ?? (coupon.expiresAt ? `Válido até ${formatDate(coupon.expiresAt)}` : 'Sem data de expiração')}
-        </span>
+      {/* direita: só o código, largura fixa, quebrando linha conforme o tamanho do código */}
+      <div className="flex w-40 shrink-0 items-center justify-center py-4 px-3">
+        <Button
+          variant="ghost"
+          onPress={handleCopyCode}
+          aria-label={`Copiar código ${coupon.code}`}
+          className="flex h-auto w-full min-w-0 flex-col items-center gap-1.5 rounded-md border border-dashed border-border px-2 py-2 text-center font-mono text-sm font-bold leading-tight tracking-wide"
+        >
+          <span className="block w-full min-w-0 whitespace-normal break-all">{coupon.code}</span>
+          {copied ? <Check size={14} className="text-success" /> : <Copy size={14} className="text-muted" />}
+        </Button>
       </div>
     </div>
   );

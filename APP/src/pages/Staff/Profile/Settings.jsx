@@ -14,6 +14,9 @@ export default function Settings() {
   // switch desligado sem ninguém saber que ela existe.
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [tabletMode, setTabletMode] = useState(false);
+  // true por padrão - bate com o default do próprio LiveClock
+  // (withSeconds = true quando a preferência ainda não foi carregada)
+  const [showClockSeconds, setShowClockSeconds] = useState(true);
 
   useEffect(() => {
     if (typeof user?.settings?.dragAppointments === "boolean") {
@@ -24,6 +27,9 @@ export default function Settings() {
     }
     if (typeof user?.settings?.tabletMode === "boolean") {
       setTabletMode(user.settings.tabletMode);
+    }
+    if (typeof user?.settings?.showClockSeconds === "boolean") {
+      setShowClockSeconds(user.settings.showClockSeconds);
     }
   }, [user]);
 
@@ -66,6 +72,19 @@ export default function Settings() {
     }
   };
 
+  const handleToggleClockSeconds = async (next) => {
+    setShowClockSeconds(next);
+    if (!user?.id) return;
+    try {
+      const updated = await api.put(`/staff/${user.id}`, { settings: { showClockSeconds: next } });
+      updateUser(updated);
+    } catch (err) {
+      console.error("Falha ao salvar preferência do relógio:", err);
+      setShowClockSeconds(!next);
+      toast(err.message || "Erro ao salvar preferência", { variant: "danger" });
+    }
+  };
+
   return (
     <div className="px-50 pt-6">
       <div>
@@ -74,7 +93,7 @@ export default function Settings() {
             <h1 className="font-bold">Arrastar agendamentos</h1>
             <span className="text-sm text-muted">Clique e arraste agendamentos para alterar dia e hora</span>
           </div>
-          
+
           <Switch isSelected={dragEnabled} onChange={handleToggleDrag}>
             <Switch.Content>
               <Switch.Control>
@@ -92,7 +111,7 @@ export default function Settings() {
             <h1 className="font-bold">Tema</h1>
             <span className="text-sm text-muted">Escolha o tema que melhor lhe agrada</span>
           </div>
-          
+
           <ThemeSwitcher />
         </div>
         <Separator className="my-6" />
@@ -104,7 +123,7 @@ export default function Settings() {
             <h1 className="font-bold">Permitir notificações</h1>
             <span className="text-sm text-muted">Receba alerta de novos agendamentos</span>
           </div>
-          
+
           <Switch isSelected={soundEnabled} onChange={handleToggleSound}>
             <Switch.Content>
               <Switch.Control>
@@ -122,8 +141,26 @@ export default function Settings() {
             <h1 className="font-bold">Modo tablet</h1>
             <span className="text-sm text-muted">Amplie a interface para melhorar a navegação</span>
           </div>
-          
+
           <Switch isSelected={tabletMode} onChange={handleToggleTablet}>
+            <Switch.Content>
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
+            </Switch.Content>
+          </Switch>
+        </div>
+        <Separator className="my-6" />
+      </div>
+
+      <div>
+        <div className="flex justify-between items-center pr-10">
+          <div>
+            <h1 className="font-bold">Mostrar segundos no relógio</h1>
+            <span className="text-sm text-muted">Exibe os segundos, menores, ao lado da hora no relógio digital</span>
+          </div>
+
+          <Switch isSelected={showClockSeconds} onChange={handleToggleClockSeconds}>
             <Switch.Content>
               <Switch.Control>
                 <Switch.Thumb />

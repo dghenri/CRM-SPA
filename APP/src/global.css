@@ -7,17 +7,22 @@
 @theme {
   --color-brand: var(--brand);
   --color-live-clock-bg: var(--live-clock-bg);
-  --color-live-clock-dot-on: var(--live-clock-dot-on);
-  --color-live-clock-dot-off: var(--live-clock-dot-off);
+  --color-live-clock-border: var(--live-clock-border);
+  --color-live-clock-fg: var(--live-clock-fg);
+  --color-live-clock-accent: var(--live-clock-accent);
 }
 
 :root {
   --spacing: 0.2rem;
   --brand: oklch(59.814% 0.13522 152.343);
-  --live-clock-bg: #010101;
-  --live-clock-dot-on: #ffffff;
-  --live-clock-dot-off: #ffffff14; /* #ffffff14 */
-  
+  /* LiveClock: agora aponta pros tokens do tema (surface/border/foreground/
+     brand) em vez de uma paleta fixa preta - assim ele acompanha claro e
+     escuro sozinho, sem precisar redefinir nada dentro de .dark. */
+  --live-clock-bg: var(--surface-secondary);
+  --live-clock-border: var(--border);
+  --live-clock-fg: var(--foreground);
+  --live-clock-accent: var(--brand);
+
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

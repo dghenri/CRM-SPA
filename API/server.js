@@ -29,6 +29,7 @@ app.use((req, res, next) => {
 const DEFAULT_STAFF_SETTINGS = {
   dragAppointments: false,
   theme: "system",
+  showClockSeconds: true,
 };
 
 // Campos da equipe (Staff) que podem ir para o front (nunca inclua "password" aqui)

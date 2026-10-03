@@ -1,89 +1,48 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-/* -------------------------- fonte matricial 5x7 -------------------------- */
-// Cada dígito é descrito como 7 linhas de 5 bits (1 = ponto aceso).
-const DIGIT_PATTERNS = {
-  '0': ['01110', '10001', '10011', '10101', '11001', '10001', '01110'],
-  '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'],
-  '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'],
-  '3': ['11111', '00010', '00100', '00010', '00001', '10001', '01110'],
-  '4': ['00010', '00110', '01010', '10010', '11111', '00010', '00010'],
-  '5': ['11111', '10000', '11110', '00001', '00001', '10001', '01110'],
-  '6': ['00110', '01000', '10000', '11110', '10001', '10001', '01110'],
-  '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'],
-  '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'],
-  '9': ['01110', '10001', '10001', '01111', '00001', '00010', '01100'],
-};
-// Os dois pontos ocupam só 1 coluna.
-const COLON_PATTERN = ['0', '0', '1', '0', '1', '0', '0'];
+// Tamanho de referência (px) só pra medir a largura do texto no canvas e
+// escalar proporcionalmente - não é o tamanho final renderizado.
+const REFERENCE_FONT_SIZE = 100;
+// Razão aproximada entre a altura "visual" de dígitos tabulares e o
+// font-size (algo entre x-height e cap-height), usada pra caber na altura
+// do container sem precisar renderizar fora da tela só pra medir.
+const CAP_HEIGHT_RATIO = 0.72;
+// Quanto menor os segundos ficam em relação ao HH:MM, como em boa parte
+// dos relógios digitais (o "miúdo" de segundos ao lado do horário grande).
+const SECONDS_SCALE = 0.55;
+const PADDING_PX = 16;
 
-// Proporções relativas ao tamanho do ponto (dotSize), usadas tanto para
-// desenhar quanto para calcular o tamanho ideal que cabe no container.
-const GAP_RATIO = 0.28; // espaço entre pontos dentro de um caractere
-const CHAR_GAP_RATIO = 0.55; // espaço entre caracteres vizinhos
-const COLON_MARGIN_RATIO = 1.15; // espaço extra de cada lado dos ":" (separa h/min/seg)
-const PADDING_PX = 12; // respiro fixo dentro do card
-
-/* ------------------------------- um dígito ------------------------------- */
-function DotChar({ char, dotSize, gap, onColor, offColor, glow }) {
-  const isColon = char === ':';
-  const pattern = isColon ? COLON_PATTERN : DIGIT_PATTERNS[char] ?? DIGIT_PATTERNS['0'];
-  const cols = isColon ? 1 : 5;
-
-  return (
-    <div
-      className="grid shrink-0"
-      style={{
-        gridTemplateColumns: `repeat(${cols}, ${dotSize}px)`,
-        gridTemplateRows: `repeat(7, ${dotSize}px)`,
-        gap: `${gap}px`,
-      }}
-    >
-      {pattern.flatMap((row, r) =>
-        (isColon ? [row] : row.split('')).map((bit, c) => {
-          const lit = bit === '1';
-          return (
-            <span
-              key={`${r}-${c}`}
-              style={{
-                width: dotSize,
-                height: dotSize,
-                borderRadius: Math.max(1, dotSize * 0.28),
-                backgroundColor: lit ? onColor : offColor,
-                boxShadow: lit && glow ? `0 0 ${dotSize}px ${onColor}99` : 'none',
-                transition: 'background-color 150ms ease, box-shadow 150ms ease',
-              }}
-            />
-          );
-        })
-      )}
-    </div>
-  );
+function measureTextWidth(text, fontSizePx, fontFamily) {
+  if (!measureTextWidth.canvas) {
+    measureTextWidth.canvas = document.createElement('canvas');
+  }
+  const ctx = measureTextWidth.canvas.getContext('2d');
+  ctx.font = `600 ${fontSizePx}px ${fontFamily}`;
+  return ctx.measureText(text).width;
 }
 
-/* -------------------------------- relógio -------------------------------- */
 /**
- * Relógio em estilo painel LED / matriz de pontos.
- * Ocupa 100% do container (w-full h-full) e recalcula o tamanho dos pontos
- * via ResizeObserver, então acompanha o card ao redimensionar a tela.
+ * Relógio digital que usa as cores do tema (claro/escuro) da aplicação em
+ * vez de uma paleta fixa - acompanha .dark/[data-theme="dark"] sozinho,
+ * através das variáveis --live-clock-bg/border/fg/accent (ver global.css).
+ *
+ * Ocupa 100% do container (w-full h-full) e recalcula o tamanho da fonte
+ * via ResizeObserver, então acompanha o card ao redimensionar a tela -
+ * mesma ideia do relógio de pontos anterior, só que medindo texto em vez
+ * de uma grade de dots.
  *
  * Props:
- * - withSeconds: mostra os segundos (padrão: true)
- * - onColor: cor dos pontos acesos (padrão: '#ffffff')
- * - offColor: cor dos pontos apagados (padrão: 'rgba(255,255,255,0.08)')
- * - glow: aplica brilho nos pontos acesos (padrão: true)
+ * - withSeconds: mostra os segundos, menores e na cor de destaque
+ *   (padrão: true)
  * - className: classes extras para o container
  */
 export default function LiveClock({
   withSeconds = true,
-  onColor = '#ffffff',
-  offColor = 'rgba(255,255,255,0.08)',
-  glow = true,
   className = '',
 }) {
   const [now, setNow] = useState(() => new Date());
   const containerRef = useRef(null);
-  const [dotSize, setDotSize] = useState(7);
+  const [fontSize, setFontSize] = useState(32);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -93,70 +52,80 @@ export default function LiveClock({
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
   const ss = String(now.getSeconds()).padStart(2, '0');
-  const chars = (withSeconds ? `${hh}:${mm}:${ss}` : `${hh}:${mm}`).split('');
-  const colonCount = chars.filter((c) => c === ':').length;
-  const digitCount = chars.length - colonCount;
+
+  // Medir sempre contra o PIOR CASO ("8" é o dígito mais largo), nunca
+  // contra a hora atual: o <canvas> usado pra medir não entende
+  // font-variant-numeric (tabular-nums), então "1" e "8" saem com larguras
+  // diferentes ali mesmo renderizando do mesmo tamanho na tela - foi isso
+  // que fazia o relógio "respirar"/mudar de tamanho a cada segundo.
+  const worstCaseText = withSeconds ? '88:88:88' : '88:88';
 
   useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
-    const digitWidthUnits = 5 + 4 * GAP_RATIO;
-    const colonWidthUnits = 1;
-    const totalWidthUnits =
-      digitCount * digitWidthUnits +
-      colonCount * colonWidthUnits +
-      (chars.length - 1) * CHAR_GAP_RATIO +
-      colonCount * 2 * COLON_MARGIN_RATIO;
-    const totalHeightUnits = 7 + 6 * GAP_RATIO;
+    const fontFamily = getComputedStyle(el).fontFamily || 'ui-monospace, monospace';
 
     const measure = () => {
       const { width, height } = el.getBoundingClientRect();
       const availableW = Math.max(0, width - PADDING_PX * 2);
       const availableH = Math.max(0, height - PADDING_PX * 2);
-      const next = Math.max(
-        1,
-        Math.min(availableW / totalWidthUnits, availableH / totalHeightUnits)
-      );
-      setDotSize(next);
+
+      const measuredWidth = measureTextWidth(worstCaseText, REFERENCE_FONT_SIZE, fontFamily) || 1;
+      const widthScale = availableW / measuredWidth;
+      const heightScale = availableH / (REFERENCE_FONT_SIZE * CAP_HEIGHT_RATIO);
+
+      // conservador de propósito: a string medida assume segundos do
+      // mesmo tamanho que HH:MM, mas eles renderizam menores (SECONDS_SCALE)
+      // - então o resultado real sempre cabe, nunca estoura.
+      const next = Math.max(8, REFERENCE_FONT_SIZE * Math.min(widthScale, heightScale));
+      setFontSize(next);
     };
 
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [digitCount, colonCount, chars.length]);
-
-  const gap = dotSize * GAP_RATIO;
-  const charGap = dotSize * CHAR_GAP_RATIO;
-  const colonMargin = dotSize * COLON_MARGIN_RATIO;
+    // só remede quando o layout pode ter mudado de verdade (liga/desliga
+    // segundos) - NUNCA a cada tick do relógio
+  }, [worstCaseText]);
 
   return (
     <div
       ref={containerRef}
-      className={`flex h-full w-full items-center justify-center overflow-hidden rounded-2xl bg-black ${className}`}
+      className={`flex h-full w-full items-center justify-center overflow-hidden rounded-2xl bg-overlay ${className}`}
       style={{ padding: PADDING_PX }}
     >
-      <div className="flex items-center" style={{ gap: `${charGap}px` }}>
-        {chars.map((char, i) => (
-          <div
-            key={i}
-            style={
-              char === ':'
-                ? { marginLeft: colonMargin, marginRight: colonMargin }
-                : undefined
-            }
-          >
-            <DotChar
-              char={char}
-              dotSize={dotSize}
-              gap={gap}
-              onColor={onColor}
-              offColor={offColor}
-              glow={glow}
-            />
-          </div>
-        ))}
+      <div
+        className="flex items-baseline font-mono font-semibold tabular-nums"
+        style={{ gap: fontSize * 0.06 }}
+      >
+        <span className="text-live-clock-fg" style={{ fontSize }}>
+          {hh}
+        </span>
+        <span className="text-live-clock-fg" style={{ fontSize }}>
+          :
+        </span>
+        <span className="text-live-clock-fg" style={{ fontSize }}>
+          {mm}
+        </span>
+
+        {withSeconds && (
+          <>
+            <span
+              /* className="text-live-clock-accent" */
+              style={{ fontSize: fontSize * SECONDS_SCALE }}
+            >
+              :
+            </span>
+            <span
+              className="text-live-clock-accent"
+              style={{ fontSize: fontSize * SECONDS_SCALE }}
+            >
+              {ss}
+            </span>
+          </>
+        )}
       </div>
     </div>
   );

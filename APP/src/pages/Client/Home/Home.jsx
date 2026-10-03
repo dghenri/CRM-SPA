@@ -6,6 +6,7 @@ import UserSuggestions from './UserSuggestions'
 import { getGreeting, getFormattedDate } from "../../../utils/dateGreeting";
 import { useAuth } from "../../../context/AuthContext";
 import { WHATSAPP_NUMBER } from '../config';
+import UserDiscovery from './UserDiscovery';
 
 const greeting = getGreeting();
 
@@ -40,7 +41,7 @@ const Home = () => {
     { label: "Meus agendamentos", icon: ClipboardList, onPress: () => {toast("Nada ainda")} }, 
     { label: "Favoritos", icon: Heart, onPress: () => {toast("Nada ainda")} },
     { label: "Histórico", icon: History, onPress: AppointmentHistory },
-    { label: "Promoções", icon: Tag, onPress: () => navigate("/user/coupons") },
+    { label: "Cupons", icon: Tag, onPress: () => navigate("/user/coupons") },
     { label: "Fale conosco", icon: MessageCircle, onPress: () => window.open(buildWhatsAppUrl(), "_blank", "noopener,noreferrer") },
   ];
 
@@ -150,6 +151,10 @@ const Home = () => {
             </Button>
           ))}
         </div>
+      </div>
+
+      <div className="mt-6">
+        <UserDiscovery />
       </div>
 
       <div className="mt-6">

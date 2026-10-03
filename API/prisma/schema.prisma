@@ -69,15 +69,21 @@ model Staff {
 }
 
 model User {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  email     String   @unique
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  email     String    @unique
+  cpf       String    @unique
   name      String
   password  String
   gender    Gender?
   phone     String?
-  birthdate DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // Progressive Profiling: cadastro inicial só exige nome, CPF, email e senha
+  // - esses campos ficam pra serem completados depois, com a conta já criada.
+  birthdate DateTime?
+  // Atualizado a cada login bem-sucedido (/auth/user/login). Usado pra
+  // identificar contas inativas (ex: lastLogin nulo ou muito antigo).
+  lastLogin DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   // relações 1-para-muitos
   // cupons criados como exclusivos deste cliente (coupon.userId aponta pra cá)

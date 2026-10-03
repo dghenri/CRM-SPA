@@ -45,6 +45,35 @@ function toPublicUser(user) {
   return safeUser;
 }
 
+// Validação de CPF (dígitos verificadores). Usada no cadastro (público e via
+// equipe) e em qualquer edição que troque o CPF - recebe o valor já só com
+// dígitos (sem pontuação).
+function isValidCpf(cpf) {
+  if (!cpf || cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+
+  let sum = 0;
+  for (let i = 0; i < 9; i++) sum += parseInt(cpf[i], 10) * (10 - i);
+  let check1 = 11 - (sum % 11);
+  if (check1 >= 10) check1 = 0;
+  if (check1 !== parseInt(cpf[9], 10)) return false;
+
+  sum = 0;
+  for (let i = 0; i < 10; i++) sum += parseInt(cpf[i], 10) * (11 - i);
+  let check2 = 11 - (sum % 11);
+  if (check2 >= 10) check2 = 0;
+  if (check2 !== parseInt(cpf[10], 10)) return false;
+
+  return true;
+}
+
+// Mensagem de erro padrão pra conflito de unicidade (e-mail ou CPF
+// duplicado), usada em qualquer rota que crie/edite um User.
+function duplicateFieldMessage(error) {
+  const target = error.meta?.target;
+  const isCpf = Array.isArray(target) ? target.includes("cpf") : String(target || "").includes("cpf");
+  return isCpf ? "Este CPF já está cadastrado." : "Este e-mail já está cadastrado.";
+}
+
 
 // Origens sempre liberadas (dev local). Pra testar via túnel, defina no
 // .env: FRONTEND_URL=https://sua-url-do-tunel.trycloudflare.com
@@ -417,17 +446,20 @@ app.delete('/services/:id', authenticateToken, async (req, res) => {
 //=============================================================== USERS (CLIENTES)
 
 //------------------------------------------------------------- POST ROUTE (cadastro de cliente - público)
+// Progressive Profiling: a primeira etapa do cadastro só exige o essencial
+// (nome, CPF, email e senha). Telefone, gênero e data de nascimento são
+// completados depois, via PUT /users/me, já com a conta criada.
 app.post('/auth/user/register', async (req, res) => {
   try {
-    const { email, name, password, gender, phone, birthdate } = req.body;
+    const { email, name, password, cpf } = req.body;
+    const cpfDigits = (cpf || "").replace(/\D/g, "");
 
-    if (!email?.trim() || !name?.trim() || !password || !birthdate) {
-      return res.status(400).json({ error: "Preencha email, nome, senha e data de nascimento." });
+    if (!email?.trim() || !name?.trim() || !password || !cpfDigits) {
+      return res.status(400).json({ error: "Preencha nome, CPF, email e senha." });
     }
 
-    const parsedBirthdate = new Date(birthdate);
-    if (Number.isNaN(parsedBirthdate.getTime())) {
-      return res.status(400).json({ error: "Data de nascimento inválida." });
+    if (!isValidCpf(cpfDigits)) {
+      return res.status(400).json({ error: "CPF inválido." });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -436,18 +468,16 @@ app.post('/auth/user/register', async (req, res) => {
       data: {
         email: email.trim().toLowerCase(),
         name: name.trim(),
+        cpf: cpfDigits,
         password: hashedPassword,
-        gender,
-        phone,
-        birthdate: parsedBirthdate,
       },
     });
 
     res.status(201).json(toPublicUser(customer));
   } catch (error) {
-    // e-mail duplicado (constraint @unique)
+    // e-mail ou CPF duplicado (constraint @unique)
     if (error.code === "P2002") {
-      return res.status(409).json({ error: "Este e-mail já está cadastrado." });
+      return res.status(409).json({ error: duplicateFieldMessage(error) });
     }
     console.error(error);
     res.status(500).json({ error: "Erro ao cadastrar cliente." });
@@ -471,13 +501,26 @@ app.post('/auth/user/login', async (req, res) => {
       return res.status(403).json({ error: "Email ou senha inválidos." });
     }
 
+    // marca o login pra depois dar pra identificar contas inativas
+    // (lastLogin nulo ou muito antigo). Feito antes de assinar o token, mas
+    // sem bloquear a resposta em caso de falha nessa atualização pontual.
+    const loginAt = new Date();
+    try {
+      await prisma.user.update({
+        where: { id: customer.id },
+        data: { lastLogin: loginAt },
+      });
+    } catch (updateError) {
+      console.error("Falha ao atualizar lastLogin:", updateError);
+    }
+
     const token = jwt.sign(
       { id: customer.id, email: customer.email, type: "user" },
       ACCESS_TOKEN_KEY,
       { expiresIn: rememberUser ? "30d" : "24h" }
     );
 
-    res.json({ token, user: toPublicUser(customer) });
+    res.json({ token, user: toPublicUser({ ...customer, lastLogin: loginAt }) });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Erro ao fazer login." });
@@ -503,12 +546,23 @@ app.get('/users/me', authenticateToken, requireUser, async (req, res) => {
   }
 });
 
-//------------------------------------------------------------- PUT ROUTE (cliente edita o próprio perfil)
+//------------------------------------------------------------- PUT ROUTE (cliente edita o próprio perfil / completa o cadastro depois)
 app.put('/users/me', authenticateToken, requireUser, async (req, res) => {
   try {
-    const { name, email, password, gender, phone, birthdate } = req.body;
+    const { name, email, password, gender, phone, birthdate, cpf } = req.body;
 
     const data = { name, email, gender, phone };
+
+    // Progressive Profiling: é por aqui que o cliente completa o cadastro
+    // depois (telefone, gênero, data de nascimento), e também onde pode
+    // corrigir o CPF se necessário.
+    if (cpf !== undefined) {
+      const cpfDigits = cpf.replace(/\D/g, "");
+      if (!isValidCpf(cpfDigits)) {
+        return res.status(400).json({ error: "CPF inválido." });
+      }
+      data.cpf = cpfDigits;
+    }
 
     if (birthdate) {
       const parsedBirthdate = new Date(birthdate);
@@ -531,7 +585,7 @@ app.put('/users/me', authenticateToken, requireUser, async (req, res) => {
     res.status(200).json(toPublicUser(updatedCustomer));
   } catch (error) {
     if (error.code === "P2002") {
-      return res.status(409).json({ error: "Este e-mail já está em uso." });
+      return res.status(409).json({ error: duplicateFieldMessage(error) });
     }
     console.error(error);
     res.status(500).json({ error: "Erro ao atualizar perfil." });
@@ -585,15 +639,23 @@ app.get('/users/:id', authenticateToken, requireStaff, async (req, res) => {
 //------------------------------------------------------------- POST ROUTE (equipe cadastra um cliente diretamente)
 app.post('/users', authenticateToken, requireStaff, async (req, res) => {
   try {
-    const { email, name, password, gender, phone, birthdate } = req.body;
+    const { email, name, password, gender, phone, birthdate, cpf } = req.body;
+    const cpfDigits = (cpf || "").replace(/\D/g, "");
 
-    if (!email?.trim() || !name?.trim() || !password || !birthdate) {
-      return res.status(400).json({ error: "Preencha email, nome, senha e data de nascimento." });
+    if (!email?.trim() || !name?.trim() || !password || !cpfDigits) {
+      return res.status(400).json({ error: "Preencha nome, CPF, email e senha." });
     }
 
-    const parsedBirthdate = new Date(birthdate);
-    if (Number.isNaN(parsedBirthdate.getTime())) {
-      return res.status(400).json({ error: "Data de nascimento inválida." });
+    if (!isValidCpf(cpfDigits)) {
+      return res.status(400).json({ error: "CPF inválido." });
+    }
+
+    let parsedBirthdate;
+    if (birthdate) {
+      parsedBirthdate = new Date(birthdate);
+      if (Number.isNaN(parsedBirthdate.getTime())) {
+        return res.status(400).json({ error: "Data de nascimento inválida." });
+      }
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -602,6 +664,7 @@ app.post('/users', authenticateToken, requireStaff, async (req, res) => {
       data: {
         email: email.trim().toLowerCase(),
         name: name.trim(),
+        cpf: cpfDigits,
         password: hashedPassword,
         gender,
         phone,
@@ -612,7 +675,7 @@ app.post('/users', authenticateToken, requireStaff, async (req, res) => {
     res.status(201).json(toPublicUser(customer));
   } catch (error) {
     if (error.code === "P2002") {
-      return res.status(409).json({ error: "Este e-mail já está cadastrado." });
+      return res.status(409).json({ error: duplicateFieldMessage(error) });
     }
     console.error(error);
     res.status(500).json({ error: "Erro ao criar cliente." });
@@ -622,9 +685,17 @@ app.post('/users', authenticateToken, requireStaff, async (req, res) => {
 //------------------------------------------------------------- PUT ROUTE (equipe edita um cliente específico)
 app.put('/users/:id', authenticateToken, requireStaff, async (req, res) => {
   try {
-    const { name, email, password, gender, phone, birthdate } = req.body;
+    const { name, email, password, gender, phone, birthdate, cpf } = req.body;
 
     const data = { name, email, gender, phone };
+
+    if (cpf !== undefined) {
+      const cpfDigits = cpf.replace(/\D/g, "");
+      if (!isValidCpf(cpfDigits)) {
+        return res.status(400).json({ error: "CPF inválido." });
+      }
+      data.cpf = cpfDigits;
+    }
 
     if (birthdate) {
       const parsedBirthdate = new Date(birthdate);
@@ -648,7 +719,7 @@ app.put('/users/:id', authenticateToken, requireStaff, async (req, res) => {
     res.status(200).json(toPublicUser(updatedCustomer));
   } catch (error) {
     if (error.code === "P2002") {
-      return res.status(409).json({ error: "Este e-mail já está em uso." });
+      return res.status(409).json({ error: duplicateFieldMessage(error) });
     }
     if (error.code === "P2025") {
       return res.status(404).json({ error: "Cliente não encontrado." });
@@ -1427,7 +1498,7 @@ app.post('/coupons/apply', authenticateToken, requireUser, async (req, res) => {
 
 server.listen(3000, () => console.log("Server running on port 3000 (HTTP + WebSocket)"));
 
-/* 
+/*
 1 - Tipo de rota / Método HTTP
 2 - Endereço
 

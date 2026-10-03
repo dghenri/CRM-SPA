@@ -121,6 +121,7 @@ export default function Login() {
           <img className="size-25" src="/LotusIcon.svg" alt="" />
           <h1 className="text-2xl font-bold text-brand">Viva Bem SPA</h1>
         </div>
+
         <div className="hidden md:col-span-2 md:block md:h-full">
           <Card className="relative h-full overflow-hidden rounded-3xl p-0">
             <Carousel />

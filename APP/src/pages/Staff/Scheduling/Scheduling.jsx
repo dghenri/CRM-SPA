@@ -734,8 +734,22 @@ function TimeGrid({ cursor, view, appointments, onCreate, onUpdate, onDelete, on
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 60_000);
-    return () => clearInterval(t);
+    // Agenda o primeiro tick exatamente na virada do próximo minuto (em vez
+    // de 60s a partir do mount, que é o que causava o atraso: se a página
+    // montasse às 12:24:41, o próximo tick só vinha às 12:25:41, não às
+    // 12:25:00). Depois disso, um tick por minuto já cai certinho na virada.
+    let intervalId;
+
+    const msUntilNextMinute = 60_000 - (Date.now() % 60_000);
+    const timeoutId = setTimeout(() => {
+      setNow(new Date());
+      intervalId = setInterval(() => setNow(new Date()), 60_000);
+    }, msUntilNextMinute);
+
+    return () => {
+      clearTimeout(timeoutId);
+      clearInterval(intervalId);
+    };
   }, []);
 
   useEffect(() => {

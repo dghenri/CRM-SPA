@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { Button, Link, Badge, Avatar, Chip, Toast, toast, } from '@heroui/react';
 import { ChevronUp, ChevronDown,  } from "lucide-react";
 import LiveClock from '../../../components/LiveClock';
+import { useAuth } from "../../../context/AuthContext";
 import { DayView, formatClock, useAppointments, colorMap } from '../Scheduling/Scheduling';
 import SessionTable from "./SessionTable"
 
@@ -156,9 +157,14 @@ function KpiCard({ label, value, chip }) {
 
 /* ---------------------------------- Home ---------------------------------- */
 const Home = () => {
+  const { user } = useAuth();
   const appointments = useAppointments();
   const now = useNow();
   const { total, completed, pending, diffPct, isUp, showChip } = useDayStats(appointments, now);
+
+  // bate com o default do próprio LiveClock (withSeconds = true) enquanto
+  // a preferência do staff ainda não carregou
+  const showClockSeconds = user?.settings?.showClockSeconds ?? true;
 
   return (
     <div className="-pr-8">
@@ -167,7 +173,7 @@ const Home = () => {
 
           {/* CLOCK */}
           <div className="flex col-span-3 h-full w-full justify-center overflow-hidden items-center rounded-xl">
-            <LiveClock />
+            <LiveClock withSeconds={showClockSeconds} />
           </div>
 
           {/* BOX 2 */}
@@ -206,12 +212,7 @@ const Home = () => {
         <div className='h-65 bg-overlay rounded-2xl'>
           <SessionTable appointments={appointments} />
         </div>
-
-        {/* <div className="h-65 bg-background rounded-2xl p-1">
-          <div className="bg-overlay h-full rounded-2xl overflow-hidden">
-            
-          </div>
-        </div> */}
+        
       </div>
     </div>
   )

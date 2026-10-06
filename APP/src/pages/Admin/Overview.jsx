@@ -283,7 +283,7 @@ function PendingRequestItem({ request, busy, onApprove, onReject }) {
   const extra = request.items.length - MAX_ITEMS;
 
   return (
-    <li className="flex flex-col gap-3 rounded-xl bg-surface-secondary p-3">
+    <li className="flex flex-col gap-3 rounded-xl bg-surface p-3">
       <div className="flex flex-col gap-1">
         <div className="flex items-start justify-between gap-2">
           <p className="text-sm">
@@ -336,7 +336,7 @@ function PendingRequestsCard({ requests, busyId, onApprove, onReject }) {
             <span className="text-sm font-semibold text-muted">Nenhuma solicitação pendente</span>
           </div>
         ) : (
-          <ul className="flex max-h-[28rem] flex-col gap-3 overflow-y-auto pr-1">
+          <ul className="flex max-h-112 bg-da flex-col gap-3 overflow-y-auto pr-1">
             {requests.map((r) => (
               <PendingRequestItem key={r.id} request={r} busy={busyId === r.id} onApprove={onApprove} onReject={onReject} />
             ))}

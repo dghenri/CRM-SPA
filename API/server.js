@@ -140,13 +140,22 @@ function requireUser(req, res, next) {
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: "/ws" });
 
-function broadcastAppointmentsChanged() {
-  const payload = JSON.stringify({ type: "appointments-changed" });
+function broadcastToStaff(type) {
+  const payload = JSON.stringify({ type });
   for (const client of wss.clients) {
     if (client.readyState === WebSocket.OPEN) {
       client.send(payload);
     }
   }
+}
+
+function broadcastAppointmentsChanged() {
+  broadcastToStaff("appointments-changed");
+}
+
+// estoque: produtos, lotes ou solicitações mudaram (o front recarrega a tela)
+function broadcastStockChanged() {
+  broadcastToStaff("stock-changed");
 }
 
 // Autenticação do socket: o handshake de WebSocket não manda header
@@ -1497,10 +1506,718 @@ app.post('/coupons/apply', authenticateToken, requireUser, async (req, res) => {
 });
 
 
+//=============================================================== ESTOQUE (INSUMOS)
+//
+// Modelo: ledger (StockMovement) + lotes (StockBatch) + cache de saldo
+// (Product.currentStock). Nada altera saldo sem passar por applyStockItems(),
+// sempre dentro de uma $transaction.
+//
+// - MajorAdmin aplica direto (a solicitação é gravada já como Approved, só
+//   pra manter a auditoria uniforme).
+// - Demais cargos criam uma StockRequest (Pending) e o MajorAdmin aprova/nega.
+// - Entrada (Purchase), Loss e Adjustment passam por aprovação. Consumo por
+//   receita (fase 2) é automático e não passa por aqui.
+
+const MAJOR_ADMIN = "MajorAdmin";
+const REQUESTABLE_TYPES = ["Purchase", "Loss", "Adjustment"];
+const EXPIRING_SOON_DAYS = 30;
+
+// evita lixo de ponto flutuante (0.1 + 0.2) no saldo
+const round3 = (n) => Math.round((Number(n) + Number.EPSILON) * 1000) / 1000;
+
+class StockError extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.status = status;
+  }
+}
+
+// carrega o Staff do banco (não confia em role vinda do JWT, mesmo padrão do PUT /staff)
+async function loadStaff(req, res, next) {
+  try {
+    const staff = await prisma.staff.findUnique({ where: { id: req.user.id } });
+    if (!staff) return res.status(401).json({ error: "Sessão expirada." });
+    if (staff.status === "Inactive") return res.status(403).json({ error: "Conta inativa." });
+    req.staff = staff;
+    next();
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro ao validar usuário." });
+  }
+}
+
+// usar depois de authenticateToken, requireStaff, loadStaff
+function requireMajorAdmin(req, res, next) {
+  if (req.staff?.role !== MAJOR_ADMIN) {
+    return res.status(403).json({ error: "Apenas o MajorAdmin pode fazer isso." });
+  }
+  next();
+}
+
+const stockAuth = [authenticateToken, requireStaff, loadStaff];
+
+function canHandleProduct(staff, product) {
+  return staff.role === MAJOR_ADMIN || (product.allowedRoles || []).includes(staff.role);
+}
+
+// ordem FEFO: vence primeiro, sai primeiro. Lotes sem validade vão por último.
+// Feito em JS (expiresAt é opcional e filtros de null no conector Mongo do Prisma são instáveis).
+function sortFefo(batches) {
+  return [...batches].sort((a, b) => {
+    const ae = a.expiresAt ? new Date(a.expiresAt).getTime() : Infinity;
+    const be = b.expiresAt ? new Date(b.expiresAt).getTime() : Infinity;
+    if (ae !== be) return ae - be;
+    return new Date(a.receivedAt) - new Date(b.receivedAt);
+  });
+}
+
+// quando o frasco aberto deixa de valer
+function openedExpiresAt(batch, product) {
+  if (!batch.openedAt || !product.shelfLifeAfterOpenHours) return null;
+  return new Date(new Date(batch.openedAt).getTime() + product.shelfLifeAfterOpenHours * 3600 * 1000);
+}
+
+function decorateBatch(batch, product, now = new Date()) {
+  const soon = new Date(now.getTime() + EXPIRING_SOON_DAYS * 86400 * 1000);
+  const openedExp = openedExpiresAt(batch, product);
+  return {
+    ...batch,
+    openedExpiresAt: openedExp,
+    isExpired: !!(batch.expiresAt && new Date(batch.expiresAt) <= now),
+    isExpiringSoon: !!(batch.expiresAt && new Date(batch.expiresAt) > now && new Date(batch.expiresAt) <= soon),
+    isOpenedExpired: !!(openedExp && openedExp <= now),
+  };
+}
+
+// valor opcional vindo do front: "" / undefined / null => undefined
+const optNumber = (v) => (v === undefined || v === null || v === "" ? undefined : Number(v));
+
+//------------------------------------------------------------- núcleo: aplica itens no estoque (SEMPRE dentro de uma transação)
+// `tx` é o client da transação. Lança StockError (e a transação inteira é desfeita).
+async function decrementBatch(tx, batch, qty, product) {
+  // updateMany condicional = proteção contra concorrência: só abate se ainda tem saldo
+  const r = await tx.stockBatch.updateMany({
+    where: { id: batch.id, quantity: { gte: qty } },
+    data: { quantity: { decrement: qty } },
+  });
+  if (r.count !== 1) {
+    throw new StockError(`Saldo insuficiente no lote${batch.lotNumber ? ` ${batch.lotNumber}` : ""} de ${product.name}.`, 409);
+  }
+}
+
+async function applyStockItems(tx, { type, items, staffId, requestId, reason }) {
+  for (const item of items) {
+    const product = await tx.product.findUnique({ where: { id: item.productId } });
+    if (!product) throw new StockError("Produto não encontrado.", 404);
+    if (!product.active) throw new StockError(`O produto ${product.name} está inativo.`);
+
+    const movementBase = { type, productId: product.id, staffId, requestId: requestId || undefined, reason: reason || undefined };
+    let delta = 0;
+
+    if (type === "Purchase") {
+      // trackOpening: 1 lote por embalagem (cada frasco abre em momentos diferentes)
+      const splitByPackage = product.trackOpening && item.packages && Number.isInteger(item.packages);
+      const parts = splitByPackage
+        ? Array.from({ length: item.packages }, () => round3(item.quantity / item.packages))
+        : [round3(item.quantity)];
+
+      for (const qty of parts) {
+        const batch = await tx.stockBatch.create({
+          data: {
+            productId: product.id,
+            quantity: qty,
+            lotNumber: item.lotNumber || undefined,
+            expiresAt: item.expiresAt ? new Date(item.expiresAt) : undefined,
+            unitCost: item.unitCost ?? undefined,
+          },
+        });
+        await tx.stockMovement.create({
+          data: { ...movementBase, batchId: batch.id, quantity: qty, unitCost: item.unitCost ?? undefined },
+        });
+        delta += qty;
+      }
+      if (item.unitCost != null) {
+        await tx.product.update({ where: { id: product.id }, data: { lastCost: item.unitCost } });
+      }
+    } else if (type === "Loss") {
+      let remaining = round3(item.quantity);
+      let candidates;
+      if (item.batchId) {
+        const b = await tx.stockBatch.findUnique({ where: { id: item.batchId } });
+        if (!b || b.productId !== product.id) throw new StockError("Lote inválido para este produto.");
+        candidates = [b];
+      } else {
+        candidates = sortFefo(await tx.stockBatch.findMany({ where: { productId: product.id, quantity: { gt: 0 } } }));
+      }
+      for (const b of candidates) {
+        if (remaining <= 0) break;
+        const take = round3(Math.min(b.quantity, remaining));
+        if (take <= 0) continue;
+        await decrementBatch(tx, b, take, product);
+        await tx.stockMovement.create({ data: { ...movementBase, batchId: b.id, quantity: -take } });
+        remaining = round3(remaining - take);
+        delta -= take;
+      }
+      if (remaining > 0) throw new StockError(`Saldo insuficiente de ${product.name}.`, 409);
+    } else if (type === "Adjustment") {
+      const b = item.batchId ? await tx.stockBatch.findUnique({ where: { id: item.batchId } }) : null;
+      if (!b || b.productId !== product.id) throw new StockError("Informe um lote válido para o ajuste.");
+      const qty = round3(item.quantity);
+      if (qty < 0) {
+        await decrementBatch(tx, b, -qty, product);
+      } else {
+        await tx.stockBatch.update({ where: { id: b.id }, data: { quantity: { increment: qty } } });
+      }
+      await tx.stockMovement.create({ data: { ...movementBase, batchId: b.id, quantity: qty } });
+      delta += qty;
+    } else {
+      throw new StockError("Tipo de movimentação inválido.");
+    }
+
+    // cache do saldo (confere com a soma do ledger)
+    await tx.product.update({ where: { id: product.id }, data: { currentStock: { increment: round3(delta) } } });
+  }
+}
+
+//------------------------------------------------------------- valida e normaliza os itens recebidos do front
+async function normalizeRequestItems(type, rawItems, staff) {
+  if (!REQUESTABLE_TYPES.includes(type)) throw new StockError("Tipo inválido. Use Purchase, Loss ou Adjustment.");
+  if (!Array.isArray(rawItems) || rawItems.length === 0) throw new StockError("Adicione ao menos um item.");
+  if (rawItems.length > 50) throw new StockError("Itens demais em uma única solicitação.");
+
+  const products = await prisma.product.findMany({ where: { id: { in: rawItems.map((i) => String(i.productId)) } } });
+  const byId = new Map(products.map((p) => [p.id, p]));
+  const out = [];
+
+  for (const raw of rawItems) {
+    const product = byId.get(String(raw.productId));
+    if (!product) throw new StockError("Produto não encontrado.", 404);
+    if (!product.active) throw new StockError(`O produto ${product.name} está inativo.`);
+    if (!canHandleProduct(staff, product)) {
+      throw new StockError(`Você não tem permissão para movimentar ${product.name}.`, 403);
+    }
+
+    const item = { productId: product.id };
+
+    if (type === "Purchase") {
+      const packages = Number(raw.packages);
+      if (!Number.isFinite(packages) || packages <= 0) throw new StockError(`Informe a quantidade de ${product.purchaseUnitLabel || "embalagens"} de ${product.name}.`);
+      item.packages = packages;
+      item.quantity = round3(packages * product.purchaseUnitSize);
+      if (raw.lotNumber?.trim()) item.lotNumber = raw.lotNumber.trim();
+      if (raw.expiresAt) {
+        const d = new Date(raw.expiresAt);
+        if (Number.isNaN(d.getTime())) throw new StockError("Validade inválida.");
+        item.expiresAt = d;
+      }
+      // o front manda o custo POR EMBALAGEM; guardamos por unidade base
+      const packageCost = optNumber(raw.packageCost);
+      if (packageCost !== undefined) {
+        if (!(packageCost >= 0)) throw new StockError("Custo inválido.");
+        item.unitCost = round3(packageCost / product.purchaseUnitSize);
+      }
+    } else {
+      const qty = Number(raw.quantity);
+      if (!Number.isFinite(qty) || qty === 0) throw new StockError(`Informe a quantidade de ${product.name}.`);
+      if (type === "Loss" && qty < 0) throw new StockError("Em perdas, informe a quantidade como valor positivo.");
+      item.quantity = round3(qty);
+      if (raw.batchId) item.batchId = String(raw.batchId);
+      if (type === "Adjustment" && !item.batchId) throw new StockError(`Escolha o lote de ${product.name} para o ajuste.`);
+    }
+
+    out.push(item);
+  }
+  return out;
+}
+
+//------------------------------------------------------------- serialização: anexa nome/unidade do produto aos itens da solicitação
+async function serializeRequests(requests) {
+  const ids = [...new Set(requests.flatMap((r) => r.items.map((i) => i.productId)))];
+  const products = await prisma.product.findMany({ where: { id: { in: ids } } });
+  const byId = new Map(products.map((p) => [p.id, p]));
+  return requests.map((r) => ({
+    ...r,
+    items: r.items.map((i) => {
+      const p = byId.get(i.productId);
+      return {
+        ...i,
+        productName: p?.name ?? "(produto removido)",
+        unit: p?.unit,
+        purchaseUnitLabel: p?.purchaseUnitLabel,
+      };
+    }),
+  }));
+}
+
+const requestInclude = {
+  requestedBy: { select: { id: true, name: true, role: true } },
+  reviewedBy: { select: { id: true, name: true } },
+};
+
+//=============================================================== PRODUTOS
+
+function parseProductBody(body, { partial = false } = {}) {
+  const data = {};
+  const has = (k) => body[k] !== undefined;
+
+  if (!partial || has("name")) {
+    if (!body.name?.trim()) throw new StockError("Informe o nome do produto.");
+    data.name = body.name.trim();
+  }
+  if (!partial || has("unit")) {
+    if (!["Un", "Ml", "G"].includes(body.unit)) throw new StockError("Unidade inválida (Un, Ml ou G).");
+    data.unit = body.unit;
+  }
+  if (has("sku")) data.sku = body.sku?.trim() || null;
+  if (has("category")) data.category = body.category?.trim() || null;
+  if (has("active")) data.active = !!body.active;
+  if (has("purchaseUnitLabel")) data.purchaseUnitLabel = body.purchaseUnitLabel?.trim() || null;
+  if (has("purchaseUnitSize")) {
+    const size = Number(body.purchaseUnitSize);
+    if (!(size > 0)) throw new StockError("O tamanho da embalagem deve ser maior que zero.");
+    data.purchaseUnitSize = size;
+  }
+  if (has("minStock")) {
+    const min = Number(body.minStock) || 0;
+    if (min < 0) throw new StockError("Estoque mínimo inválido.");
+    data.minStock = min;
+  }
+  if (has("trackOpening")) data.trackOpening = !!body.trackOpening;
+  if (has("shelfLifeAfterOpenHours")) {
+    const h = optNumber(body.shelfLifeAfterOpenHours);
+    data.shelfLifeAfterOpenHours = h && h > 0 ? Math.round(h) : null;
+  }
+  if (has("allowedRoles")) {
+    const valid = ["MajorAdmin", "Farmaceutica", "Massoterapeuta"];
+    if (!Array.isArray(body.allowedRoles) || body.allowedRoles.some((r) => !valid.includes(r))) {
+      throw new StockError("Cargos permitidos inválidos.");
+    }
+    // MajorAdmin sempre pode; não precisa ficar na lista
+    data.allowedRoles = [...new Set(body.allowedRoles.filter((r) => r !== MAJOR_ADMIN))];
+  }
+  return data;
+}
+
+//------------------------------------------------------------- GET ROUTE (lista produtos com saldo, lotes e alertas - toda a equipe vê)
+app.get('/products', ...stockAuth, async (req, res) => {
+  try {
+    const includeInactive = req.staff.role === MAJOR_ADMIN && req.query.includeInactive === "true";
+    const products = await prisma.product.findMany({ orderBy: { name: 'asc' } });
+    const visible = includeInactive ? products : products.filter((p) => p.active);
+
+    const batches = await prisma.stockBatch.findMany({
+      where: { productId: { in: visible.map((p) => p.id) }, quantity: { gt: 0 } },
+    });
+    const batchesByProduct = new Map();
+    for (const b of batches) {
+      if (!batchesByProduct.has(b.productId)) batchesByProduct.set(b.productId, []);
+      batchesByProduct.get(b.productId).push(b);
+    }
+
+    const now = new Date();
+    res.json(visible.map((p) => {
+      const productBatches = sortFefo(batchesByProduct.get(p.id) || []).map((b) => decorateBatch(b, p, now));
+      return {
+        ...p,
+        canRequest: canHandleProduct(req.staff, p),
+        batches: productBatches,
+        alerts: {
+          lowStock: p.minStock > 0 && p.currentStock <= p.minStock,
+          expired: productBatches.some((b) => b.isExpired),
+          expiringSoon: productBatches.some((b) => b.isExpiringSoon),
+          openedExpired: productBatches.some((b) => b.isOpenedExpired),
+        },
+      };
+    }));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro ao buscar produtos." });
+  }
+});
+
+//------------------------------------------------------------- POST ROUTE (MajorAdmin cadastra produto - saldo nasce zerado, entra só via movimentação)
+app.post('/products', ...stockAuth, requireMajorAdmin, async (req, res) => {
+  try {
+    const data = parseProductBody(req.body);
+    const product = await prisma.product.create({ data });
+    broadcastStockChanged();
+    res.status(201).json(product);
+  } catch (error) {
+    if (error instanceof StockError) return res.status(error.status).json({ error: error.message });
+    if (error.code === "P2002") return res.status(409).json({ error: "Já existe um produto com esse SKU." });
+    console.error(error);
+    res.status(500).json({ error: "Erro ao criar produto." });
+  }
+});
+
+//------------------------------------------------------------- PUT ROUTE (MajorAdmin edita produto; currentStock NÃO é editável aqui)
+app.put('/products/:id', ...stockAuth, requireMajorAdmin, async (req, res) => {
+  try {
+    const data = parseProductBody(req.body, { partial: true });
+    const product = await prisma.product.update({ where: { id: req.params.id }, data });
+    broadcastStockChanged();
+    res.json(product);
+  } catch (error) {
+    if (error instanceof StockError) return res.status(error.status).json({ error: error.message });
+    if (error.code === "P2002") return res.status(409).json({ error: "Já existe um produto com esse SKU." });
+    if (error.code === "P2025") return res.status(404).json({ error: "Produto não encontrado." });
+    console.error(error);
+    res.status(500).json({ error: "Erro ao atualizar produto." });
+  }
+});
+
+//------------------------------------------------------------- PATCH ROUTE (registra a abertura de um frasco/lote)
+// Não mexe em saldo, então não precisa de aprovação: basta ter permissão no produto.
+app.patch('/stock/batches/:id/open', ...stockAuth, async (req, res) => {
+  try {
+    const batch = await prisma.stockBatch.findUnique({ where: { id: req.params.id }, include: { product: true } });
+    if (!batch) return res.status(404).json({ error: "Lote não encontrado." });
+    if (!canHandleProduct(req.staff, batch.product)) {
+      return res.status(403).json({ error: "Você não tem permissão para este produto." });
+    }
+    if (!batch.product.trackOpening) {
+      return res.status(400).json({ error: "Este produto não controla abertura de frasco." });
+    }
+    if (batch.openedAt) return res.status(409).json({ error: "Este frasco já foi marcado como aberto." });
+    if (batch.quantity <= 0) return res.status(400).json({ error: "Este lote está vazio." });
+
+    let openedAt = new Date();
+    if (req.body?.openedAt) {
+      openedAt = new Date(req.body.openedAt);
+      if (Number.isNaN(openedAt.getTime()) || openedAt > new Date()) {
+        return res.status(400).json({ error: "Data de abertura inválida." });
+      }
+    }
+
+    await prisma.stockBatch.update({ where: { id: batch.id }, data: { openedAt } });
+
+    broadcastStockChanged();
+    const updated = await prisma.stockBatch.findUnique({ where: { id: batch.id } });
+    res.json(decorateBatch(updated, batch.product));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro ao registrar abertura." });
+  }
+});
+
+//=============================================================== SOLICITAÇÕES DE ESTOQUE
+
+//------------------------------------------------------------- POST ROUTE (cria solicitação; MajorAdmin aplica direto)
+app.post('/stock/requests', ...stockAuth, async (req, res) => {
+  try {
+    const { type, items, reason } = req.body;
+    const normalized = await normalizeRequestItems(type, items, req.staff);
+    const isAdmin = req.staff.role === MAJOR_ADMIN;
+
+    if (type !== "Purchase" && !reason?.trim()) {
+      return res.status(400).json({ error: "Informe o motivo (perda/ajuste exigem justificativa)." });
+    }
+
+    const request = await prisma.$transaction(async (tx) => {
+      const created = await tx.stockRequest.create({
+        data: {
+          type,
+          items: normalized,
+          reason: reason?.trim() || undefined,
+          requestedById: req.staff.id,
+          ...(isAdmin ? { status: "Approved", reviewedById: req.staff.id, reviewedAt: new Date() } : {}),
+        },
+      });
+      if (isAdmin) {
+        await applyStockItems(tx, {
+          type, items: normalized, staffId: req.staff.id, requestId: created.id, reason: reason?.trim(),
+        });
+      }
+      return created;
+    });
+
+    broadcastStockChanged();
+    const full = await prisma.stockRequest.findUnique({ where: { id: request.id }, include: requestInclude });
+    const [serialized] = await serializeRequests([full]);
+    res.status(201).json(serialized);
+  } catch (error) {
+    if (error instanceof StockError) return res.status(error.status).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: "Erro ao criar solicitação." });
+  }
+});
+
+//------------------------------------------------------------- GET ROUTE (MajorAdmin vê todas; demais veem só as próprias)
+app.get('/stock/requests', ...stockAuth, async (req, res) => {
+  try {
+    const { status } = req.query;
+    const isAdmin = req.staff.role === MAJOR_ADMIN;
+
+    const requests = await prisma.stockRequest.findMany({
+      where: {
+        status: status || undefined,
+        requestedById: isAdmin ? undefined : req.staff.id,
+      },
+      include: requestInclude,
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+
+    res.json(await serializeRequests(requests));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro ao buscar solicitações." });
+  }
+});
+
+//------------------------------------------------------------- PATCH ROUTE (MajorAdmin aprova: aplica no estoque, tudo-ou-nada)
+app.patch('/stock/requests/:id/approve', ...stockAuth, requireMajorAdmin, async (req, res) => {
+  try {
+    await prisma.$transaction(async (tx) => {
+      // transição atômica Pending -> Approved: dois cliques não aplicam duas vezes
+      const claim = await tx.stockRequest.updateMany({
+        where: { id: req.params.id, status: "Pending" },
+        data: { status: "Approved", reviewedById: req.staff.id, reviewedAt: new Date() },
+      });
+      if (claim.count !== 1) {
+        const exists = await tx.stockRequest.findUnique({ where: { id: req.params.id } });
+        throw new StockError(exists ? "Esta solicitação já foi analisada." : "Solicitação não encontrada.", exists ? 409 : 404);
+      }
+
+      const request = await tx.stockRequest.findUnique({ where: { id: req.params.id } });
+      // saldo é validado AQUI (na aprovação), não na criação. Se faltar saldo,
+      // o erro desfaz a transação inteira e a solicitação continua Pending.
+      await applyStockItems(tx, {
+        type: request.type, items: request.items, staffId: req.staff.id,
+        requestId: request.id, reason: request.reason,
+      });
+    });
+
+    broadcastStockChanged();
+    const full = await prisma.stockRequest.findUnique({ where: { id: req.params.id }, include: requestInclude });
+    const [serialized] = await serializeRequests([full]);
+    res.json(serialized);
+  } catch (error) {
+    if (error instanceof StockError) return res.status(error.status).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({ error: "Erro ao aprovar solicitação." });
+  }
+});
+
+//------------------------------------------------------------- PATCH ROUTE (MajorAdmin nega)
+app.patch('/stock/requests/:id/reject', ...stockAuth, requireMajorAdmin, async (req, res) => {
+  try {
+    const r = await prisma.stockRequest.updateMany({
+      where: { id: req.params.id, status: "Pending" },
+      data: {
+        status: "Rejected",
+        reviewedById: req.staff.id,
+        reviewedAt: new Date(),
+        reviewNote: req.body?.reviewNote?.trim() || undefined,
+      },
+    });
+    if (r.count !== 1) {
+      const exists = await prisma.stockRequest.findUnique({ where: { id: req.params.id } });
+      return res.status(exists ? 409 : 404).json({ error: exists ? "Esta solicitação já foi analisada." : "Solicitação não encontrada." });
+    }
+
+    broadcastStockChanged();
+    const full = await prisma.stockRequest.findUnique({ where: { id: req.params.id }, include: requestInclude });
+    const [serialized] = await serializeRequests([full]);
+    res.json(serialized);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro ao negar solicitação." });
+  }
+});
+
+//------------------------------------------------------------- PATCH ROUTE (quem solicitou cancela enquanto ainda está Pending)
+app.patch('/stock/requests/:id/cancel', ...stockAuth, async (req, res) => {
+  try {
+    const r = await prisma.stockRequest.updateMany({
+      where: { id: req.params.id, status: "Pending", requestedById: req.staff.id },
+      data: { status: "Cancelled" },
+    });
+    if (r.count !== 1) {
+      return res.status(409).json({ error: "Só é possível cancelar suas próprias solicitações pendentes." });
+    }
+    broadcastStockChanged();
+    res.json({ message: "Solicitação cancelada." });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro ao cancelar solicitação." });
+  }
+});
+
+//------------------------------------------------------------- GET ROUTE (MajorAdmin: histórico/auditoria do ledger)
+app.get('/stock/movements', ...stockAuth, requireMajorAdmin, async (req, res) => {
+  try {
+    const { productId, type } = req.query;
+    const limit = Math.min(Number(req.query.limit) || 100, 500);
+
+    const movements = await prisma.stockMovement.findMany({
+      where: { productId: productId || undefined, type: type || undefined },
+      include: {
+        product: { select: { id: true, name: true, unit: true } },
+        batch: { select: { id: true, lotNumber: true } },
+        staff: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+
+    res.json(movements);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro ao buscar movimentações." });
+  }
+});
+
+//=============================================================== ADMIN: OVERVIEW (DASHBOARD)
+// Cole este bloco no server.js, ANTES do `server.listen(...)`.
+// Depende de `stockAuth` e `requireMajorAdmin` (definidos no bloco de ESTOQUE).
+//
+// Regras de cálculo (todas sobre agendamentos com status "Completed"):
+// - Faturamento = preço do serviço - desconto de cupom usado no agendamento.
+//   (o Service não guarda o preço "congelado" no agendamento; se o preço do
+//   serviço mudar, meses passados refletem o preço atual.)
+// - Sessões = quantidade de agendamentos concluídos no mês.
+// - Cancelamento = (Cancelled + NoShow) / (Completed + Cancelled + NoShow);
+//   agendamentos ainda Scheduled/Confirmed não entram (o desfecho é desconhecido).
+// - Recorrentes = % dos clientes atendidos no mês que já tinham sessão
+//   concluída ANTES do mês.
+// - Mês fechado no fuso America/Bahia (UTC-3, sem horário de verão).
+
+const OVERVIEW_TZ_OFFSET_H = -3;
+const MONTH_LABELS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+// início do mês (00:00 no fuso da clínica) como Date UTC. month0 pode estourar (-1 = dez do ano anterior)
+const monthStartUtc = (year, month0) => new Date(Date.UTC(year, month0, 1, -OVERVIEW_TZ_OFFSET_H));
+
+// { y, m0 } do mês em que `date` cai, no fuso da clínica
+function clinicYearMonth(date) {
+  const d = new Date(new Date(date).getTime() + OVERVIEW_TZ_OFFSET_H * 3600 * 1000);
+  return { y: d.getUTCFullYear(), m0: d.getUTCMonth() };
+}
+
+const round1 = (n) => Math.round(n * 10) / 10;
+const round2 = (n) => Math.round(n * 100) / 100;
+
+// variação percentual; sem base de comparação (mês anterior = 0) devolve null
+const pctChange = (cur, prev) => (prev > 0 ? round1(((cur - prev) / prev) * 100) : null);
+
+app.get('/admin/overview', ...stockAuth, requireMajorAdmin, async (req, res) => {
+  try {
+    const months = Math.min(Math.max(parseInt(req.query.months, 10) || 12, 2), 24);
+    const now = new Date();
+    const { y: curY, m0: curM0 } = clinicYearMonth(now);
+
+    // buckets do mais antigo para o atual
+    const buckets = [];
+    for (let i = months - 1; i >= 0; i--) {
+      const start = monthStartUtc(curY, curM0 - i);
+      const { y, m0 } = clinicYearMonth(start);
+      buckets.push({
+        key: `${y}-${String(m0 + 1).padStart(2, "0")}`,
+        label: MONTH_LABELS[m0],
+        year: y,
+        start,
+        end: monthStartUtc(y, m0 + 1),
+        revenue: 0,
+        sessions: 0,
+        cancelled: 0,
+        customers: new Set(),
+        newCustomers: 0,
+      });
+    }
+    const bucketOf = (date) => {
+      const { y, m0 } = clinicYearMonth(date);
+      const key = `${y}-${String(m0 + 1).padStart(2, "0")}`;
+      return buckets.find((b) => b.key === key);
+    };
+
+    const rangeStart = buckets[0].start;
+    const rangeEnd = buckets[buckets.length - 1].end;
+
+    const [appointments, newUsers] = await Promise.all([
+      prisma.appointment.findMany({
+        where: { date: { gte: rangeStart, lt: rangeEnd } },
+        select: {
+          date: true,
+          status: true,
+          customerId: true,
+          service: { select: { price: true } },
+          couponRedemptions: { select: { usedAt: true, discountAmount: true } },
+        },
+      }),
+      prisma.user.findMany({
+        where: { createdAt: { gte: rangeStart, lt: rangeEnd } },
+        select: { createdAt: true },
+      }),
+    ]);
+
+    for (const a of appointments) {
+      const b = bucketOf(a.date);
+      if (!b) continue;
+      if (a.status === "Completed") {
+        const price = a.service?.price ?? 0;
+        const discount = a.couponRedemptions.reduce((s, r) => s + (r.usedAt ? r.discountAmount ?? 0 : 0), 0);
+        b.revenue += Math.max(price - discount, 0);
+        b.sessions += 1;
+        if (a.customerId) b.customers.add(a.customerId);
+      } else if (a.status === "Cancelled" || a.status === "NoShow") {
+        b.cancelled += 1;
+      }
+    }
+    for (const u of newUsers) {
+      const b = bucketOf(u.createdAt);
+      if (b) b.newCustomers += 1;
+    }
+
+    // recorrentes: dos clientes atendidos no mês, quantos já tinham sessão concluída antes dele
+    async function returningRate(bucket) {
+      const ids = [...bucket.customers];
+      if (ids.length === 0) return null;
+      const earlier = await prisma.appointment.findMany({
+        where: { status: "Completed", customerId: { in: ids }, date: { lt: bucket.start } },
+        select: { customerId: true },
+      });
+      const returning = new Set(earlier.map((e) => e.customerId));
+      return round1((returning.size / ids.length) * 100);
+    }
+
+    const cur = buckets[buckets.length - 1];
+    const prev = buckets[buckets.length - 2];
+    const [curReturning, prevReturning] = await Promise.all([returningRate(cur), returningRate(prev)]);
+
+    const ticket = (b) => (b.sessions > 0 ? b.revenue / b.sessions : 0);
+    const cancelRate = (b) => {
+      const resolved = b.sessions + b.cancelled;
+      return resolved > 0 ? round1((b.cancelled / resolved) * 100) : 0;
+    };
+    // diferença em pontos percentuais (para métricas que já são %)
+    const pp = (c, p) => (c == null || p == null ? null : round1(c - p));
+
+    res.json({
+      generatedAt: now,
+      month: { key: cur.key, label: MONTH_LABELS[curM0], year: curY },
+      cards: {
+        revenue: { value: round2(cur.revenue), previous: round2(prev.revenue), change: pctChange(cur.revenue, prev.revenue), unit: "pct" },
+        sessions: { value: cur.sessions, previous: prev.sessions, change: pctChange(cur.sessions, prev.sessions), unit: "pct" },
+        averageTicket: { value: round2(ticket(cur)), previous: round2(ticket(prev)), change: pctChange(ticket(cur), ticket(prev)), unit: "pct" },
+        newCustomers: { value: cur.newCustomers, previous: prev.newCustomers, change: pctChange(cur.newCustomers, prev.newCustomers), unit: "pct" },
+        returningCustomers: { value: curReturning, previous: prevReturning, change: pp(curReturning, prevReturning), unit: "pp" },
+        cancellationRate: { value: cancelRate(cur), previous: cancelRate(prev), change: pp(cancelRate(cur), cancelRate(prev)), unit: "pp" },
+      },
+      series: buckets.map((b) => ({
+        key: b.key,
+        label: b.label,
+        year: b.year,
+        revenue: round2(b.revenue),
+        sessions: b.sessions,
+      })),
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro ao montar o dashboard." });
+  }
+});
+
+
+
 server.listen(3000, () => console.log("Server running on port 3000 (HTTP + WebSocket)"));
-
-/*
-1 - Tipo de rota / Método HTTP
-2 - Endereço
-
-*/

@@ -66,6 +66,11 @@ model Staff {
 
   appointments Appointment[]
   services     Service[]
+
+  // estoque
+  executedMovements StockMovement[] @relation("MovementExecutor")
+  stockRequests     StockRequest[]  @relation("RequestedBy")
+  reviewedRequests  StockRequest[]  @relation("ReviewedBy")
 }
 
 model User {
@@ -181,6 +186,9 @@ model Appointment {
   professional   Staff?  @relation(fields: [professionalId], references: [id])
 
   couponRedemptions CouponRedemption[]
+
+  // consumo de estoque gerado por este atendimento (fase 2: receitas)
+  stockMovements StockMovement[]
 }
 
 model Service {
@@ -204,4 +212,132 @@ model Service {
   // procedimentos já cadastrados sem ninguém definido ainda
   professionalId String? @db.ObjectId
   professional   Staff?  @relation(fields: [professionalId], references: [id])
+}
+
+
+//=============================================================== ESTOQUE (INSUMOS)
+
+enum StockUnit {
+  Un // unidades (ex: unidades de toxina)
+  Ml
+  G
+}
+
+enum StockMovementType {
+  Purchase    // entrada por compra
+  Consumption // saída automática por procedimento (fase 2: receitas)
+  Adjustment  // correção de inventário (+ ou -)
+  Loss        // perda, quebra, vencimento
+  Return      // estorno de consumo
+}
+
+enum StockRequestStatus {
+  Pending
+  Approved
+  Rejected
+  Cancelled
+}
+
+// Item de uma solicitação (embutido no documento, sem coleção própria).
+// `quantity` é SEMPRE em unidade base do produto. Em Purchase, o back-end
+// calcula quantity = packages * Product.purchaseUnitSize.
+type StockRequestItem {
+  productId String    @db.ObjectId
+  quantity  Float     // base; Purchase/Loss > 0, Adjustment com sinal (+/-)
+  packages  Float?    // só Purchase: nº de embalagens (frascos, ampolas, caixas)
+  batchId   String?   @db.ObjectId // Loss/Adjustment: lote afetado (Loss sem lote = FEFO)
+  lotNumber String?   // só Purchase
+  expiresAt DateTime? // só Purchase
+  unitCost  Float?    // só Purchase: custo por unidade base
+}
+
+model Product {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  sku       String?  @unique
+  category  String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // unidade base = a menor que é consumida (receitas e saldo usam sempre ela)
+  unit              StockUnit
+  purchaseUnitLabel String? // "frasco", "ampola", "caixa"
+  purchaseUnitSize  Float   @default(1) // quantas unidades base cabem em 1 embalagem
+
+  minStock     Float  @default(0) // alerta de reposição
+  currentStock Float  @default(0) // cache: soma dos lotes
+  lastCost     Float? // custo por unidade base
+
+  // controle de frasco aberto: quando ligado, cada embalagem comprada vira um
+  // lote próprio (pra registrar a abertura de cada frasco individualmente)
+  trackOpening            Boolean @default(false)
+  shelfLifeAfterOpenHours Int? // validade depois de aberto (ex: 24)
+
+  // cargos que podem SOLICITAR movimentações deste produto. Vazio = só o
+  // MajorAdmin. O MajorAdmin sempre pode, independente desta lista.
+  allowedRoles StaffRole[]
+
+  batches   StockBatch[]
+  movements StockMovement[]
+}
+
+model StockBatch {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  lotNumber  String?
+  expiresAt  DateTime?
+  quantity   Float // saldo restante, em unidade base
+  unitCost   Float?
+  receivedAt DateTime  @default(now())
+  openedAt   DateTime? // quando o frasco foi aberto (só com Product.trackOpening)
+
+  productId String  @db.ObjectId
+  product   Product @relation(fields: [productId], references: [id])
+
+  movements StockMovement[]
+}
+
+// Ledger: nunca é editado nem apagado. Saldo do produto = soma das quantities.
+model StockMovement {
+  id        String            @id @default(auto()) @map("_id") @db.ObjectId
+  type      StockMovementType
+  quantity  Float // COM SINAL: + entra, - sai
+  unitCost  Float?
+  reason    String?
+  createdAt DateTime          @default(now())
+
+  productId String  @db.ObjectId
+  product   Product @relation(fields: [productId], references: [id])
+
+  batchId String?     @db.ObjectId
+  batch   StockBatch? @relation(fields: [batchId], references: [id])
+
+  appointmentId String?      @db.ObjectId
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+
+  requestId String?       @db.ObjectId
+  request   StockRequest? @relation(fields: [requestId], references: [id])
+
+  // quem executou (quem aprovou, ou o próprio MajorAdmin quando aplica direto)
+  staffId String @db.ObjectId
+  staff   Staff  @relation("MovementExecutor", fields: [staffId], references: [id])
+}
+
+model StockRequest {
+  id        String             @id @default(auto()) @map("_id") @db.ObjectId
+  type      StockMovementType // Purchase, Loss ou Adjustment
+  status    StockRequestStatus @default(Pending)
+  items     StockRequestItem[]
+  reason    String?
+  createdAt DateTime           @default(now())
+
+  requestedById String @db.ObjectId
+  requestedBy   Staff  @relation("RequestedBy", fields: [requestedById], references: [id])
+
+  reviewedById String?   @db.ObjectId
+  reviewedBy   Staff?    @relation("ReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+  reviewNote   String? // motivo da negação
+
+  movements StockMovement[]
 }

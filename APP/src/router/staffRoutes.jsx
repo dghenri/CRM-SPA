@@ -9,12 +9,14 @@ import Home from "../pages/Staff/Home/Home";
 import Scheduling from "../pages/Staff/Scheduling/Scheduling";
 import Services from "../pages/Staff/Services/Services";
 import Coupons from "../pages/Staff/Coupons/Coupons";
-import Storage from "../pages/Staff/Storage/Storage";
+import Storage from "../pages/Staff/Stock/Stock";
+import Revenue from "../pages/Staff/Revenue/Revenue";
 
 import Settings from "../pages/Staff/Profile/Settings";
 import Profile from "../pages/Staff/Profile/Profile";
 
 /* ADMIN ROUTES */
+import Overview from "../pages/Admin/Overview"
 import Employees from "../pages/Admin/Employees";
 import Users from "../pages/Admin/Users";
 import Logs from "../pages/Admin/Logs";
@@ -36,10 +38,12 @@ export const staffRoutes = (
       <Route path="services" element={<Services />} />
       <Route path="coupons" element={<Coupons />} />
       <Route path="storage" element={<Storage />} />
+      <Route path="revenue" element={<Revenue />} />
 
       {/* ADMIN - só cargo MajorAdmin acessa; Farmaceutica/Massoterapeuta
           que tentarem entrar direto pela URL voltam pra "/staff/dashboard" */}
       <Route element={<RequireStaffRole allow={["MajorAdmin"]} />}>
+        <Route path="overview" element={<Overview />} />
         <Route path="employees" element={<Employees />} />
         <Route path="users" element={<Users />} />
         <Route path="logs" element={<Logs />} />

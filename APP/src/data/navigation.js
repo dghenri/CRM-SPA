@@ -10,6 +10,7 @@ import {
   Store,
   Ticket,
   ShelvingUnit,
+  Receipt,
 } from "lucide-react";
 
 // Cargos existentes em prisma.Staff.role - usados pra filtrar quais itens
@@ -65,6 +66,15 @@ export const mainItems = [
     badge: 0,
     roles: ALL_STAFF_ROLES,
   },
+  {
+    key: "receita",
+    label: "Receita",
+    tooltip: "Receita",
+    Icon: Receipt,
+    to: "/staff/revenue",
+    badge: 0,
+    roles: ALL_STAFF_ROLES,
+  },
 ];
 
 export const usersItems = [
@@ -95,7 +105,7 @@ export const usersItems = [
 ];
 
 export const managementItems = [
-  /* {
+  {
     key: "overview",
     label: "Overview",
     tooltip: "Overview",
@@ -114,5 +124,5 @@ export const managementItems = [
     // staffRoutes.jsx - link fica quebrado até essa rota ser criada
     to: "/staff/logs",
     roles: ADMIN_ONLY_ROLES,
-  }, */
+  },
 ]

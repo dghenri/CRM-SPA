@@ -1075,14 +1075,14 @@ export default function Storage() {
     }
   }
 
-  if (loading) return <p className="p-6 text-muted">Carregando estoque…</p>;
+  if (loading) return <p className="text-sm text-muted text-center font-medium py-10">Carregando estoque…</p>;
 
   return (
     <div className="flex flex-col gap-6 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Estoque</h1>
-          <p className="text-sm text-muted">
+          <h1 className="text-2xl font-bold">Estoque</h1>
+          <p className="text-sm text-muted font-semibold">
             {products.filter((p) => p.active).length} produtos
             {alertCount > 0 && ` · ${alertCount} com alerta`}
           </p>

@@ -10,7 +10,7 @@ import CreateCuponModal from './CreateCouponModal';
 const TAB_TO_STATUS = {
   all: undefined,
   actives: 'active',
-  inactives: 'scheduled', // "Agendados": cupons com startsAt no futuro
+  inactives: 'scheduled',
   expired: 'expired',
   archived: 'archived',
 };
@@ -121,18 +121,20 @@ export default function Coupons() {
   }
 
   return (
-    <div>
+    <div className="flex flex-col gap-6 sm:p-6">
       {/* HEAD */}
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Cupons</h1>
-          <span className="text-sm text-muted font-semibold">Crie e gerencie cupons de desconto.</span>
+          <p className="text-sm text-muted font-semibold">Crie e gerencie cupons de desconto.</p>
         </div>
 
-        <Button variant="outline" className="rounded-lg" onPress={openCreateModal}>
-          <Plus className="size-5" />
-          Criar cupom
-        </Button>
+         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" className="rounded-lg" onPress={openCreateModal}>
+            <Plus className="size-5" />
+            Criar cupom
+          </Button>
+         </div>
       </div>
 
       {!!errorMessage && (

@@ -88,8 +88,8 @@ const KPI_CARDS = [
 
 function Change({ card, goodWhen }) {
   const { change, unit } = card;
-  if (change == null) return <span className="text-xs text-muted">Sem base de comparação</span>;
-  if (change === 0) return <span className="text-xs text-muted">Sem variação vs mês anterior</span>;
+  if (change == null) return <span className="text-xs font-semibold text-muted">Sem base de comparação</span>;
+  if (change === 0) return <span className="text-xs font-semibold text-muted">Sem variação vs mês anterior</span>;
 
   const isGood = (change > 0) === (goodWhen === "up");
   const Icon = change > 0 ? TrendingUp : TrendingDown;
@@ -100,7 +100,7 @@ function Change({ card, goodWhen }) {
       {change > 0 ? "+" : "−"}
       {value}
       {unit === "pp" ? " p.p." : "%"}
-      <span className="font-normal text-muted">vs mês anterior</span>
+      <span className="font-semibold text-muted">vs mês anterior</span>
     </span>
   );
 }
@@ -108,7 +108,7 @@ function Change({ card, goodWhen }) {
 function KpiCard({ config, card }) {
   const Icon = config.icon;
   return (
-    <Card className="rounded-2xl">
+    <Card className="rounded-2xl bg-surface-secondary">
       <Card.Header className="flex-row items-center justify-between">
         <Card.Title className="text-sm font-medium text-muted">{config.title}</Card.Title>
         <Icon size={18} className="text-muted" aria-hidden="true" />
@@ -250,7 +250,7 @@ function ChartCard({ series }) {
   const pill = (active) => (active ? "primary" : "tertiary");
 
   return (
-    <Card className="rounded-2xl">
+    <Card className="rounded-2xl bg-surface-secondary">
       <Card.Header className="flex-row flex-wrap items-center justify-between gap-3">
         <Card.Title className="text-lg font-semibold">{METRICS[metric].label} por mês</Card.Title>
         <div className="flex flex-wrap gap-2">
@@ -320,7 +320,7 @@ function PendingRequestItem({ request, busy, onApprove, onReject }) {
 
 function PendingRequestsCard({ requests, busyId, onApprove, onReject }) {
   return (
-    <Card className="rounded-2xl">
+    <Card className="rounded-2xl bg-surface-secondary">
       <Card.Header className="flex-row items-center justify-between">
         <Card.Title className="text-lg font-semibold">Solicitações de estoque</Card.Title>
         {requests.length > 0 && (
@@ -352,7 +352,7 @@ function StockAlertsCard({ products }) {
   const flagged = products.filter((p) => p.active && Object.values(p.alerts).some(Boolean));
 
   return (
-    <Card className="rounded-2xl">
+    <Card className="rounded-2xl bg-surface-secondary">
       <Card.Header className="flex-row items-center justify-between">
         <Card.Title className="text-lg font-semibold">Alertas de estoque</Card.Title>
         {flagged.length > 0 && (
@@ -376,7 +376,7 @@ function StockAlertsCard({ products }) {
                     <AlertTriangle size={14} className="text-warning" aria-hidden="true" />
                     {p.name}
                   </span>
-                  <span className="text-xs text-muted">{fmtQty(p.currentStock, p.unit)}</span>
+                  <span className="text-xs text-muted font-semibold">{fmtQty(p.currentStock, p.unit)}</span>
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {p.alerts.lowStock && <Chip color="warning" variant="soft" size="sm">Repor</Chip>}
@@ -514,7 +514,7 @@ export default function Overview() {
     }
   }
 
-  if (loading) return <p className="p-6 text-muted">Carregando dashboard…</p>;
+  if (loading) return <p className="text-sm text-muted text-center font-medium py-10">Carregando overview</p>;
 
   const monthName = overview
     ? new Date(overview.month.year, Number(overview.month.key.slice(5)) - 1, 1).toLocaleDateString("pt-BR", {
@@ -527,8 +527,8 @@ export default function Overview() {
   return (
     <div className="flex flex-col gap-6 sm:p-6">
       <div>
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <p className="text-sm text-muted">
+        <h1 className="text-2xl font-bold">Overview</h1>
+        <p className="text-sm font-semibold text-muted">
           {firstName ? `Olá, ${firstName}. ` : ""}
           {monthName && (
             <>
@@ -542,7 +542,7 @@ export default function Overview() {
         <Alert status="danger">
           <Alert.Indicator />
           <Alert.Content>
-            <Alert.Title>Não foi possível carregar o dashboard</Alert.Title>
+            <Alert.Title>Não foi possível carregar o overview</Alert.Title>
             <Alert.Description>{loadError}</Alert.Description>
           </Alert.Content>
         </Alert>

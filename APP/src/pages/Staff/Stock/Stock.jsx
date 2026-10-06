@@ -882,7 +882,7 @@ function RequestsTab({ requests, isAdmin, meId, onApprove, onReject, onCancel, b
       {shown.map((r) => {
         const meta = STATUS_META[r.status];
         return (
-          <Card key={r.id}>
+          <Card key={r.id} className="bg-surface-secondary">
             <Card.Header>
               <div className="flex w-full flex-wrap items-start justify-between gap-2">
                 <div>
@@ -906,7 +906,7 @@ function RequestsTab({ requests, isAdmin, meId, onApprove, onReject, onCancel, b
               {r.reviewedBy && r.status !== "Cancelled" && (
                 <p className="text-sm text-muted">
                   {r.status === "Approved" ? "Aprovada" : "Negada"} por {r.reviewedBy.name} em {fmtDateTime(r.reviewedAt)}
-                  {r.reviewNote ? ` — ${r.reviewNote}` : ""}
+                  {r.reviewNote ? ` — Nota: ${r.reviewNote}` : ""}
                 </p>
               )}
             </Card.Content>

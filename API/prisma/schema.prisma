@@ -169,6 +169,8 @@ model Appointment {
   color     String            @default("blue")
   status    AppointmentStatus @default(Scheduled)
   notes     String?
+  // quando o profissional clicou em "Iniciar atendimento" (nulo = ainda não iniciado)
+  startedAt DateTime?
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
 

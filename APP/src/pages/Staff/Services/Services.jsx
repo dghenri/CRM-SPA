@@ -9,7 +9,7 @@ import {
 } from "@heroui/react";
 
 import { 
-  Clock, Tag, Pencil, Trash2, Plus, EyeOff, Check, CloudAlert, IdCardLanyard 
+  Clock, Tag, Pencil, Trash2, Plus, EyeOff, Check, CloudAlert, IdCardLanyard, Package
 } from "lucide-react";
 
 function formatPrice(value) {
@@ -19,7 +19,146 @@ function formatPrice(value) {
   });
 }
 
-function ServiceFormModal({ isOpen, onOpenChange, initial, staff, onSave }) {
+const UNIT_LABEL = { Un: "un", Ml: "ml", G: "g" };
+
+/* ---------- receita (insumos do procedimento) ----------
+ * Chamadas à API usadas só aqui. Se preferir, mova para ../../../api/services
+ * junto com as outras (fetchServices, createService...). Assumem que `api`
+ * devolve o corpo da resposta, como no GET /staff abaixo.
+ */
+const fetchRecipe = (serviceId) => api.get(`/services/${serviceId}/recipe`);
+const saveRecipe = (serviceId, items) => api.put(`/services/${serviceId}/recipe`, { items });
+const fetchRecipeSummary = () => api.get("/admin/recipes/summary");
+const fetchProducts = () => api.get("/products");
+
+// chave só para o React identificar a linha (sem a API de UUID do navegador, que
+// não existe em http fora de localhost)
+let recipeRowSeq = 0;
+const newRecipeRow = (productId = "", quantity = "") => ({ key: `recipe-${++recipeRowSeq}`, productId, quantity });
+
+// linhas do formulário -> itens da API (ignora linha totalmente vazia)
+const recipeRowsToItems = (rows) =>
+  rows
+    .filter((r) => r.productId || String(r.quantity).trim() !== "")
+    .map((r) => ({ productId: r.productId, quantity: Number(r.quantity) }));
+
+function RecipeEditor({ rows, setRows, products, status }) {
+  const byId = new Map(products.map((p) => [p.id, p]));
+  const options = products.filter((p) => p.active);
+  const usedIds = rows.map((r) => r.productId).filter(Boolean);
+
+  const setRow = (key, patch) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+
+  // custo estimado por sessão (só conta insumos com custo conhecido)
+  let cost = 0;
+  let missingCost = 0;
+  for (const r of rows) {
+    const p = byId.get(r.productId);
+    const qty = Number(r.quantity);
+    if (!p || !(qty > 0)) continue;
+    if (p.lastCost == null) missingCost += 1;
+    else cost += qty * p.lastCost;
+  }
+
+  return (
+    <div className="mb-4 flex flex-col gap-3">
+      <div>
+        <Label className="block">Insumos do procedimento (opcional)</Label>
+        <p className="text-xs font-semibold text-muted">
+          Quanto de cada produto é usado por sessão. O estoque baixa sozinho quando o atendimento é concluído.
+        </p>
+      </div>
+
+      {status === "loading" && <p className="text-sm font-semibold text-muted">Carregando insumos…</p>}
+      {status === "error" && (
+        <p className="text-sm font-semibold text-danger">
+          Não foi possível carregar os insumos. Salvar o procedimento não altera a receita atual.
+        </p>
+      )}
+
+      {status === "ready" && (
+        <>
+          {rows.map((row) => {
+            const product = byId.get(row.productId);
+            const qty = Number(row.quantity);
+            const short = product && qty > 0 && product.currentStock < qty;
+            return (
+              <div key={row.key} className="flex flex-col gap-1">
+                <div className="flex items-start gap-2">
+                  <Select
+                    aria-label="Produto"
+                    placeholder="Selecione o produto"
+                    className="flex-1"
+                    value={row.productId || null}
+                    onChange={(key) => setRow(row.key, { productId: key ?? "" })}
+                    disabledKeys={usedIds.filter((id) => id !== row.productId)}
+                  >
+                    <Select.Trigger className="border border-border font-medium">
+                      <Select.Value />
+                      <Select.Indicator />
+                    </Select.Trigger>
+                    <Select.Popover className="font-semibold">
+                      <ListBox>
+                        {options.map((p) => (
+                          <ListBox.Item key={p.id} id={p.id} textValue={p.name}>
+                            {p.name} ({UNIT_LABEL[p.unit]})
+                            <ListBox.ItemIndicator />
+                          </ListBox.Item>
+                        ))}
+                      </ListBox>
+                    </Select.Popover>
+                  </Select>
+
+                  <TextField
+                    aria-label="Quantidade por sessão"
+                    className="w-28"
+                    value={row.quantity}
+                    onChange={(v) => setRow(row.key, { quantity: v })}
+                  >
+                    <Input type="number" min="0" step="any" placeholder="Qtd." className="border border-border font-medium" />
+                  </TextField>
+                  <span className="w-7 pt-2.5 text-sm font-semibold text-muted">{product ? UNIT_LABEL[product.unit] : ""}</span>
+
+                  <Button
+                    isIconOnly
+                    size="sm"
+                    variant="danger-soft"
+                    className="mt-1 rounded-full"
+                    aria-label="Remover insumo"
+                    onPress={() => setRows((rs) => rs.filter((r) => r.key !== row.key))}
+                  >
+                    <Trash2 size={14} />
+                  </Button>
+                </div>
+                {product && (
+                  <p className={`text-xs font-semibold ${short ? "text-danger" : "text-muted"}`}>
+                    Saldo em estoque: {product.currentStock.toLocaleString("pt-BR")} {UNIT_LABEL[product.unit]}
+                    {short && " (insuficiente para uma sessão)"}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Button size="sm" variant="tertiary" onPress={() => setRows((rs) => [...rs, newRecipeRow()])}>
+              <Plus size={14} />
+              Adicionar insumo
+            </Button>
+            {rows.length > 0 && (
+              <p className="text-xs font-semibold text-muted">
+                Custo estimado por sessão: <span className="text-foreground">{formatPrice(cost)}</span>
+                {missingCost > 0 && ` (${missingCost} sem custo cadastrado)`}
+              </p>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ServiceFormModal({ isOpen, onOpenChange, initial, staff, products, onSave }) {
   const EMPTY_SERVICE_FORM = {
     title: "",
     description: "",
@@ -31,6 +170,38 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, onSave }) {
   };
   const [form, setForm] = useState(EMPTY_SERVICE_FORM);
   const [error, setError] = useState("");
+  const [recipeRows, setRecipeRows] = useState([]);
+  const [recipeStatus, setRecipeStatus] = useState("ready"); // loading | ready | error
+  const [recipeInitialKey, setRecipeInitialKey] = useState("[]"); // para só salvar se mudou
+
+  // carrega a receita atual ao abrir um procedimento existente
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!initial) {
+      setRecipeRows([]);
+      setRecipeStatus("ready");
+      setRecipeInitialKey("[]");
+      return;
+    }
+    let cancelled = false;
+    setRecipeRows([]);
+    setRecipeStatus("loading");
+    fetchRecipe(initial.id)
+      .then((data) => {
+        if (cancelled) return;
+        const rows = data.items.map((i) => newRecipeRow(i.productId, String(i.quantity)));
+        setRecipeRows(rows);
+        setRecipeInitialKey(JSON.stringify(recipeRowsToItems(rows)));
+        setRecipeStatus("ready");
+      })
+      .catch((err) => {
+        console.error("Falha ao carregar receita:", err);
+        if (!cancelled) setRecipeStatus("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, initial]);
 
   useEffect(() => {
     if (isOpen) {
@@ -56,6 +227,25 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, onSave }) {
       setError("Preencha todos os campos obrigatórios.");
       return;
     }
+    // receita: valida e só envia se foi carregada e mudou (null = não mexe)
+    let recipeItems = null;
+    if (recipeStatus === "ready") {
+      const items = recipeRowsToItems(recipeRows);
+      if (items.some((i) => !i.productId)) {
+        setError("Escolha o produto de cada insumo.");
+        return;
+      }
+      if (items.some((i) => !(i.quantity > 0))) {
+        setError("Informe a quantidade de cada insumo (maior que zero).");
+        return;
+      }
+      if (new Set(items.map((i) => i.productId)).size !== items.length) {
+        setError("Há um insumo repetido na receita.");
+        return;
+      }
+      if (JSON.stringify(items) !== recipeInitialKey) recipeItems = items;
+    }
+
     onSave({
       title: form.title.trim(),
       description: form.description.trim(),
@@ -66,14 +256,14 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, onSave }) {
         `https://picsum.photos/seed/${encodeURIComponent(form.title)}/600/450`,
       available: form.available,
       professionalId: form.professionalId || null,
-    });
+    }, recipeItems);
     close();
   };
 
   return (
     <Modal>
       <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
-        <Modal.Container placement="center" size="lg">
+        <Modal.Container placement="center" size="lg" scroll="inside">
           <Modal.Dialog>
             {({ close }) => (
               <>
@@ -167,6 +357,7 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, onSave }) {
                       </Select.Popover>
                     </Select>
                   </div>
+                  <RecipeEditor rows={recipeRows} setRows={setRecipeRows} products={products} status={recipeStatus} />
                   {error && <p className="text-sm text-danger">{error}</p>}
                 </Modal.Body>
 
@@ -206,7 +397,7 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, onSave }) {
   );
 }
 
-function ServiceCard({ service, onEdit, onDelete, onToggle }) {
+function ServiceCard({ service, recipe, onEdit, onDelete, onToggle }) {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedService, setSelectedService] = useState(null);
 
@@ -266,10 +457,26 @@ function ServiceCard({ service, onEdit, onDelete, onToggle }) {
             </Chip>
           </div>
 
+          <div className="flex flex-wrap items-center gap-2">
+            <Chip size="sm" variant="soft" color={recipe?.items ? "default" : "warning"}>
+              <Package size={13} />
+              {recipe?.items ? `${recipe.items} insumo${recipe.items > 1 ? "s" : ""}` : "Sem insumos"}
+            </Chip>
+            {recipe?.cost != null && (
+              <span
+                className="text-xs font-semibold text-muted"
+                title={recipe.costComplete ? "Custo estimado dos insumos por sessão" : "Custo parcial: há insumos sem custo cadastrado"}
+              >
+                Custo {formatPrice(recipe.cost)}
+                {!recipe.costComplete && "*"}
+              </span>
+            )}
+          </div>
+
           <div className="flex w-full items-center gap-2 pt-1">
             <Button
               size="sm"
-              variant="secondary"
+              variant="tertiary"
               className={`flex-1 justify-center gap-2 rounded-full font-semibold ${
                 service.available
                   ? "bg-success/10 text-success hover:bg-success/20"
@@ -283,7 +490,7 @@ function ServiceCard({ service, onEdit, onDelete, onToggle }) {
             <Button
               isIconOnly
               size="sm"
-              variant="secondary"
+              variant="tertiary"
               className="rounded-full"
               aria-label="Editar"
               onPress={() => onEdit(service)}
@@ -351,6 +558,27 @@ export default function AdminServicesPage() {
   const [editingService, setEditingService] = useState(null);
   const [isOpen, setIsOpen] = useState(false);
   const [staff, setStaff] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [recipeSummary, setRecipeSummary] = useState({});
+
+  // Produtos do estoque (seletor de insumos) e resumo das receitas (card de cada procedimento)
+  const refreshRecipeSummary = () =>
+    fetchRecipeSummary()
+      .then(setRecipeSummary)
+      .catch((err) => console.error("Falha ao carregar receitas:", err));
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchProducts()
+      .then((data) => {
+        if (!cancelled) setProducts(data);
+      })
+      .catch((err) => console.error("Falha ao carregar produtos:", err));
+    refreshRecipeSummary();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Carrega a lista de profissionais pro seletor "Profissional responsável"
   useEffect(() => {
@@ -396,20 +624,33 @@ export default function AdminServicesPage() {
     setIsOpen(true);
   };
 
-  const handleSave = async (data) => {
+  const handleSave = async (data, recipeItems) => {
+    let saved;
     try {
       if (editingService) {
-        const updated = await updateService(editingService.id, data);
-        setServices((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-        toast("Procedimento atualizado", { variant: "success" });
+        saved = await updateService(editingService.id, data);
+        setServices((prev) => prev.map((s) => (s.id === saved.id ? saved : s)));
       } else {
-        const created = await createService(data);
-        setServices((prev) => [...prev, created]);
-        toast("Procedimento criado", { variant: "success" });
+        saved = await createService(data);
+        setServices((prev) => [...prev, saved]);
       }
     } catch (err) {
       toast(err.message || "Erro ao salvar procedimento", { variant: "danger" });
+      return;
     }
+
+    // recipeItems === null: a receita não mudou (ou não carregou), então não mexe nela
+    if (recipeItems) {
+      try {
+        await saveRecipe(saved.id, recipeItems);
+        await refreshRecipeSummary();
+      } catch (err) {
+        toast(`Procedimento salvo, mas os insumos não: ${err.message || "erro desconhecido"}`, { variant: "danger" });
+        return;
+      }
+    }
+
+    toast(editingService ? "Procedimento atualizado" : "Procedimento criado", { variant: "success" });
   };
 
   const handleDelete = async (id) => {
@@ -455,25 +696,26 @@ export default function AdminServicesPage() {
         </div>
       ) : (
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        {services.map((service) => (
-          <ServiceCard
-            key={service.id}
-            service={service}
-            onEdit={openEdit}
-            onDelete={handleDelete}
-            onToggle={handleToggle}
-          />
-        ))}
-
         <button
           onClick={openNew}
-          className="flex min-h-[280px] flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-default-200 text-default-500 transition hover:border-primary hover:text-primary"
+          className="flex min-h-70 flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-default-200 text-default-500 transition hover:border-primary hover:text-primary"
         >
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-default-100">
             <Plus size={22} />
           </div>
           <span className="text-sm font-semibold">Adicionar serviço</span>
         </button>
+        {services.map((service) => (
+          <ServiceCard
+            key={service.id}
+            service={service}
+            recipe={recipeSummary[service.id]}
+            onEdit={openEdit}
+            onDelete={handleDelete}
+            onToggle={handleToggle}
+          />
+        ))}
+
       </div>
       )}
 
@@ -482,6 +724,7 @@ export default function AdminServicesPage() {
         onOpenChange={setIsOpen}
         initial={editingService}
         staff={staff}
+        products={products}
         onSave={handleSave}
       />
     </section>

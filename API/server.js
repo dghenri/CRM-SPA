@@ -438,8 +438,10 @@ app.patch('/services/:id', authenticateToken, async (req, res) => {
 //------------------------------------------------------------- DELETE ROUTE (services - protegido)
 app.delete('/services/:id', authenticateToken, async (req, res) => {
   try {
-    await prisma.service.delete({
-      where: { id: req.params.id }, // ObjectId do Mongo é string, não Number
+    // a receita (RecipeItem) depende do serviço: sai junto com ele
+    await prisma.$transaction(async (tx) => {
+      await tx.recipeItem.deleteMany({ where: { serviceId: req.params.id } });
+      await tx.service.delete({ where: { id: req.params.id } }); // ObjectId do Mongo é string, não Number
     });
 
     res.status(200).json({ message: "Serviço removido com sucesso." });
@@ -903,10 +905,17 @@ app.post('/appointments', authenticateToken, async (req, res) => {
   }
 });
 
+const APPOINTMENT_STATUSES = ["Scheduled", "Confirmed", "Completed", "Cancelled", "NoShow"];
+const APPOINTMENT_INCLUDE = { service: true, customer: true, professional: { select: { id: true, name: true } } };
+
 //------------------------------------------------------------- PUT ROUTE (equipe edita um agendamento completo)
 app.put('/appointments/:id', authenticateToken, requireStaff, async (req, res) => {
   try {
     const { title, date, endDate, color, notes, status, serviceId, customerId, professionalId } = req.body;
+
+    if (status !== undefined && !APPOINTMENT_STATUSES.includes(status)) {
+      return res.status(400).json({ error: "Status inválido." });
+    }
 
     const data = {};
     if (title !== undefined) data.title = title.trim() || "Sem título";
@@ -927,15 +936,23 @@ app.put('/appointments/:id', authenticateToken, requireStaff, async (req, res) =
       data.professional = professionalId ? { connect: { id: professionalId } } : { disconnect: true };
     }
 
-    const appointment = await prisma.appointment.update({
-      where: { id: req.params.id },
-      data,
-      include: { service: true, customer: true, professional: { select: { id: true, name: true } } },
+    const { appointment, stock } = await prisma.$transaction(async (tx) => {
+      const before = await tx.appointment.findUnique({ where: { id: req.params.id } });
+      if (!before) {
+        const notFound = new Error("Agendamento não encontrado.");
+        notFound.code = "P2025";
+        throw notFound;
+      }
+      const appointment = await tx.appointment.update({ where: { id: req.params.id }, data, include: APPOINTMENT_INCLUDE });
+      const stock = await syncAppointmentStock(tx, { before, after: appointment, staffId: req.user.id });
+      return { appointment, stock };
     });
 
     broadcastAppointmentsChanged();
-    res.status(200).json({ ...appointment, customer: toPublicUser(appointment.customer) });
+    if (stock.changed) broadcastStockChanged();
+    res.status(200).json({ ...appointment, customer: toPublicUser(appointment.customer), stockWarnings: stock.warnings });
   } catch (error) {
+    if (error instanceof StockError) return res.status(error.status).json({ error: error.message });
     if (error.code === "P2025") {
       return res.status(404).json({ error: "Agendamento não encontrado." });
     }
@@ -1030,16 +1047,27 @@ app.get('/appointments/availability', authenticateToken, async (req, res) => {
 app.patch('/appointments/:id/status', authenticateToken, requireStaff, async (req, res) => {
   try {
     const { status } = req.body;
+    if (!APPOINTMENT_STATUSES.includes(status)) {
+      return res.status(400).json({ error: "Status inválido." });
+    }
 
-    const appointment = await prisma.appointment.update({
-      where: { id: req.params.id },
-      data: { status },
-      include: { service: true, customer: true, professional: { select: { id: true, name: true } } },
+    const { appointment, stock } = await prisma.$transaction(async (tx) => {
+      const before = await tx.appointment.findUnique({ where: { id: req.params.id } });
+      if (!before) {
+        const notFound = new Error("Agendamento não encontrado.");
+        notFound.code = "P2025";
+        throw notFound;
+      }
+      const appointment = await tx.appointment.update({ where: { id: req.params.id }, data: { status }, include: APPOINTMENT_INCLUDE });
+      const stock = await syncAppointmentStock(tx, { before, after: appointment, staffId: req.user.id });
+      return { appointment, stock };
     });
 
     broadcastAppointmentsChanged();
-    res.status(200).json({ ...appointment, customer: toPublicUser(appointment.customer) });
+    if (stock.changed) broadcastStockChanged();
+    res.status(200).json({ ...appointment, customer: toPublicUser(appointment.customer), stockWarnings: stock.warnings });
   } catch (error) {
+    if (error instanceof StockError) return res.status(error.status).json({ error: error.message });
     if (error.code === "P2025") {
       return res.status(404).json({ error: "Agendamento não encontrado." });
     }
@@ -1063,8 +1091,26 @@ app.delete('/appointments/:id', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: "Você não pode cancelar este agendamento." });
     }
 
-    await prisma.appointment.delete({ where: { id: req.params.id } });
+    // atendimento concluído já consumiu insumos: só a equipe pode removê-lo (o estorno é registrado em nome dela)
+    if (appointment.status === "Completed" && !isStaff) {
+      return res.status(403).json({ error: "Atendimentos concluídos não podem ser removidos." });
+    }
+
+    const reverted = await prisma.$transaction(async (tx) => {
+      // devolve ao estoque o que o atendimento consumiu, ANTES de apagá-lo
+      const reverted = isStaff
+        ? await revertAppointmentConsumption(tx, {
+            appointmentId: appointment.id,
+            staffId: req.user.id,
+            reason: "Estorno: atendimento excluído",
+          })
+        : false;
+      await tx.appointment.delete({ where: { id: req.params.id } });
+      return reverted;
+    });
+
     broadcastAppointmentsChanged();
+    if (reverted) broadcastStockChanged();
     res.status(200).json({ message: "Agendamento cancelado com sucesso." });
   } catch (error) {
     console.error(error);
@@ -2218,6 +2264,261 @@ app.get('/admin/overview', ...stockAuth, requireMajorAdmin, async (req, res) => 
   }
 });
 
+//=============================================================== RECEITAS (INSUMOS POR PROCEDIMENTO) + CONSUMO AUTOMÁTICO
+// Cole este bloco no server.js DEPOIS do bloco de ESTOQUE (usa StockError,
+// round3, decrementBatch, sortFefo, openedExpiresAt, stockAuth e
+// requireMajorAdmin) e ANTES do `server.listen(...)`.
+//
+// Como funciona:
+// - Receita = RecipeItem (procedimento x produto x quantidade por execução).
+// - Ao CONCLUIR um atendimento ("Completed"), cada insumo da receita vira uma
+//   movimentação Consumption (negativa), tirada dos lotes:
+//     * frascos já ABERTOS primeiro, depois o que vence primeiro (FEFO);
+//     * lote vencido (ou frasco aberto fora da validade) NUNCA é usado;
+//     * produto com controle de abertura: o lote usado pela 1ª vez é marcado
+//       como aberto (na data do atendimento).
+// - Ao sair de "Completed" (reabrir, cancelar, não compareceu) ou ao excluir o
+//   atendimento, o consumo é ESTORNADO (Return) nos mesmos lotes.
+// - Idempotente: só age quando o status muda (ou o procedimento muda num
+//   atendimento concluído); salvar de novo não baixa o estoque duas vezes.
+// - Falta de estoque NÃO trava o atendimento: baixa o que houver e devolve
+//   `stockWarnings` na resposta (o estoque nunca fica negativo).
 
+const CONSUMPTION_EPS = 0.0005;
+
+// lote que pode ser usado em paciente: não vencido e, se aberto, dentro da validade pós-abertura
+function isUsableForConsumption(batch, product, now) {
+  if (batch.expiresAt && new Date(batch.expiresAt) <= now) return false;
+  const openedExp = openedExpiresAt(batch, product);
+  if (openedExp && openedExp <= now) return false;
+  return true;
+}
+
+// termina o frasco aberto antes de abrir outro; dentro de cada grupo, FEFO
+function sortForConsumption(batches) {
+  return [...sortFefo(batches.filter((b) => b.openedAt)), ...sortFefo(batches.filter((b) => !b.openedAt))];
+}
+
+// consumo líquido já lançado para o atendimento, por lote: Consumption(-) + Return(+)
+async function netConsumptionByBatch(tx, appointmentId) {
+  const movements = await tx.stockMovement.findMany({
+    where: { appointmentId, type: { in: ["Consumption", "Return"] } },
+  });
+  const byBatch = new Map();
+  for (const m of movements) {
+    if (!m.batchId) continue;
+    const entry = byBatch.get(m.batchId) || { productId: m.productId, batchId: m.batchId, quantity: 0 };
+    entry.quantity = round3(entry.quantity + m.quantity);
+    byBatch.set(m.batchId, entry);
+  }
+  return [...byBatch.values()];
+}
+
+// devolve ao estoque tudo que o atendimento ainda tem consumido (no-op se não há nada)
+async function revertAppointmentConsumption(tx, { appointmentId, staffId, reason }) {
+  const consumed = (await netConsumptionByBatch(tx, appointmentId)).filter((e) => e.quantity < -CONSUMPTION_EPS);
+  const perProduct = new Map();
+
+  for (const e of consumed) {
+    const amount = -e.quantity;
+    await tx.stockBatch.update({ where: { id: e.batchId }, data: { quantity: { increment: amount } } });
+    await tx.stockMovement.create({
+      data: { type: "Return", productId: e.productId, batchId: e.batchId, appointmentId, staffId, quantity: amount, reason },
+    });
+    perProduct.set(e.productId, round3((perProduct.get(e.productId) || 0) + amount));
+  }
+  for (const [productId, amount] of perProduct) {
+    await tx.product.update({ where: { id: productId }, data: { currentStock: { increment: amount } } });
+  }
+  return consumed.length > 0;
+}
+
+// aplica a receita no estoque. Devolve a lista de avisos de falta.
+async function consumeRecipe(tx, { appointment, recipe, staffId }) {
+  const warnings = [];
+  const now = new Date();
+  // data em que um frasco novo é considerado aberto: a do atendimento (se já passou)
+  const openedAt = new Date(Math.min(now.getTime(), new Date(appointment.date).getTime()));
+
+  for (const item of recipe) {
+    const product = await tx.product.findUnique({ where: { id: item.productId } });
+    if (!product) continue;
+
+    const needed = round3(item.quantity);
+    let remaining = needed;
+    let consumedTotal = 0;
+
+    const batches = await tx.stockBatch.findMany({ where: { productId: product.id, quantity: { gt: 0 } } });
+    const usable = sortForConsumption(batches.filter((b) => isUsableForConsumption(b, product, now)));
+
+    for (const b of usable) {
+      if (remaining <= 0) break;
+      const take = round3(Math.min(b.quantity, remaining));
+      if (take <= 0) continue;
+
+      await decrementBatch(tx, b, take, product);
+      if (product.trackOpening && !b.openedAt) {
+        await tx.stockBatch.update({ where: { id: b.id }, data: { openedAt } });
+      }
+      await tx.stockMovement.create({
+        data: {
+          type: "Consumption",
+          productId: product.id,
+          batchId: b.id,
+          appointmentId: appointment.id,
+          staffId,
+          quantity: -take,
+          reason: `Atendimento: ${appointment.title}`,
+        },
+      });
+      remaining = round3(remaining - take);
+      consumedTotal = round3(consumedTotal + take);
+    }
+
+    if (consumedTotal > 0) {
+      await tx.product.update({ where: { id: product.id }, data: { currentStock: { increment: -consumedTotal } } });
+    }
+    if (remaining > CONSUMPTION_EPS) {
+      warnings.push({
+        productId: product.id,
+        productName: product.name,
+        unit: product.unit,
+        needed,
+        missing: remaining,
+      });
+    }
+  }
+  return warnings;
+}
+
+// Chamar DENTRO da transação que atualiza o atendimento.
+// `before` = atendimento antes da mudança, `after` = depois (com status e serviceId).
+async function syncAppointmentStock(tx, { before, after, staffId }) {
+  const wasCompleted = before?.status === "Completed";
+  const isCompleted = after.status === "Completed";
+  const serviceChanged = (before?.serviceId ?? null) !== (after.serviceId ?? null);
+
+  // nada relevante mudou: não mexe no estoque (garante a idempotência)
+  if (wasCompleted === isCompleted && !(isCompleted && serviceChanged)) return { warnings: [], changed: false };
+
+  const reverted = await revertAppointmentConsumption(tx, {
+    appointmentId: after.id,
+    staffId,
+    reason: isCompleted ? "Estorno: procedimento do atendimento alterado" : `Estorno: atendimento deixou de estar concluído (${after.status})`,
+  });
+  if (!isCompleted || !after.serviceId) return { warnings: [], changed: reverted };
+
+  const recipe = await tx.recipeItem.findMany({ where: { serviceId: after.serviceId } });
+  if (recipe.length === 0) return { warnings: [], changed: reverted };
+
+  const warnings = await consumeRecipe(tx, { appointment: after, recipe, staffId });
+  return { warnings, changed: true };
+}
+
+//------------------------------------------------------------- helpers de receita
+async function loadRecipe(serviceId) {
+  const items = await prisma.recipeItem.findMany({ where: { serviceId } });
+  const products = await prisma.product.findMany({ where: { id: { in: items.map((i) => i.productId) } } });
+  const byId = new Map(products.map((p) => [p.id, p]));
+
+  const rows = items.map((i) => {
+    const p = byId.get(i.productId);
+    return {
+      id: i.id,
+      productId: i.productId,
+      quantity: i.quantity,
+      product: p
+        ? { id: p.id, name: p.name, unit: p.unit, currentStock: p.currentStock, lastCost: p.lastCost, active: p.active }
+        : null,
+    };
+  });
+  return { serviceId, items: rows, ...recipeCost(rows) };
+}
+
+// custo estimado por execução = soma(quantidade x último custo por unidade base)
+function recipeCost(rows) {
+  let cost = 0;
+  let complete = rows.length > 0;
+  for (const r of rows) {
+    const unitCost = r.product?.lastCost;
+    if (unitCost == null) complete = false;
+    else cost += r.quantity * unitCost;
+  }
+  return { cost: rows.length ? Math.round(cost * 100) / 100 : null, costComplete: complete };
+}
+
+//------------------------------------------------------------- GET ROUTE (resumo: nº de insumos e custo de cada procedimento - MajorAdmin)
+app.get('/admin/recipes/summary', ...stockAuth, requireMajorAdmin, async (req, res) => {
+  try {
+    const [items, products] = await Promise.all([prisma.recipeItem.findMany(), prisma.product.findMany()]);
+    const byProduct = new Map(products.map((p) => [p.id, p]));
+
+    const grouped = new Map();
+    for (const i of items) {
+      if (!grouped.has(i.serviceId)) grouped.set(i.serviceId, []);
+      grouped.get(i.serviceId).push({ quantity: i.quantity, product: byProduct.get(i.productId) });
+    }
+
+    const summary = {};
+    for (const [serviceId, rows] of grouped) {
+      summary[serviceId] = { items: rows.length, ...recipeCost(rows) };
+    }
+    res.json(summary);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro ao buscar receitas." });
+  }
+});
+
+//------------------------------------------------------------- GET ROUTE (receita de um procedimento - MajorAdmin)
+app.get('/services/:id/recipe', ...stockAuth, requireMajorAdmin, async (req, res) => {
+  try {
+    const service = await prisma.service.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!service) return res.status(404).json({ error: "Serviço não encontrado." });
+    res.json(await loadRecipe(service.id));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro ao buscar receita." });
+  }
+});
+
+//------------------------------------------------------------- PUT ROUTE (substitui a receita inteira - MajorAdmin)
+// Não é retroativa: atendimentos já concluídos mantêm o consumo que tiveram.
+app.put('/services/:id/recipe', ...stockAuth, requireMajorAdmin, async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length > 30) {
+      return res.status(400).json({ error: "Envie a lista de insumos (até 30)." });
+    }
+
+    const service = await prisma.service.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!service) return res.status(404).json({ error: "Serviço não encontrado." });
+
+    const seen = new Set();
+    const data = [];
+    for (const raw of items) {
+      const productId = String(raw.productId || "");
+      const quantity = Number(raw.quantity);
+      if (!productId) return res.status(400).json({ error: "Escolha o produto de cada insumo." });
+      if (!Number.isFinite(quantity) || quantity <= 0) return res.status(400).json({ error: "A quantidade de cada insumo deve ser maior que zero." });
+      if (seen.has(productId)) return res.status(400).json({ error: "Há um insumo repetido na receita." });
+      seen.add(productId);
+      data.push({ serviceId: service.id, productId, quantity: round3(quantity) });
+    }
+
+    const products = await prisma.product.findMany({ where: { id: { in: data.map((d) => d.productId) } }, select: { id: true } });
+    if (products.length !== data.length) return res.status(400).json({ error: "Produto não encontrado." });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.recipeItem.deleteMany({ where: { serviceId: service.id } });
+      if (data.length > 0) await tx.recipeItem.createMany({ data });
+    });
+
+    res.json(await loadRecipe(service.id));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro ao salvar receita." });
+  }
+});
 
 server.listen(3000, () => console.log("Server running on port 3000 (HTTP + WebSocket)"));

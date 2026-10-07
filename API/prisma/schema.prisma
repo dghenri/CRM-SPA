@@ -205,6 +205,9 @@ model Service {
 
   appointments Appointment[]
 
+  // insumos consumidos a cada execução deste procedimento (receita)
+  recipeItems RecipeItem[]
+
   favoritedByIds String[] @db.ObjectId
   favoritedBy    User[]   @relation(fields: [favoritedByIds], references: [id])
 
@@ -278,8 +281,9 @@ model Product {
   // MajorAdmin. O MajorAdmin sempre pode, independente desta lista.
   allowedRoles StaffRole[]
 
-  batches   StockBatch[]
-  movements StockMovement[]
+  batches     StockBatch[]
+  movements   StockMovement[]
+  recipeItems RecipeItem[]
 }
 
 model StockBatch {
@@ -340,4 +344,20 @@ model StockRequest {
   reviewNote   String? // motivo da negação
 
   movements StockMovement[]
+}
+
+// Receita: quanto de cada insumo um procedimento consome por execução.
+// `quantity` é na unidade base do produto (ex: 30 un de toxina, 2 ml de ácido).
+// O consumo real vira StockMovement (Consumption) quando o atendimento é concluído.
+model RecipeItem {
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
+  quantity Float
+
+  serviceId String  @db.ObjectId
+  service   Service @relation(fields: [serviceId], references: [id])
+
+  productId String  @db.ObjectId
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@unique([serviceId, productId])
 }

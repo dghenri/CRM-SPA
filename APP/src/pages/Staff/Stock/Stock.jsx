@@ -284,7 +284,7 @@ function ProductModal({ product, onClose, onSaved }) {
   return (
     <Modal>
       <Modal.Backdrop isOpen={!!product} onOpenChange={(o) => !o && onClose()} isDismissable={!saving} isKeyboardDismissDisabled={saving}>
-        <Modal.Container size="cover" scroll="inside" className="px-120">
+        <Modal.Container size="cover" scroll="inside">
           <Modal.Dialog>
             <div className="contents" onKeyDown={confirmOnEnter(save, saving)}>
               <Modal.CloseTrigger />
@@ -645,7 +645,7 @@ function BatchesModal({ product, onClose, onChanged }) {
   return (
     <Modal>
       <Modal.Backdrop isOpen={!!product} onOpenChange={(o) => !o && onClose()}>
-        <Modal.Container size="cover" scroll="inside" className="px-130 py-50">
+        <Modal.Container size="lg" scroll="inside">
           <Modal.Dialog>
             <Modal.Header>
               <Modal.Heading>Lotes · {product?.name}</Modal.Heading>
@@ -771,6 +771,50 @@ function RejectModal({ request, onClose, onDone }) {
         </Modal.Container>
       </Modal.Backdrop>
     </Modal>
+  );
+}
+
+/* ------------------------------ aviso persistente ------------------------ */
+// Aviso fixo no centro inferior da tela enquanto houver solicitação pendente.
+// - "Ignorar" só esconde por enquanto: ele volta sozinho quando chega uma
+//   solicitação nova, e sempre que a página é aberta de novo (o estado de
+//   "ignorado" fica só na memória, de propósito).
+// - Some de vez quando todas as pendentes são aprovadas ou negadas.
+// - Não aparece na aba "Solicitações", onde o Gerente já está decidindo.
+// Para ele valer em QUALQUER página do painel (e não só no Estoque), mova este
+// componente e o estado `requests` para o layout do admin.
+function PendingApprovalsToast({ requests, isVisible, onReview }) {
+  const [dismissedIds, setDismissedIds] = useState([]);
+
+  const hasUnseen = requests.some((r) => !dismissedIds.includes(r.id));
+  if (!isVisible || !hasUnseen) return null;
+
+  const count = requests.length;
+  const description =
+    count === 1
+      ? `${describeRequest(requests[0])} ${requests[0].items.map((i) => describeItem(requests[0].type, i)).join("; ")}`
+      : "Entradas, baixas e ajustes só mudam o estoque depois de aprovados.";
+
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4" role="region" aria-label="Solicitações pendentes">
+      <Alert status="warning" className="pointer-events-auto w-full max-w-xl shadow-overlay">
+        <Alert.Indicator />
+        <Alert.Content>
+          <Alert.Title>
+            {count} {count > 1 ? "solicitações aguardando" : "solicitação aguardando"} sua aprovação
+          </Alert.Title>
+          <Alert.Description className="line-clamp-2 pr-5 ">{description}</Alert.Description>
+        </Alert.Content>
+        <div className="flex shrink-0 items-center gap-1 self-center">
+          <Button size="sm" variant="ghost" onPress={() => setDismissedIds(requests.map((r) => r.id))}>
+            Ignorar
+          </Button>
+          <Button size="sm" variant="tertiary" className="bg-warning" onPress={onReview}>
+            Revisar
+          </Button>
+        </div>
+      </Alert>
+    </div>
   );
 }
 
@@ -1045,7 +1089,8 @@ export default function Storage() {
     };
   }, [load]);
 
-  const pendingCount = requests.filter((r) => r.status === "Pending").length;
+  const pendingRequests = useMemo(() => requests.filter((r) => r.status === "Pending"), [requests]);
+  const pendingCount = pendingRequests.length;
   const batchesProduct = products.find((p) => p.id === batchesProductId) ?? null;
   const alertCount = products.filter((p) => p.active && Object.values(p.alerts).some(Boolean)).length;
 
@@ -1105,17 +1150,6 @@ export default function Storage() {
         </Alert>
       )}
 
-      {isAdmin && pendingCount > 0 && tab !== "requests" && (
-        <Alert status="warning">
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Title>
-              {pendingCount} solicitação{pendingCount > 1 ? "ões" : ""} aguardando sua aprovação
-            </Alert.Title>
-          </Alert.Content>
-        </Alert>
-      )}
-
       <Tabs selectedKey={tab} onSelectionChange={(k) => setTab(String(k))}>
         <Tabs.ListContainer>
           <Tabs.List aria-label="Seções do estoque">
@@ -1161,6 +1195,12 @@ export default function Storage() {
           </Tabs.Panel>
         )}
       </Tabs>
+
+      <PendingApprovalsToast
+        requests={pendingRequests}
+        isVisible={isAdmin && tab !== "requests"}
+        onReview={() => setTab("requests")}
+      />
 
       <ProductModal product={productModal} onClose={() => setProductModal(null)} onSaved={load} />
       <RequestModal type={requestType} products={products} isAdmin={isAdmin} onClose={() => setRequestType(null)} onSaved={load} />

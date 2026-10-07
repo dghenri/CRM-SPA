@@ -202,7 +202,7 @@ export default function UserHomePage() {
       {isLoading ? (
         <div className="flex items-center justify-center gap-2 py-10">
           <Spinner color="current" />
-          <p className="text-sm font-semibold text-muted">Carregando recomendações</p>
+          <p className="text-sm font-semibold text-muted">Carregando sugestões</p>
         </div>
       ) : loadError ? (
         <div className="flex items-center justify-center gap-2 py-10 text-danger">

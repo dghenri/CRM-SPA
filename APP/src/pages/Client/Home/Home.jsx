@@ -138,7 +138,6 @@ const Home = () => {
       </div>
 
       <div>
-        <h2 className="font-serif text-xl font-bold text-foreground mb-4">Ações rápidas</h2>
         <div className="grid grid-cols-3 gap-3 place-items-center">
           {quickActions.map(({ label, icon: Icon, onPress }) => (
             <Button

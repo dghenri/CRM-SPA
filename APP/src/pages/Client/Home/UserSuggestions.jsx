@@ -88,9 +88,9 @@ function RecommendedSection({ services, favorites, onToggleFavorite, onSelect })
   if (services.length === 0) return null;
 
   return (
-    <div className="mb-8">
+    <div>
       <div className="mb-4 flex items-center justify-between -ml-4">
-        <h2 className="font-serif text-xl font-bold text-foreground">Recomendados para você</h2>
+        <h2 className="font-serif text-xl font-bold text-foreground">Sugestões</h2>
         <Link href="/user/services" className="text-xs md:text-sm font-semibold text-focus">
           Ver todos
         </Link>
@@ -198,7 +198,7 @@ export default function UserHomePage() {
   const visibleServices = services.filter((s) => s.available);
 
   return (
-    <section className="w-full p-4">
+    <section className="w-full p-4 pt-0">
       {isLoading ? (
         <div className="flex items-center justify-center gap-2 py-10">
           <Spinner color="current" />

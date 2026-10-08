@@ -1,14 +1,8 @@
 import React, { useId } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Avatar } from '@heroui/react';
-// ATENÇÃO: ajuste esse caminho pro local real do seu AuthContext.jsx
-// em relação a este arquivo.
 import { useAuth } from '../context/AuthContext';
 
-// Path data dos ícones lucide-react (House, Leaf, CalendarCheck), separada
-// em "outer" (silhueta externa) e "inner" (traço interno) — precisamos
-// desenhar na mão porque o <Icon /> do lucide não deixa estilizar cada
-// path individualmente.
 const GLYPHS = {
   home: {
     viewBox: '0 0 24 24',
@@ -35,7 +29,6 @@ const GLYPHS = {
   },
 };
 
-// Ajuste as rotas para bater com o seu router
 const navItems = [
   { key: 'home', label: 'Início', glyph: 'home', path: '/user' },
   {
@@ -61,15 +54,13 @@ const navItems = [
 const INK_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
 const INK_DURATION = '480ms';
 
-const OUTLINE_COLOR = '#474747'; // neutral-400 — cor do outline quando inativo
-const FILL_COLOR = '#222222'; // neutral-900
+const OUTLINE_COLOR = '#474747';
+const FILL_COLOR = '#222222';
 const BG_COLOR = '#FFFFFF'; // mesma cor do fundo do menu (bg-white no <nav>) —
 
 const InkIcon = ({ glyph, active, size = 24 }) => {
   const g = GLYPHS[glyph];
   const reactId = useId();
-  // clipPath único por instância — evita colisão de id se o Menu for
-  // renderizado mais de uma vez na árvore (SSR, testes, etc).
   const clipId = `${glyph}-outer-clip-${reactId}`;
 
   const strokeCommon = {
@@ -165,19 +156,15 @@ const InkIcon = ({ glyph, active, size = 24 }) => {
   );
 };
 
-// `name` sem `src`/`avatarUrl` faz o <Avatar> da HeroUI cair pras
-// iniciais automaticamente — não precisamos calcular isso na mão aqui.
-// Como o schema do User ainda não tem campo de foto, na prática o
-// avatar do menu sempre vai mostrar as iniciais até isso existir.
-const InkAvatar = ({ client, active }) => (
-  <Avatar
-    src={client?.avatarUrl}
-    name={client?.name}
-    size="sm"
-    className={active ? 'ring-2 ring-offset-2 ring-offset-white ring-focus' : ''}
-    style={{ transition: `box-shadow ${INK_DURATION} ${INK_EASE}` }}
-  />
-);
+const getInitials = (name = '') =>
+  name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('');
+
+
 
 /**
  * Menu inferior mobile.
@@ -187,11 +174,10 @@ const InkAvatar = ({ client, active }) => (
  * se precisar sobrescrever isso manualmente (ex: testes).
  */
 const Menu = ({ client }) => {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
-  const resolvedClient = client ?? { name: user?.name, avatarUrl: user?.avatarUrl };
 
   const isActive = (path) => location.pathname === path;
 
@@ -210,11 +196,18 @@ const Menu = ({ client }) => {
                 aria-current={active ? 'page' : undefined}
                 aria-label={label}
                 className="flex flex-col items-center gap-1 rounded-xl px-3 py-1
-                           focus-visible:outline-none focus-visible:ring-2
-                           focus-visible:ring-neutral-900"
+                  focus-visible:outline-none focus-visible:ring-2
+                  focus-visible:ring-neutral-900"
               >
                 {isProfile ? (
-                  <InkAvatar client={resolvedClient} active={active} />
+                                    <Avatar
+                    size="sm"
+                    className={`${active ? 'ring-2 ring-offset-2 ring-offset-white ring-focus' : ''}`}
+                    style={{ transition: `box-shadow ${INK_DURATION} ${INK_EASE}` }}
+                  >
+                    {user?.avatarUrl && <Avatar.Image alt={user?.name} src={user.avatarUrl} />}
+                    <Avatar.Fallback>{loading ? '' : getInitials(user?.name)}</Avatar.Fallback>
+                  </Avatar>
                 ) : (
                   <InkIcon glyph={glyph} active={active} />
                 )}

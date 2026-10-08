@@ -15,6 +15,15 @@ function getShortName(name) {
   return name.split(" ").filter(Boolean).slice(0, 2).join(" ");
 }
 
+function getInitials(name = "") {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((n) => n[0]?.toUpperCase())
+    .join("");
+}
+
 function buildWhatsAppUrl() {
   const message = `Olá, gostaria de tirar algumas dúvidas...`;
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
@@ -23,7 +32,7 @@ function buildWhatsAppUrl() {
 /* const { full: formattedDate } = getFormattedDate(); */
 
 const Home = () => {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
 
   const handleNewAppointment = () => {
@@ -50,9 +59,9 @@ const Home = () => {
       {/* HEAD */}
       <div className="fixed inset-x-0 top-0 z-30 flex items-center justify-between bg-overlay border-b border-neutral-100 p-5 pb-0">
         <div className="flex gap-4">
-          <Avatar size="lg" className="mt-1.5">
-            <Avatar.Image alt="John Doe" src="https://img.heroui.chat/image/avatar?w=400&h=400&u=3" />
-            <Avatar.Fallback>H</Avatar.Fallback>
+          <Avatar className="size-15 rounded-full">
+            {user?.avatarUrl && <Avatar.Image alt={user?.name} src={user.avatarUrl} />}
+            <Avatar.Fallback>{loading ? "" : getInitials(user?.name)}</Avatar.Fallback>
           </Avatar>
           <div>
             <p className="text-md text-muted font-semibold">

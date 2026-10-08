@@ -195,7 +195,7 @@ const Profile = () => {
             onPress={() => navigate("/user/account?editar=nome")}
           >
             <div className="flex gap-4">
-              <Avatar className="h-20 w-20 rounded-full">
+              <Avatar className="size-20 rounded-full">
                 {user?.avatarUrl && <Avatar.Image alt={user?.name} src={user.avatarUrl} />}
                 <Avatar.Fallback>{loading ? "" : getInitials(user?.name)}</Avatar.Fallback>
               </Avatar>

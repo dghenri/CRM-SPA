@@ -5,6 +5,7 @@ import staffRoutes from './routes/staff.js';
 import servicesRoutes from './routes/services.js';
 import usersRoutes from './routes/users.js';
 import favoritesRoutes from './routes/favorites.js';
+import accountRoutes from './routes/account.js';
 import appointmentsRoutes from './routes/appointments.js';
 import couponsRoutes from './routes/coupons.js';
 import productsRoutes from './routes/products.js';
@@ -53,6 +54,7 @@ app.use(staffRoutes);        // /staff, /auth/staff/*
 app.use(servicesRoutes);     // /services
 app.use(usersRoutes);        // /auth/user/*, /users/*
 app.use(favoritesRoutes);    // /users/me/favorites
+app.use(accountRoutes);      // /users/me/password, /addresses, /notifications, /avatar
 app.use(appointmentsRoutes); // /appointments (inclui iniciar atendimento)
 app.use(couponsRoutes);      // /coupons
 app.use(productsRoutes);     // /products, /stock/batches

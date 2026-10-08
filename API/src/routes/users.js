@@ -105,7 +105,7 @@ router.get('/users/me', authenticateToken, requireUser, async (req, res) => {
       return res.status(404).json({ error: "Cliente não encontrado." });
     }
 
-    res.json(toPublicUser(customer));
+    res.json(toPublicUser(customer, { includeAvatar: true }));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Erro ao buscar cliente." });
@@ -113,11 +113,49 @@ router.get('/users/me', authenticateToken, requireUser, async (req, res) => {
 });
 
 //------------------------------------------------------------- PUT ROUTE (cliente edita o próprio perfil / completa o cadastro depois)
+// Senha NÃO passa por aqui: use PATCH /users/me/password (exige a senha atual).
 router.put('/users/me', authenticateToken, requireUser, async (req, res) => {
   try {
-    const { name, email, password, gender, phone, birthdate, cpf } = req.body;
+    const { name, email, gender, phone, birthdate, cpf } = req.body;
 
-    const data = { name, email, gender, phone };
+    if (req.body.password !== undefined) {
+      return res.status(400).json({ error: "Para trocar a senha use PATCH /users/me/password." });
+    }
+
+    const data = {};
+
+    if (name !== undefined) {
+      const cleanName = String(name).trim();
+      if (cleanName.length < 2 || cleanName.length > 100) {
+        return res.status(400).json({ error: "Informe um nome com 2 a 100 caracteres." });
+      }
+      data.name = cleanName;
+    }
+
+    if (email !== undefined) {
+      const cleanEmail = String(email).trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        return res.status(400).json({ error: "E-mail inválido." });
+      }
+      data.email = cleanEmail;
+    }
+
+    if (gender !== undefined) data.gender = gender;
+
+    // telefone: guarda como o front enviou (ex: "(71) 99999-9999") e só confere
+    // se tem 10 ou 11 dígitos. Vazio = apaga o telefone.
+    if (phone !== undefined) {
+      const rawPhone = phone === null ? "" : String(phone).trim();
+      if (rawPhone === "") {
+        data.phone = null;
+      } else {
+        const digits = rawPhone.replace(/\D/g, "");
+        if (!/^[\d\s()+\-]+$/.test(rawPhone) || rawPhone.length > 20 || (digits.length !== 10 && digits.length !== 11)) {
+          return res.status(400).json({ error: "Telefone inválido. Informe DDD + número." });
+        }
+        data.phone = rawPhone;
+      }
+    }
 
     // Progressive Profiling: é por aqui que o cliente completa o cadastro
     // depois (telefone, gênero, data de nascimento), e também onde pode
@@ -130,17 +168,16 @@ router.put('/users/me', authenticateToken, requireUser, async (req, res) => {
       data.cpf = cpfDigits;
     }
 
-    if (birthdate) {
-      const parsedBirthdate = new Date(birthdate);
-      if (Number.isNaN(parsedBirthdate.getTime())) {
-        return res.status(400).json({ error: "Data de nascimento inválida." });
+    if (birthdate !== undefined) {
+      if (birthdate === null || birthdate === "") {
+        data.birthdate = null;
+      } else {
+        const parsedBirthdate = new Date(birthdate);
+        if (Number.isNaN(parsedBirthdate.getTime()) || parsedBirthdate > new Date() || parsedBirthdate.getUTCFullYear() < 1900) {
+          return res.status(400).json({ error: "Data de nascimento inválida." });
+        }
+        data.birthdate = parsedBirthdate;
       }
-      data.birthdate = parsedBirthdate;
-    }
-
-    // só troca a senha se realmente veio uma nova; campo vazio = mantém a atual
-    if (password) {
-      data.password = await bcrypt.hash(password, 10);
     }
 
     const updatedCustomer = await prisma.user.update({
@@ -148,7 +185,7 @@ router.put('/users/me', authenticateToken, requireUser, async (req, res) => {
       data,
     });
 
-    res.status(200).json(toPublicUser(updatedCustomer));
+    res.status(200).json(toPublicUser(updatedCustomer, { includeAvatar: true }));
   } catch (error) {
     if (error.code === "P2002") {
       return res.status(409).json({ error: duplicateFieldMessage(error) });

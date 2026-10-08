@@ -4,14 +4,15 @@ import { useAuth } from '../../../context/AuthContext';
 import { TermsCard } from './Terms';
 import { WHATSAPP_NUMBER } from '../config';
 
-import { Avatar, Button, Modal, Separator } from '@heroui/react';
+import { Avatar, Button, Modal, Separator, AlertDialog } from '@heroui/react';
 import {
   DoorOpen, ChevronRight, BadgeCheck, LockKeyhole, MapPinned,
-  BellRing, RectangleEllipsis, Headset, BookOpenText,
+  BellRing, RectangleEllipsis, Headset, BookOpenText, Phone,
+  Cake,
 } from 'lucide-react';
 
 // -----------------------------------------------------------------------
-function ProfileMenuButton({ icon: Icon, label, to, onPress, danger = false }) {
+function ProfileMenuButton({ icon: Icon, label, to, onPress, value, danger = false }) {
   const navigate = useNavigate();
 
   const handlePress = () => {
@@ -30,7 +31,10 @@ function ProfileMenuButton({ icon: Icon, label, to, onPress, danger = false }) {
         <Icon className={danger ? "text-danger" : ""} />
         <h2 className={danger ? "text-danger" : ""}>{label}</h2>
       </div>
-      <ChevronRight className={danger ? "text-danger" : ""} />
+      <div className="flex items-center gap-2">
+        {value && <span className="max-w-40 truncate text-sm font-normal text-muted">{value}</span>}
+        <ChevronRight className={danger ? "text-danger" : ""} />
+      </div>
     </Button>
   );
 }
@@ -95,26 +99,35 @@ function getInitials(name = "") {
     .join("");
 }
 
+// "1990-05-17T00:00:00.000Z" -> "17/05/1990" (sem passar por Date, que deslocaria o dia pelo fuso)
+function formatBirthdate(value) {
+  const iso = value ? String(value).slice(0, 10) : "";
+  const [y, m, d] = iso.split("-");
+  return y && m && d ? `${d}/${m}/${y}` : "";
+}
+
 function buildWhatsAppUrl() {
   const message = `Olá, estou precisando de ajuda com: [DIGITE SEU PROBLEMA]`;
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 }
 
 // -----------------------------------------------------------------------
-function buildProfileSections({ onOpenWhatsApp }) {
+function buildProfileSections({ user }) {
   return [
     {
-      title: "Endereço e segurança",
+      title: "Informações e segurança",
       items: [
-        { icon: MapPinned, label: "Endereços Salvos", to: "/user/addresses" },
-        { icon: LockKeyhole, label: "Alterar Senha", to: "/user/change-password" },
-        { icon: RectangleEllipsis, label: "Alterar PIN", to: "/user/change-pin" },
+        // cada botão abre a página Account já na seção correspondente (?editar=...)
+        { icon: MapPinned, label: "Endereços", to: "/user/account?editar=enderecos" },
+        { icon: Phone, label: "Telefone", to: "/user/account?editar=telefone", value: user?.phone },
+        { icon: Cake, label: "Data de nascimento", to: "/user/account?editar=nascimento", value: formatBirthdate(user?.birthdate) },
+        { icon: LockKeyhole, label: "Alterar Senha", to: "/user/account?editar=senha" },
       ],
     },
     {
       title: "Mais",
       items: [
-        { icon: BellRing, label: "Preferência de Notificações", to: "/user/notifications" },
+        { icon: BellRing, label: "Preferência de Notificações", to: "/user/account?editar=notificacoes" },
         { label: "Política de Privacidade", render: () => <TermsMenuTrigger /> },
         { icon: Headset, label: "Ajuda e Suporte", onPress: () => window.open(buildWhatsAppUrl(), "_blank", "noopener,noreferrer") },
       ],
@@ -126,11 +139,7 @@ const Profile = () => {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
 
-  const openWhatsApp = () => {
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}`, "_blank", "noopener,noreferrer");
-  };
-
-  const PROFILE_SECTIONS = buildProfileSections({ onOpenWhatsApp: openWhatsApp });
+  const PROFILE_SECTIONS = buildProfileSections({ user });
 
   return (
     <div className="flex h-full flex-col pt-34 pb-20 mx-6">
@@ -141,16 +150,41 @@ const Profile = () => {
           <span className="font-semibold">Configurações</span>
         </div>
 
-        <Button
-          isIconOnly
-          size="lg"
-          variant="ghost"
-          className="size-15 rounded-full font-semibold"
-          onPress={logout}
-        >
-          <DoorOpen className="size-8 text-danger" />
-        </Button>
+        <AlertDialog>
+          <Button variant="danger-soft" className="text-danger" ><DoorOpen /> Sair</Button>
+          <AlertDialog.Backdrop className="bg-overlay/50 dark:bg-overlay/60" variant="blur">
+            <AlertDialog.Container>
+              <AlertDialog.Dialog className="relative overflow-hidden border border-border/80 bg-surface shadow-2xl ring-1 ring-danger/10 sm:max-w-100 dark:border-border/90 dark:bg-surface dark:ring-danger/15">
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-linear-to-b from-danger/6 to-transparent dark:from-danger/10"
+                />
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-8 top-0 h-px bg-linear-to-r from-transparent via-danger/35 to-transparent dark:via-danger/45"
+                />
+                <AlertDialog.Header className="relative">
+                  <AlertDialog.Icon status="danger" />
+                  <AlertDialog.Heading>Sair da sua conta?</AlertDialog.Heading>
+                </AlertDialog.Header>
+                <AlertDialog.Body className="relative">
+                  <p className="text-muted">
+                    Você será desconectado deste dispositivo. Alterações não salvas no{" "}
+                    <strong className="text-foreground">Riviera</strong> serão perdidas.
+                  </p>
+                </AlertDialog.Body>
+                <AlertDialog.Footer>
+                  <Button slot="close" variant="tertiary">
+                    Continuar conectado 
+                  </Button>
+                  <Button slot="close" variant="danger" onPress={logout}>Sair</Button>
+                </AlertDialog.Footer>
+              </AlertDialog.Dialog>
+            </AlertDialog.Container>
+          </AlertDialog.Backdrop>
+        </AlertDialog>
       </div>
+
 
       <div className="grid gap-10">
         {/* USER - dados reais do cliente logado, via AuthContext */}
@@ -158,12 +192,11 @@ const Profile = () => {
           <Button
             variant="tertiary"
             className="flex h-30 w-full justify-between items-center bg-overlay rounded-2xl p-4"
-            onPress={() => navigate("/user/account")}
+            onPress={() => navigate("/user/account?editar=nome")}
           >
             <div className="flex gap-4">
               <Avatar className="h-20 w-20 rounded-full">
-                {/* sem campo de avatar no schema do User ainda - por
-                    enquanto só as iniciais do nome como fallback */}
+                {user?.avatarUrl && <Avatar.Image alt={user?.name} src={user.avatarUrl} />}
                 <Avatar.Fallback>{loading ? "" : getInitials(user?.name)}</Avatar.Fallback>
               </Avatar>
               <div className="grid items-center">
@@ -182,6 +215,19 @@ const Profile = () => {
         {PROFILE_SECTIONS.map((section) => (
           <ProfileSection key={section.title} title={section.title} items={section.items} />
         ))}
+
+       {/*  <div className="h-auto  rounded-2xl">
+          <Button
+            variant="tertiary"
+            className="flex h-18 w-full items-center justify-between bg-danger-soft rounded-2xl"
+          >
+            <div className="flex gap-2">
+              <DoorOpen className="text-danger" />
+              <h2 className="text-danger">Sair</h2>
+            </div>
+            <ChevronRight className="text-danger" />
+          </Button>
+        </div> */}
       </div>
     </div>
   );

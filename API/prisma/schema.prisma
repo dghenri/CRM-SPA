@@ -100,6 +100,36 @@ model User {
   // cada lado guarda seu próprio array de ObjectIds
   favoriteServiceIds String[] @db.ObjectId
   favoriteServices   Service[] @relation(fields: [favoriteServiceIds], references: [id])
+
+  // Foto de perfil: por enquanto uma miniatura JPEG (256px, ~20-40 KB) guardada
+  // como data URL. Quando existir uma API de upload de imagens, troque por a
+  // URL do arquivo - o front só lê este campo.
+  avatarUrl String?
+
+  // Preferências de notificação (ver DEFAULT_USER_NOTIFICATIONS em lib/serializers.js).
+  // Json: novas preferências entram sem migration.
+  notificationPrefs Json?
+
+  addresses Address[]
+}
+
+// Endereços do cliente (vários por cliente, um deles é o principal)
+model Address {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  label        String? // "Casa", "Trabalho"...
+  zipCode      String // CEP, só dígitos (8)
+  street       String
+  number       String
+  complement   String?
+  neighborhood String
+  city         String
+  state        String // UF, 2 letras maiúsculas
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  userId String @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Coupon {

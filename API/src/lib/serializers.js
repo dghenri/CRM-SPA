@@ -15,9 +15,25 @@ export function toPublicStaff(staff) {
   return { ...safeStaff, settings: { ...DEFAULT_STAFF_SETTINGS, ...(staff.settings || {}) } };
 }
 
-// Idem para User (cliente)
-export function toPublicUser(user) {
+// Preferências de notificação do cliente quando ainda não escolheu nada.
+// Preferência nova = só entrar aqui (o campo no banco é Json).
+export const DEFAULT_USER_NOTIFICATIONS = {
+  sessionReminders: true, // lembretes de sessão agendada
+  promotions: true, //       promoções e cupons
+  news: false, //            novidades do SPA
+  viaEmail: true,
+  viaWhatsapp: true,
+};
+
+// Idem para User (cliente).
+// `avatarUrl` (data URL de até ~70 KB) só vai quando pedido (includeAvatar):
+// listas da equipe e agendamentos não devem carregar a foto de todo mundo.
+export function toPublicUser(user, { includeAvatar = false } = {}) {
   if (!user) return null;
-  const { password, ...safeUser } = user;
-  return safeUser;
+  const { password, avatarUrl, notificationPrefs, ...safeUser } = user;
+  return {
+    ...safeUser,
+    ...(includeAvatar ? { avatarUrl: avatarUrl ?? null } : {}),
+    notificationPrefs: { ...DEFAULT_USER_NOTIFICATIONS, ...(notificationPrefs || {}) },
+  };
 }

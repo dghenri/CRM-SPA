@@ -26,8 +26,8 @@ export const DEFAULT_USER_NOTIFICATIONS = {
 };
 
 // Idem para User (cliente).
-// `avatarUrl` (data URL de até ~70 KB) só vai quando pedido (includeAvatar):
-// listas da equipe e agendamentos não devem carregar a foto de todo mundo.
+// `avatarUrl` (caminho da foto, ex: /uploads/avatars/x.jpg) só vai quando pedido (includeAvatar):
+// listas da equipe e agendamentos não precisam da foto de todo mundo.
 export function toPublicUser(user, { includeAvatar = false } = {}) {
   if (!user) return null;
   const { password, avatarUrl, notificationPrefs, ...safeUser } = user;

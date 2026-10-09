@@ -81,15 +81,29 @@ model User {
   password  String
   gender    Gender?
   phone     String?
+  // Progressive Profiling: cadastro inicial só exige nome, CPF, email e senha
+  // - esses campos ficam pra serem completados depois, com a conta já criada.
   birthdate DateTime?
+  // Atualizado a cada login bem-sucedido (/auth/user/login). Usado pra
+  // identificar contas inativas (ex: lastLogin nulo ou muito antigo).
   lastLogin DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+
+  // relações 1-para-muitos
+  // cupons criados como exclusivos deste cliente (coupon.userId aponta pra cá)
   exclusiveCoupons  Coupon[]
   couponRedemptions CouponRedemption[]
   appointments      Appointment[]
+
+  // relação muitos-para-muitos (favoritos) — padrão MongoDB do Prisma:
+  // cada lado guarda seu próprio array de ObjectIds
   favoriteServiceIds String[] @db.ObjectId
   favoriteServices   Service[] @relation(fields: [favoriteServiceIds], references: [id])
+
+  // Foto de perfil: por enquanto uma miniatura JPEG (256px, ~20-40 KB) guardada
+  // como data URL. Quando existir uma API de upload de imagens, troque por a
+  // URL do arquivo - o front só lê este campo.
   avatarUrl String?
 
   // Preferências de notificação (ver DEFAULT_USER_NOTIFICATIONS em lib/serializers.js).

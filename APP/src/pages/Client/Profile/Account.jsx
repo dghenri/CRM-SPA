@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import MobileNav from "../../../components/MobileNav";
 import { useAuth } from "../../../context/AuthContext";
-import api from "../../../api/api";
+import api, { assetUrl } from "../../../api/api";
 
 import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
 import {
@@ -50,18 +50,22 @@ import {
  * ------------------------------------------------------------------------- */
 
 /* ------------------------------ foto: envio ------------------------------ */
-// ÚNICO ponto que sabe COMO a foto é enviada. Hoje: uma miniatura JPEG (256 px)
-// em base64, gravada no próprio cliente (PUT /users/me/avatar). Quando você
-// tiver uma API de upload de imagens, troque só o corpo destas duas funções:
-// a tela continua igual (ela só precisa receber de volta o usuário com avatarUrl).
-const saveAvatar = (dataUrl) => api.put("/users/me/avatar", { image: dataUrl });
+// ÚNICO ponto que sabe COMO a foto vai para o servidor: um arquivo JPEG (já
+// recortado em 512x512) enviado em multipart/form-data no campo "file", igual à
+// sua API de imagens. O servidor grava em uploads/avatars e devolve o usuário
+// com `avatarUrl` = caminho do arquivo (o assetUrl() transforma em URL completa).
+const saveAvatar = (blob) => {
+  const form = new FormData();
+  form.append("file", blob, "avatar.jpg");
+  return api.put("/users/me/avatar", form);
+};
 const removeAvatar = () => api.delete("/users/me/avatar");
 
-const AVATAR_SIZE = 256;
-const AVATAR_MAX_CHARS = 85_000; // o back-end aceita até 90 mil
+const AVATAR_SIZE = 512;
+const AVATAR_MAX_BYTES = 1_500_000; // o servidor aceita até 2 MB
 
-// Recorta a foto no centro (quadrado), reduz para 256x256 e devolve um data URL JPEG
-async function fileToAvatarDataUrl(file) {
+// Recorta a foto no centro (quadrado), reduz para 512x512 e devolve um Blob JPEG
+async function fileToAvatarBlob(file) {
   if (!file.type.startsWith("image/")) throw new Error("Escolha um arquivo de imagem.");
   if (file.size > 15 * 1024 * 1024) throw new Error("A imagem é muito grande (máximo 15 MB).");
 
@@ -84,8 +88,8 @@ async function fileToAvatarDataUrl(file) {
   bitmap.close?.();
 
   for (const quality of [0.85, 0.7, 0.55]) {
-    const url = canvas.toDataURL("image/jpeg", quality);
-    if (url.length <= AVATAR_MAX_CHARS) return url;
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    if (blob && blob.size <= AVATAR_MAX_BYTES) return blob;
   }
   throw new Error("Não foi possível reduzir essa foto. Tente outra.");
 }
@@ -205,19 +209,47 @@ function SaveButton({ pending, disabled, children = "Salvar" }) {
 /* ------------------------------ nome ------------------------------------- */
 function NameForm({ user, onSaved }) {
   const [name, setName] = useState(user.name ?? "");
+  const [email, setEmail] = useState(user.email ?? "");
+  const [password, setPassword] = useState("");
   const { pending, error, setError, run } = useAction();
-  const clean = name.trim();
+
+  const cleanName = name.trim();
+  const cleanEmail = email.trim().toLowerCase();
+  const nameChanged = cleanName !== (user.name ?? "");
+  const emailChanged = cleanEmail !== String(user.email ?? "").toLowerCase();
 
   const submit = () => {
-    if (clean.length < 2) return setError("Informe seu nome (mínimo 2 letras).");
-    run(async () => onSaved(await api.put("/users/me", { name: clean }), "Nome atualizado."));
+    if (cleanName.length < 2) return setError("Informe seu nome (mínimo 2 letras).");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return setError("Informe um e-mail válido.");
+    if (emailChanged && !password) return setError("Para alterar o e-mail, informe sua senha atual.");
+
+    // manda só o que mudou; a senha só vai junto quando o e-mail muda
+    const body = {};
+    if (nameChanged) body.name = cleanName;
+    if (emailChanged) {
+      body.email = cleanEmail;
+      body.currentPassword = password;
+    }
+    const message = emailChanged && nameChanged ? "Nome e e-mail atualizados." : emailChanged ? "E-mail atualizado." : "Nome atualizado.";
+    run(async () => onSaved(await api.put("/users/me", body), message));
   };
 
   return (
     <FormCard onSubmit={submit}>
       <ErrorAlert message={error} />
       <Field label="Nome completo" value={name} onChange={setName} autoComplete="name" maxLength={100} />
-      <SaveButton pending={pending} disabled={clean === (user.name ?? "")} />
+      <Field label="E-mail" type="email" inputMode="email" value={email} onChange={setEmail} autoComplete="email" maxLength={120} />
+      {emailChanged && (
+        <Field
+          label="Senha atual"
+          type="password"
+          value={password}
+          onChange={setPassword}
+          autoComplete="current-password"
+          description="Por segurança, confirme sua senha para trocar o e-mail. Ele é o seu login."
+        />
+      )}
+      <SaveButton pending={pending} disabled={!nameChanged && !emailChanged} />
     </FormCard>
   );
 }
@@ -426,9 +458,13 @@ function NotificationsForm({ user, onSaved }) {
 /* ------------------------------ foto ------------------------------------- */
 function PhotoForm({ user, onSaved }) {
   const inputRef = useRef(null);
-  const [preview, setPreview] = useState(null); // data URL da foto escolhida, ainda não enviada
+  const [picked, setPicked] = useState(null); // { blob, url } da foto escolhida, ainda não enviada
+  const preview = picked?.url ?? null;
   const [reading, setReading] = useState(false);
   const { pending, error, setError, run } = useAction();
+
+  // libera a memória do preview anterior (troca de foto ou saída da tela)
+  useEffect(() => () => picked && URL.revokeObjectURL(picked.url), [picked]);
 
   const pickFile = async (event) => {
     const file = event.target.files?.[0];
@@ -437,7 +473,8 @@ function PhotoForm({ user, onSaved }) {
     setReading(true);
     setError("");
     try {
-      setPreview(await fileToAvatarDataUrl(file));
+      const blob = await fileToAvatarBlob(file);
+      setPicked({ blob, url: URL.createObjectURL(blob) });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -447,19 +484,19 @@ function PhotoForm({ user, onSaved }) {
 
   const save = () =>
     run(async () => {
-      const updated = await saveAvatar(preview);
-      setPreview(null);
+      const updated = await saveAvatar(picked.blob);
+      setPicked(null);
       onSaved({ ...user, ...updated }, "Foto atualizada.", { stay: true });
     });
 
   const remove = () =>
     run(async () => {
       const updated = await removeAvatar();
-      setPreview(null);
+      setPicked(null);
       onSaved({ ...user, ...updated }, "Foto removida.", { stay: true });
     });
 
-  const shown = preview ?? user.avatarUrl ?? undefined;
+  const shown = preview ?? assetUrl(user.avatarUrl);
 
   return (
     <div className="grid justify-items-center gap-4 rounded-2xl bg-overlay p-4">
@@ -780,7 +817,7 @@ function AddressesSection({ editing, setEditing }) {
 /* ------------------------------ seções ----------------------------------- */
 // chave da URL (?editar=...) -> título da barra e ícone
 const SECTIONS = {
-  nome: { title: "Nome", icon: UserRound },
+  nome: { title: "Nome e e-mail", icon: UserRound },
   telefone: { title: "Telefone", icon: Phone },
   nascimento: { title: "Data de nascimento", icon: Cake },
   senha: { title: "Alterar senha", icon: LockKeyhole },
@@ -801,7 +838,7 @@ function AvatarHeader({ user, loading, isPhotoPage, onPress }) {
         <div className="flex min-w-0 gap-4">
           <Badge.Anchor>
             <Avatar className="h-20 w-20 rounded-full">
-              <Avatar.Image src={user?.avatarUrl ?? undefined} alt="" />
+              <Avatar.Image src={assetUrl(user?.avatarUrl)} alt="" />
               <Avatar.Fallback>{loading ? "" : getInitials(user?.name)}</Avatar.Fallback>
             </Avatar>
             <Badge color="accent" placement="bottom-right" size="lg" className="h-10 w-10 text-white">

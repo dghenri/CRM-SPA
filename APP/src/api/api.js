@@ -6,15 +6,22 @@
 // (ex: VITE_API_URL=https://sua-api.trycloudflare.com) e reinicie o vite.
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
+// Endereço público de um arquivo guardado no servidor (ex: foto de perfil).
+// A API devolve só o caminho ("/uploads/avatars/abc.jpg"); aqui vira URL completa.
+export const assetUrl = (path) => (!path ? undefined : /^(https?:|data:|blob:)/.test(path) ? path : `${API_BASE_URL}${path}`);
+
 async function request(path, { method = "GET", body } = {}) {
-  const headers = { "Content-Type": "application/json" };
+  // FormData (upload de arquivo): o navegador monta o Content-Type sozinho, com o
+  // "boundary" do multipart - por isso não se define o header nem se usa JSON.stringify
+  const isForm = typeof FormData !== "undefined" && body instanceof FormData;
+  const headers = isForm ? {} : { "Content-Type": "application/json" };
   const token = localStorage.getItem("token");
   if (token) headers.Authorization = `Bearer ${token}`;
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     cache: "no-store", // nunca reaproveita cache do navegador (evita 304 com corpo vazio)
   });
 

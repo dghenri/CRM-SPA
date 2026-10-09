@@ -2,6 +2,7 @@ import React, { useId } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Avatar } from '@heroui/react';
 import { useAuth } from '../context/AuthContext';
+import { assetUrl } from '../api/api';
 
 const GLYPHS = {
   home: {
@@ -200,13 +201,13 @@ const Menu = ({ client }) => {
                   focus-visible:ring-neutral-900"
               >
                 {isProfile ? (
-                                    <Avatar
+                  <Avatar
                     size="sm"
                     className={`${active ? 'ring-2 ring-offset-2 ring-offset-white ring-focus' : ''}`}
                     style={{ transition: `box-shadow ${INK_DURATION} ${INK_EASE}` }}
                   >
-                    {user?.avatarUrl && <Avatar.Image alt={user?.name} src={user.avatarUrl} />}
-                    <Avatar.Fallback>{loading ? '' : getInitials(user?.name)}</Avatar.Fallback>
+                    {user?.avatarUrl && <Avatar.Image alt={user?.name} src={assetUrl(user.avatarUrl)} />}
+                    <Avatar.Fallback>{loading ? "" : getInitials(user?.name)}</Avatar.Fallback>
                   </Avatar>
                 ) : (
                   <InkIcon glyph={glyph} active={active} />

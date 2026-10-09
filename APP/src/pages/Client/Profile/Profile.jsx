@@ -1,6 +1,7 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext';
+import { assetUrl } from '../../../api/api';
 import { TermsCard } from './Terms';
 import { WHATSAPP_NUMBER } from '../config';
 
@@ -195,8 +196,8 @@ const Profile = () => {
             onPress={() => navigate("/user/account?editar=nome")}
           >
             <div className="flex gap-4">
-              <Avatar className="size-20 rounded-full">
-                {user?.avatarUrl && <Avatar.Image alt={user?.name} src={user.avatarUrl} />}
+              <Avatar className="h-20 w-20 rounded-full">
+                {user?.avatarUrl && <Avatar.Image alt={user?.name} src={assetUrl(user.avatarUrl)} />}
                 <Avatar.Fallback>{loading ? "" : getInitials(user?.name)}</Avatar.Fallback>
               </Avatar>
               <div className="grid items-center">

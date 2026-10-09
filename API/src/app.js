@@ -13,6 +13,7 @@ import stockRoutes from './routes/stock.js';
 import overviewRoutes from './routes/overview.js';
 import recipesRoutes from './routes/recipes.js';
 import daySummaryRoutes from './routes/daySummary.js';
+import { UPLOADS_DIR } from './lib/uploads.js';
 
 export const app = express();
 
@@ -47,6 +48,16 @@ app.use(cors({
   },
 }))
 app.use(express.json())
+
+// Arquivos enviados (fotos de perfil). O nome muda a cada upload, então o
+// navegador pode guardar em cache por bastante tempo.
+app.use('/uploads', express.static(UPLOADS_DIR, {
+  index: false,
+  dotfiles: 'ignore',
+  maxAge: '30d',
+  immutable: true,
+  setHeaders: (res) => res.set('X-Content-Type-Options', 'nosniff'),
+}));
 
 // A ORDEM importa só entre rotas do mesmo prefixo (ex: /users/me antes de
 // /users/:id) - e isso já está garantido dentro de cada arquivo.

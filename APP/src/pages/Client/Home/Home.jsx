@@ -5,6 +5,7 @@ import { Calendar, ClipboardList, Heart, History, Tag, MessageCircle, Bell, X } 
 import UserSuggestions from './UserSuggestions'
 import { getGreeting, getFormattedDate } from "../../../utils/dateGreeting";
 import { useAuth } from "../../../context/AuthContext";
+import { assetUrl } from '../../../api/api';
 import { WHATSAPP_NUMBER } from '../config';
 import UserDiscovery from './UserDiscovery';
 
@@ -59,8 +60,8 @@ const Home = () => {
       {/* HEAD */}
       <div className="fixed inset-x-0 top-0 z-30 flex items-center justify-between bg-overlay border-b border-neutral-100 p-5 pb-0">
         <div className="flex gap-4">
-          <Avatar className="size-15 rounded-full">
-            {user?.avatarUrl && <Avatar.Image alt={user?.name} src={user.avatarUrl} />}
+          <Avatar className="size-16 rounded-full">
+            {user?.avatarUrl && <Avatar.Image alt={user?.name} src={assetUrl(user.avatarUrl)} />}
             <Avatar.Fallback>{loading ? "" : getInitials(user?.name)}</Avatar.Fallback>
           </Avatar>
           <div>

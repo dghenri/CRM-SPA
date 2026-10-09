@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from '../lib/prisma.js';
 import { DEFAULT_USER_NOTIFICATIONS, toPublicUser } from '../lib/serializers.js';
 import { authenticateToken, requireUser } from '../middleware/auth.js';
+import { deleteAvatarFile, detectImageExtension, receiveAvatar, saveAvatarFile } from '../lib/uploads.js';
 
 const router = Router();
 
@@ -13,7 +14,6 @@ const router = Router();
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 72; // o bcrypt ignora o que passa de 72 bytes
 const MAX_ADDRESSES = 10;
-const MAX_AVATAR_CHARS = 90_000; // o express.json() aceita no máximo ~100 KB por requisição
 const UFS = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA",
   "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
@@ -107,37 +107,42 @@ router.put('/users/me/notifications', authenticateToken, requireUser, async (req
 });
 
 //------------------------------------------------------------- FOTO DE PERFIL
-// O front manda uma miniatura JPEG já reduzida (256px) como data URL. É uma
-// solução simples: a imagem fica no próprio documento do cliente. Quando
-// houver uma API de upload, só `avatarUrl` passa a receber a URL do arquivo.
-router.put('/users/me/avatar', authenticateToken, requireUser, async (req, res) => {
+// O front manda a foto (já recortada em 256x256) como arquivo, num multipart/form-data
+// no campo "file". O arquivo fica em uploads/avatars e `avatarUrl` guarda o caminho
+// (ex: /uploads/avatars/abc.jpg), que o servidor entrega em GET /uploads/...
+router.put('/users/me/avatar', authenticateToken, requireUser, receiveAvatar, async (req, res) => {
+  let savedUrl = null;
   try {
-    const image = typeof req.body.image === "string" ? req.body.image : "";
-    const prefix = "data:image/jpeg;base64,";
+    if (!req.file) throw new InputError('Envie a foto no campo "file".');
 
-    if (!image.startsWith(prefix)) throw new InputError("Envie a foto em JPEG.");
-    if (image.length > MAX_AVATAR_CHARS) throw new InputError("A foto é grande demais. Escolha outra.", 413);
+    const extension = detectImageExtension(req.file.buffer);
+    if (!extension) throw new InputError('Formato inválido. Envie uma imagem JPG, PNG ou WEBP.');
 
-    const base64 = image.slice(prefix.length);
-    // além do formato, confere a "assinatura" de um JPEG de verdade (FF D8 FF)
-    const signature = Buffer.from(base64.slice(0, 8), "base64");
-    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(base64) || signature[0] !== 0xff || signature[1] !== 0xd8 || signature[2] !== 0xff) {
-      throw new InputError("Imagem inválida.");
-    }
+    const customer = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!customer) throw new InputError('Cliente não encontrado.', 404);
 
-    const updated = await prisma.user.update({ where: { id: req.user.id }, data: { avatarUrl: image } });
+    savedUrl = await saveAvatarFile(customer.id, req.file.buffer, extension);
+    const updated = await prisma.user.update({ where: { id: customer.id }, data: { avatarUrl: savedUrl } });
+    await deleteAvatarFile(customer.avatarUrl); // a foto anterior não fica ocupando disco
+
     res.json(toPublicUser(updated, { includeAvatar: true }));
   } catch (error) {
-    handleError(res, error, "Erro ao salvar a foto.");
+    if (savedUrl) await deleteAvatarFile(savedUrl); // não deixa arquivo órfão se o banco falhou
+    handleError(res, error, 'Erro ao salvar a foto.');
   }
 });
 
 router.delete('/users/me/avatar', authenticateToken, requireUser, async (req, res) => {
   try {
-    const updated = await prisma.user.update({ where: { id: req.user.id }, data: { avatarUrl: null } });
+    const customer = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!customer) throw new InputError('Cliente não encontrado.', 404);
+
+    const updated = await prisma.user.update({ where: { id: customer.id }, data: { avatarUrl: null } });
+    await deleteAvatarFile(customer.avatarUrl);
+
     res.json(toPublicUser(updated, { includeAvatar: true }));
   } catch (error) {
-    handleError(res, error, "Erro ao remover a foto.");
+    handleError(res, error, 'Erro ao remover a foto.');
   }
 });
 

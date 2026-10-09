@@ -137,7 +137,26 @@ router.put('/users/me', authenticateToken, requireUser, async (req, res) => {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
         return res.status(400).json({ error: "E-mail inválido." });
       }
-      data.email = cleanEmail;
+
+      // Trocar o e-mail muda o login da conta: só com a senha atual (protege
+      // contra alguém que pegou o celular do cliente já logado)
+      const customer = await prisma.user.findUnique({ where: { id: req.user.id } });
+      if (!customer) return res.status(404).json({ error: "Cliente não encontrado." });
+
+      if (cleanEmail !== String(customer.email).toLowerCase()) {
+        const currentPassword = typeof req.body.currentPassword === "string" ? req.body.currentPassword : "";
+        if (!currentPassword) {
+          return res.status(400).json({ error: "Para alterar o e-mail, informe sua senha atual." });
+        }
+        if (!(await bcrypt.compare(currentPassword, customer.password))) {
+          return res.status(400).json({ error: "Senha atual incorreta." });
+        }
+        const taken = await prisma.user.findUnique({ where: { email: cleanEmail } });
+        if (taken && taken.id !== customer.id) {
+          return res.status(409).json({ error: "Este e-mail já está em uso." });
+        }
+        data.email = cleanEmail;
+      }
     }
 
     if (gender !== undefined) data.gender = gender;

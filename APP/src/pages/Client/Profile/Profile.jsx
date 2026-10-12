@@ -2,10 +2,11 @@ import React from 'react'
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../context/AuthContext';
 import { assetUrl } from '../../../api/api';
+import { PendingAnchor, PendingMark, getPendingFields, useImageReady } from './ProfilePending';
 import { TermsCard } from './Terms';
 import { WHATSAPP_NUMBER } from '../config';
 
-import { Avatar, Button, Modal, Separator, AlertDialog } from '@heroui/react';
+import { Avatar, Button, Modal, Separator, AlertDialog, Spinner } from '@heroui/react';
 import {
   DoorOpen, ChevronRight, BadgeCheck, LockKeyhole, MapPinned,
   BellRing, RectangleEllipsis, Headset, BookOpenText, Phone,
@@ -13,7 +14,7 @@ import {
 } from 'lucide-react';
 
 // -----------------------------------------------------------------------
-function ProfileMenuButton({ icon: Icon, label, to, onPress, value, danger = false }) {
+function ProfileMenuButton({ icon: Icon, label, to, onPress, value, pending = false, danger = false }) {
   const navigate = useNavigate();
 
   const handlePress = () => {
@@ -29,7 +30,9 @@ function ProfileMenuButton({ icon: Icon, label, to, onPress, value, danger = fal
       isDisabled={!to && !onPress}
     >
       <div className="flex gap-2">
-        <Icon className={danger ? "text-danger" : ""} />
+        <PendingAnchor show={pending}>
+          <Icon className={danger ? "text-danger" : ""} />
+        </PendingAnchor>
         <h2 className={danger ? "text-danger" : ""}>{label}</h2>
       </div>
       <div className="flex items-center gap-2">
@@ -113,15 +116,15 @@ function buildWhatsAppUrl() {
 }
 
 // -----------------------------------------------------------------------
-function buildProfileSections({ user }) {
+function buildProfileSections({ user, pendingFields }) {
   return [
     {
       title: "Informações e segurança",
       items: [
         // cada botão abre a página Account já na seção correspondente (?editar=...)
         { icon: MapPinned, label: "Endereços", to: "/user/account?editar=enderecos" },
-        { icon: Phone, label: "Telefone", to: "/user/account?editar=telefone", value: user?.phone },
-        { icon: Cake, label: "Data de nascimento", to: "/user/account?editar=nascimento", value: formatBirthdate(user?.birthdate) },
+        { icon: Phone, label: "Telefone", to: "/user/account?editar=telefone", value: user?.phone, pending: pendingFields.phone },
+        { icon: Cake, label: "Data de nascimento", to: "/user/account?editar=nascimento", value: formatBirthdate(user?.birthdate), pending: pendingFields.birthdate },
         { icon: LockKeyhole, label: "Alterar Senha", to: "/user/account?editar=senha" },
       ],
     },
@@ -140,7 +143,10 @@ const Profile = () => {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
 
-  const PROFILE_SECTIONS = buildProfileSections({ user });
+  const pendingFields = getPendingFields(loading ? null : user);
+  // espera a foto carregar antes de montar a tela (não aparece "depois" nem pisca o aviso)
+  const avatarReady = useImageReady(assetUrl(user?.avatarUrl), { wait: !loading && !!user });
+  const PROFILE_SECTIONS = buildProfileSections({ user, pendingFields });
 
   return (
     <div className="flex h-full flex-col pt-34 pb-20 mx-6">
@@ -187,6 +193,11 @@ const Profile = () => {
       </div>
 
 
+      {loading || !avatarReady ? (
+        <div className="flex justify-center py-24">
+          <Spinner aria-label="Carregando" />
+        </div>
+      ) : (
       <div className="grid gap-10">
         {/* USER - dados reais do cliente logado, via AuthContext */}
         <div className="h-auto bg-overlay rounded-2xl">
@@ -196,13 +207,16 @@ const Profile = () => {
             onPress={() => navigate("/user/account?editar=nome")}
           >
             <div className="flex gap-4">
+              <PendingAnchor show={!loading && pendingFields.photo} size="md">
               <Avatar className="h-20 w-20 rounded-full">
                 {user?.avatarUrl && <Avatar.Image alt={user?.name} src={assetUrl(user.avatarUrl)} />}
                 <Avatar.Fallback>{loading ? "" : getInitials(user?.name)}</Avatar.Fallback>
               </Avatar>
+              </PendingAnchor>
               <div className="grid items-center">
-                <h2 className="flex justify-start font-semibold -mb-4">
+                <h2 className="flex items-center justify-start font-semibold -mb-4">
                   {loading ? "Carregando..." : user?.name || "Cliente"}
+                  {!loading && pendingFields.gender && <PendingMark />}
                 </h2>
                 <span className="text-muted">{loading ? "" : user?.email}</span>
               </div>
@@ -230,6 +244,7 @@ const Profile = () => {
           </Button>
         </div> */}
       </div>
+      )}
     </div>
   );
 };

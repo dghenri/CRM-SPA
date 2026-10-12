@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import MobileNav from "../../../components/MobileNav";
 import { useAuth } from "../../../context/AuthContext";
 import api, { assetUrl } from "../../../api/api";
+import { WHATSAPP_NUMBER } from "../config";
+import { PendingAnchor, PendingMark, getPendingFields, pendingBadgeClass, useImageReady } from "./ProfilePending";
 
 import { getLocalTimeZone, parseDate, today } from "@internationalized/date";
 import {
@@ -19,8 +21,10 @@ import {
   I18nProvider,
   Input,
   Label,
+  Link,
   ListBox,
   Select,
+  Spinner,
   Switch,
   TextField,
   toast,
@@ -174,10 +178,15 @@ function ErrorAlert({ message }) {
   );
 }
 
-function Field({ label, value, onChange, description, ...inputProps }) {
+// `isDisabled` é prop do TextField (o Input é só o <input> estilizado): por isso sai do
+// ...inputProps e vai para o TextField, que desabilita o campo e aplica o estilo padrão do HeroUI
+function Field({ label, value, onChange, description, pending = false, isDisabled = false, ...inputProps }) {
   return (
-    <TextField fullWidth value={value} onChange={onChange}>
-      <Label>{label}</Label>
+    <TextField fullWidth value={value} onChange={onChange} isDisabled={isDisabled}>
+      <Label className="flex items-center">
+        {label}
+        {pending && <PendingMark />}
+      </Label>
       <Input {...inputProps} />
       {description && <Description>{description}</Description>}
     </TextField>
@@ -207,9 +216,26 @@ function SaveButton({ pending, disabled, children = "Salvar" }) {
 }
 
 /* ------------------------------ nome ------------------------------------- */
+const GENDERS = [
+  { id: "Female", label: "Feminino" },
+  { id: "Male", label: "Masculino" },
+  { id: "Other", label: "Outro" },
+  { id: "PreferNotToSay", label: "Prefiro não informar" },
+];
+
+const formatCpf = (value) => {
+  const d = onlyDigits(value).slice(0, 11);
+  return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{0,2}).*/, (_, a, b, c, e) => `${a}.${b}.${c}${e ? `-${e}` : ""}`);
+};
+
+// Link para o suporte corrigir o CPF (o cliente não consegue editar)
+const cpfSupportUrl = (user) =>
+  `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`Olá, o CPF do meu cadastro (${user.email}) está incorreto e preciso corrigir.`)}`;
+
 function NameForm({ user, onSaved }) {
   const [name, setName] = useState(user.name ?? "");
   const [email, setEmail] = useState(user.email ?? "");
+  const [gender, setGender] = useState(user.gender ?? null);
   const [password, setPassword] = useState("");
   const { pending, error, setError, run } = useAction();
 
@@ -217,6 +243,7 @@ function NameForm({ user, onSaved }) {
   const cleanEmail = email.trim().toLowerCase();
   const nameChanged = cleanName !== (user.name ?? "");
   const emailChanged = cleanEmail !== String(user.email ?? "").toLowerCase();
+  const genderChanged = gender !== (user.gender ?? null);
 
   const submit = () => {
     if (cleanName.length < 2) return setError("Informe seu nome (mínimo 2 letras).");
@@ -226,11 +253,12 @@ function NameForm({ user, onSaved }) {
     // manda só o que mudou; a senha só vai junto quando o e-mail muda
     const body = {};
     if (nameChanged) body.name = cleanName;
+    if (genderChanged) body.gender = gender;
     if (emailChanged) {
       body.email = cleanEmail;
       body.currentPassword = password;
     }
-    const message = emailChanged && nameChanged ? "Nome e e-mail atualizados." : emailChanged ? "E-mail atualizado." : "Nome atualizado.";
+    const message = emailChanged ? "E-mail atualizado." : "Dados atualizados.";
     run(async () => onSaved(await api.put("/users/me", body), message));
   };
 
@@ -249,7 +277,44 @@ function NameForm({ user, onSaved }) {
           description="Por segurança, confirme sua senha para trocar o e-mail. Ele é o seu login."
         />
       )}
-      <SaveButton pending={pending} disabled={!nameChanged && !emailChanged} />
+
+      <Select aria-label="Gênero" placeholder="Selecione" value={gender} onChange={(key) => setGender(key ? String(key) : null)}>
+        <Label className="flex items-center">
+          Gênero
+          {!user.gender && <PendingMark />}
+        </Label>
+        <Select.Trigger>
+          <Select.Value />
+          <Select.Indicator />
+        </Select.Trigger>
+        <Select.Popover>
+          <ListBox>
+            {GENDERS.map((g) => (
+              <ListBox.Item key={g.id} id={g.id} textValue={g.label}>
+                {g.label}
+                <ListBox.ItemIndicator />
+              </ListBox.Item>
+            ))}
+          </ListBox>
+        </Select.Popover>
+      </Select>
+
+      {/* CPF: somente leitura. Quem corrige é o suporte */}
+      <Field
+        isDisabled
+        label="CPF"
+        value={formatCpf(user.cpf)}
+        description={
+          <>
+            CPF incorreto?{" "}
+            <Link href={cpfSupportUrl(user)} target="_blank" rel="noopener noreferrer" className="text-accent underline">
+              Fale com o suporte
+            </Link>
+          </>
+        }
+      />
+
+      <SaveButton pending={pending} disabled={!nameChanged && !emailChanged && !genderChanged} />
     </FormCard>
   );
 }
@@ -270,6 +335,7 @@ function PhoneForm({ user, onSaved }) {
     <FormCard onSubmit={submit}>
       <ErrorAlert message={error} />
       <Field
+        pending={!user.phone}
         label="Telefone"
         type="tel"
         inputMode="tel"
@@ -277,7 +343,7 @@ function PhoneForm({ user, onSaved }) {
         placeholder="(71) 99999-9999"
         value={phone}
         onChange={(v) => setPhone((prev) => maskedChange(v, prev, formatPhone))}
-        description="Usamos para confirmar e lembrar das suas sessões. Deixe vazio para remover."
+        description="Usamos para confirmar e lembrar das suas sessões."
       />
       <SaveButton pending={pending} disabled={phone === initial} />
     </FormCard>
@@ -301,7 +367,10 @@ function BirthdateForm({ user, onSaved }) {
       <ErrorAlert message={error} />
       <I18nProvider locale="pt-BR">
         <DatePicker className="w-full" value={value} onChange={setValue} minValue={minDate} maxValue={maxDate}>
-          <Label>Data de nascimento</Label>
+          <Label className="flex items-center">
+            Data de nascimento
+            {!user.birthdate && <PendingMark />}
+          </Label>
           <DateField.Group fullWidth className="border border-border">
             <DateField.Input>{(segment) => <DateField.Segment segment={segment} />}</DateField.Input>
             <DateField.Suffix>
@@ -817,7 +886,7 @@ function AddressesSection({ editing, setEditing }) {
 /* ------------------------------ seções ----------------------------------- */
 // chave da URL (?editar=...) -> título da barra e ícone
 const SECTIONS = {
-  nome: { title: "Nome e e-mail", icon: UserRound },
+  nome: { title: "Dados pessoais", icon: UserRound },
   telefone: { title: "Telefone", icon: Phone },
   nascimento: { title: "Data de nascimento", icon: Cake },
   senha: { title: "Alterar senha", icon: LockKeyhole },
@@ -826,14 +895,14 @@ const SECTIONS = {
   foto: { title: "Foto de perfil", icon: Pencil },
 };
 
-// Cartão do topo: foto + e-mail. Toque = editar a foto.
-function AvatarHeader({ user, loading, isPhotoPage, onPress }) {
+// Cartão do topo (só em "Dados pessoais"): foto + nome. Toque = abrir a tela da foto.
+function AvatarHeader({ user, loading, onPress }) {
   return (
     <div className="h-auto rounded-2xl bg-overlay">
       <Button
         variant="tertiary"
         className="flex h-30 w-full items-center justify-between rounded-2xl bg-overlay p-4"
-        onPress={isPhotoPage ? undefined : onPress}
+        onPress={onPress}
       >
         <div className="flex min-w-0 gap-4">
           <Badge.Anchor>
@@ -841,16 +910,20 @@ function AvatarHeader({ user, loading, isPhotoPage, onPress }) {
               <Avatar.Image src={assetUrl(user?.avatarUrl)} alt="" />
               <Avatar.Fallback>{loading ? "" : getInitials(user?.name)}</Avatar.Fallback>
             </Avatar>
-            <Badge color="accent" placement="bottom-right" size="lg" className="h-10 w-10 text-white">
-              <Pencil size={12} />
+            <Badge color="accent" placement="bottom-right" size="lg" className="size-8 text-white">
+              <Pencil className="size-4" />
             </Badge>
+            {!user?.avatarUrl && !loading && (
+              <Badge color="warning" placement="top-right" size="md" aria-label="Pendente" className={pendingBadgeClass("md")}>
+                !
+              </Badge>
+            )}
           </Badge.Anchor>
           <div className="grid min-w-0 items-center">
-            <h2 className="flex justify-start font-semibold">{isPhotoPage ? user?.name : "Edite sua foto"}</h2>
-            <span className="truncate text-muted">{loading ? "" : user?.email}</span>
+            <h2 className="flex justify-start font-semibold">Alterar foto</h2>
           </div>
         </div>
-        {!isPhotoPage && <ChevronRight />}
+        <ChevronRight />
       </Button>
     </div>
   );
@@ -878,9 +951,25 @@ export default function Account() {
   const title = inAddressForm ? (addressEditing === "new" ? "Novo endereço" : "Editar endereço") : (SECTIONS[section]?.title ?? "Conta");
   const goBack = () => (inAddressForm ? setAddressEditing(null) : navigate(-1));
 
+  // Progressive Profiling: o que o cliente ainda não preencheu (marca "!")
+  const pendingFields = getPendingFields(user);
+  const pendingBySection = {
+    nome: pendingFields.gender,
+    telefone: pendingFields.phone,
+    nascimento: pendingFields.birthdate,
+  };
+
+  // As telas que mostram a foto esperam ela carregar antes de montar
+  const needsAvatar = section === "nome" || section === "foto";
+  const avatarReady = useImageReady(assetUrl(user?.avatarUrl), { wait: !loading && !!user });
+
   let content;
-  if (loading || !user) {
-    content = <p className="py-8 text-center text-muted">Carregando…</p>;
+  if (loading || !user || (needsAvatar && !avatarReady)) {
+    content = (
+      <div className="flex justify-center py-16">
+        <Spinner aria-label="Carregando" />
+      </div>
+    );
   } else if (section === "nome") {
     content = <NameForm user={user} onSaved={onSaved} />;
   } else if (section === "telefone") {
@@ -904,7 +993,9 @@ export default function Account() {
           .map(([key, { title: label, icon: Icon }]) => (
             <Button key={key} variant="tertiary" className="flex h-14 w-full items-center justify-between" onPress={() => openSection(key)}>
               <span className="flex items-center gap-2">
-                <Icon size={18} />
+                <PendingAnchor show={!!pendingBySection[key]}>
+                  <Icon size={18} />
+                </PendingAnchor>
                 {label}
               </span>
               <ChevronRight size={16} />
@@ -914,13 +1005,14 @@ export default function Account() {
     );
   }
 
-  const showHeader = !section || section === "nome" || section === "foto";
+  // o cartão da foto só aparece em "Dados pessoais" (a tela da foto já mostra a foto grande)
+  const showHeader = section === "nome" && !!user && avatarReady;
 
   return (
     <div className="mx-6 flex h-full flex-col pb-20 pt-12">
       <MobileNav onBack={goBack} title={title} />
       <main className="grid flex-1 content-start gap-4 overflow-y-auto pb-24 pt-14">
-        {showHeader && <AvatarHeader user={user} loading={loading} isPhotoPage={section === "foto"} onPress={() => openSection("foto")} />}
+        {showHeader && <AvatarHeader user={user} loading={loading} onPress={() => openSection("foto")} />}
         {content}
       </main>
     </div>

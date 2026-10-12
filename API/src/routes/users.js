@@ -55,7 +55,8 @@ router.post('/auth/user/login', async (req, res) => {
   try {
     const { email, password, rememberUser } = req.body;
 
-    const customer = await prisma.user.findUnique({ where: { email } });
+    // mesmo formato do GET /users/me (com favoritos): o AuthContext guarda o que vier daqui
+    const customer = await prisma.user.findUnique({ where: { email }, include: { favoriteServices: true } });
 
     // mesma mensagem tanto pra email inexistente quanto senha errada
     if (!customer) {
@@ -86,7 +87,8 @@ router.post('/auth/user/login', async (req, res) => {
       { expiresIn: rememberUser ? "30d" : "24h" }
     );
 
-    res.json({ token, user: toPublicUser({ ...customer, lastLogin: loginAt }) });
+    // includeAvatar: sem isso a foto só aparecia depois de recarregar a página (GET /users/me)
+    res.json({ token, user: toPublicUser({ ...customer, lastLogin: loginAt }, { includeAvatar: true }) });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Erro ao fazer login." });
@@ -116,7 +118,14 @@ router.get('/users/me', authenticateToken, requireUser, async (req, res) => {
 // Senha NÃO passa por aqui: use PATCH /users/me/password (exige a senha atual).
 router.put('/users/me', authenticateToken, requireUser, async (req, res) => {
   try {
-    const { name, email, gender, phone, birthdate, cpf } = req.body;
+    const { name, email, gender, phone, birthdate } = req.body;
+
+    // O CPF identifica o cliente (e protege contra cadastro duplicado): o próprio
+    // cliente não troca. Se estiver errado, ele fala com o suporte e a equipe
+    // corrige em PUT /users/:id.
+    if (req.body.cpf !== undefined) {
+      return res.status(400).json({ error: "O CPF não pode ser alterado por aqui. Entre em contato com o suporte." });
+    }
 
     if (req.body.password !== undefined) {
       return res.status(400).json({ error: "Para trocar a senha use PATCH /users/me/password." });
@@ -159,7 +168,16 @@ router.put('/users/me', authenticateToken, requireUser, async (req, res) => {
       }
     }
 
-    if (gender !== undefined) data.gender = gender;
+    // gênero: só os valores do enum Gender; vazio apaga
+    if (gender !== undefined) {
+      if (gender === null || gender === "") {
+        data.gender = null;
+      } else if (!["Male", "Female", "Other", "PreferNotToSay"].includes(gender)) {
+        return res.status(400).json({ error: "Gênero inválido." });
+      } else {
+        data.gender = gender;
+      }
+    }
 
     // telefone: guarda como o front enviou (ex: "(71) 99999-9999") e só confere
     // se tem 10 ou 11 dígitos. Vazio = apaga o telefone.
@@ -176,16 +194,8 @@ router.put('/users/me', authenticateToken, requireUser, async (req, res) => {
       }
     }
 
-    // Progressive Profiling: é por aqui que o cliente completa o cadastro
-    // depois (telefone, gênero, data de nascimento), e também onde pode
-    // corrigir o CPF se necessário.
-    if (cpf !== undefined) {
-      const cpfDigits = cpf.replace(/\D/g, "");
-      if (!isValidCpf(cpfDigits)) {
-        return res.status(400).json({ error: "CPF inválido." });
-      }
-      data.cpf = cpfDigits;
-    }
+    // Progressive Profiling: é por aqui que o cliente completa o cadastro depois
+    // (telefone, gênero e data de nascimento), já com a conta criada.
 
     if (birthdate !== undefined) {
       if (birthdate === null || birthdate === "") {

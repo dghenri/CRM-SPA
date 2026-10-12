@@ -88,8 +88,10 @@ router.patch('/stock/requests/:id/approve', ...stockAuth, requireMajorAdmin, asy
       const request = await tx.stockRequest.findUnique({ where: { id: req.params.id } });
       // saldo é validado AQUI (na aprovação), não na criação. Se faltar saldo,
       // o erro desfaz a transação inteira e a solicitação continua Pending.
+      // Responsável no histórico = quem SOLICITOU. Quem aprovou fica na própria
+      // solicitação (reviewedBy) e a movimentação aponta para ela (requestId).
       await applyStockItems(tx, {
-        type: request.type, items: request.items, staffId: req.staff.id,
+        type: request.type, items: request.items, staffId: request.requestedById,
         requestId: request.id, reason: request.reason,
       });
     });

@@ -134,9 +134,13 @@ export async function syncAppointmentStock(tx, { before, after, staffId }) {
   // nada relevante mudou: não mexe no estoque (garante a idempotência)
   if (wasCompleted === isCompleted && !(isCompleted && serviceChanged)) return { warnings: [], changed: false };
 
+  // Responsável no histórico = quem faz o procedimento (o profissional do atendimento),
+  // e não quem apertou "finalizar". Sem profissional definido, cai em quem executou a ação.
+  const responsibleId = after.professionalId || staffId;
+
   const reverted = await revertAppointmentConsumption(tx, {
     appointmentId: after.id,
-    staffId,
+    staffId: responsibleId,
     reason: isCompleted ? "Estorno: procedimento do atendimento alterado" : `Estorno: atendimento deixou de estar concluído (${after.status})`,
   });
   if (!isCompleted || !after.serviceId) return { warnings: [], changed: reverted };
@@ -144,7 +148,7 @@ export async function syncAppointmentStock(tx, { before, after, staffId }) {
   const recipe = await tx.recipeItem.findMany({ where: { serviceId: after.serviceId } });
   if (recipe.length === 0) return { warnings: [], changed: reverted };
 
-  const warnings = await consumeRecipe(tx, { appointment: after, recipe, staffId });
+  const warnings = await consumeRecipe(tx, { appointment: after, recipe, staffId: responsibleId });
   return { warnings, changed: true };
 }
 

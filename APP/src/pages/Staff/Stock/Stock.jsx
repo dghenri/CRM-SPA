@@ -809,7 +809,7 @@ function PendingApprovalsToast({ requests, isVisible, onReview }) {
           <Button size="sm" variant="ghost" onPress={() => setDismissedIds(requests.map((r) => r.id))}>
             Ignorar
           </Button>
-          <Button size="sm" variant="tertiary" className="bg-warning" onPress={onReview}>
+          <Button size="sm" variant="tertiary" className="bg-warning text-warning-foreground" onPress={onReview}>
             Revisar
           </Button>
         </div>

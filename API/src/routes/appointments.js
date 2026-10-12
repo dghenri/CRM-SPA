@@ -297,7 +297,7 @@ router.delete('/appointments/:id', authenticateToken, async (req, res) => {
       const reverted = isStaff
         ? await revertAppointmentConsumption(tx, {
             appointmentId: appointment.id,
-            staffId: req.user.id,
+            staffId: appointment.professionalId || req.user.id, // responsável = quem faz o procedimento
             reason: "Estorno: atendimento excluído",
           })
         : false;

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { SearchField, Avatar, Button, Drawer, Alert, CloseButton, toast } from "@heroui/react";
 import { Calendar, ClipboardList, Heart, History, Tag, MessageCircle, Bell, X } from "lucide-react";
 import UserSuggestions from './UserSuggestions'
-import { getGreeting, getFormattedDate } from "../../../utils/dateGreeting";
+import { getGreeting } from "../../../utils/dateGreeting";
 import { useAuth } from "../../../context/AuthContext";
 import { assetUrl } from '../../../api/api';
 import { WHATSAPP_NUMBER } from '../config';
@@ -29,8 +29,6 @@ function buildWhatsAppUrl() {
   const message = `Olá, gostaria de tirar algumas dúvidas...`;
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 }
-
-/* const { full: formattedDate } = getFormattedDate(); */
 
 const Home = () => {
   const { user, loading } = useAuth();
@@ -58,42 +56,62 @@ const Home = () => {
   return (
     <div className="bg-background pt-28 pl-6 pr-6">
       {/* HEAD */}
-      <div className="fixed inset-x-0 top-0 z-30 flex items-center justify-between bg-overlay border-b border-neutral-100 p-5 pb-0">
+      <div className="fixed inset-x-0 top-0 z-30 flex items-center justify-between bg-overlay border-b border-border/50 p-5 pb-0">
         <div className="flex gap-4">
-          <Avatar className="size-16 rounded-full">
+          <Avatar className="size-14 rounded-full border border-border">
             {user?.avatarUrl && <Avatar.Image alt={user?.name} src={assetUrl(user.avatarUrl)} />}
             <Avatar.Fallback>{loading ? "" : getInitials(user?.name)}</Avatar.Fallback>
           </Avatar>
           <div>
-            <p className="text-md text-muted font-semibold">
-              {greeting}
+            <p className="text-sm text-muted font-semibold">
+              {greeting}!
             </p>
-            <h1 className="mb-4 shrink-0 text-xl font-bold text-overlay-foreground -mt-2">
-              {getShortName(user?.name)}!
+            <h1 className="mb-4 shrink-0 text-lg font-bold text-overlay-foreground -mt-1">
+              {getShortName(user?.name)}
             </h1>
           </div>
         </div>
 
         <Drawer>
-          <Button variant="tertiary" className="bg-surface-tertiary rounded-lg size-12 mb-2 shrink-0">
-            <Bell className="size-7 " />
+          <Button variant="tertiary" className="bg-surface-secondary rounded-xl size-12 mb-2 shrink-0">
+            <Bell className="size-7" />
           </Button>
           <Drawer.Backdrop>
             <Drawer.Content placement="right">
               <Drawer.Dialog className="w-md lg:w-md">
-                <Drawer.Header className="relative mb-20">
-                  {/* Posicionado para ficar exatamente sobre o Bell (pt-8 pr-6 do container + size-12 do botão) */}
+                <Drawer.Header className="relative mb-15">
                   <Button
                     slot="close"
-                    variant="tertiary"
-                    className="fixed top-10 right-8 rounded-lg size-10"
+                    variant="ghost"
+                    className="fixed top-8 right-6 size-10"
                   >
                     <X className="size-7" />
                   </Button>
-                  <Drawer.Heading className="fixed top-12">Notificações</Drawer.Heading>
+                  <Drawer.Heading className="fixed top-9">Notificações</Drawer.Heading>
                 </Drawer.Header>
                 <Drawer.Body>
-                  <div className="w-full max-w-xl gap-2">
+                  <div className="w-full max-w-xl space-y-4">
+                    
+                    {/* Default - Important information with action */}
+                    <Alert
+                      className="relative overflow-hidden rounded-xl border border-black/20 bg-linear-to-br from-black/10 via-surface to-surface-secondary shadow-sm dark:border-white/30 dark:from-white/15 dark:via-surface dark:to-white/5"
+                      status="default"
+                    >
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute -top-8 -right-8 size-28 rounded-full bg-black/15 blur-2xl dark:bg-white/25"
+                      />
+                      <Alert.Indicator className="relative" />
+                      <Alert.Content className="relative">
+                        <Alert.Title>New features available</Alert.Title>
+                        <Alert.Description>
+                          Check out our latest updates including dark mode support and improved accessibility features.
+                        </Alert.Description>
+                      </Alert.Content>
+                      <CloseButton variant="ghost" className="relative" />
+                    </Alert>
+
+                    {/* Warning - Important information with action */}
                     <Alert
                       className="relative overflow-hidden rounded-xl border border-warning/20 bg-linear-to-br from-warning/10 via-surface to-surface-secondary shadow-sm dark:border-warning/30 dark:from-warning/15 dark:via-surface dark:to-warning/5"
                       status="warning"
@@ -102,45 +120,120 @@ const Home = () => {
                         aria-hidden="true"
                         className="pointer-events-none absolute -top-8 -right-8 size-28 rounded-full bg-warning/15 blur-2xl dark:bg-warning/25"
                       />
-                      <Alert.Indicator className="relative text-warning" />
+                      <Alert.Indicator className="relative" />
                       <Alert.Content className="relative">
                         <Alert.Title>Payment method expires soon</Alert.Title>
                         <Alert.Description>
                           Your Visa ending in 4242 expires on March 28. Update billing to avoid interrupting your
                           Pro subscription.
                         </Alert.Description>
-                        <Button className="mt-3 sm:hidden" size="sm" variant="tertiary">
+                        <Button className="mt-3 sm:hidden bg-warning text-warning-foreground" size="sm" variant="tertiary">
                           Update billing
                         </Button>
                       </Alert.Content>
-                      <Button className="relative hidden shrink-0 sm:inline-flex" size="sm" variant="tertiary">
+                      <Button className="relative hidden shrink-0 sm:inline-flex bg-warning text-warning-foreground" size="sm" variant="tertiary">
                         Update billing
                       </Button>
-                      <CloseButton className="relative" />
+                      <CloseButton variant="ghost" className="relative" />
                     </Alert>
 
-                    {/* Accent - Important information with action */}
-                    <Alert status="accent">
-                      <Alert.Indicator />
-                      <Alert.Content>
+                    {/* Accent - Accent information with action */}
+                    <Alert
+                      className="relative overflow-hidden rounded-xl border border-accent/20 bg-linear-to-br from-accent/10 via-surface to-surface-secondary shadow-sm dark:border-accent/30 dark:from-accent/15 dark:via-surface dark:to-accent/5"
+                      status="accent"
+                    >
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute -top-8 -right-8 size-28 rounded-full bg-accent/15 blur-2xl dark:bg-accent/25"
+                      />
+                      <Alert.Indicator className="relative" />
+                      <Alert.Content className="relative">
                         <Alert.Title>Update available</Alert.Title>
                         <Alert.Description>
                           A new version of the application is available. Please refresh to get the latest features
                           and bug fixes.
                         </Alert.Description>
-                        <Button className="mt-2 sm:hidden" size="sm" variant="primary">
+                        <Button className="mt-3 sm:hidden" size="sm" variant="primary">
                           Refresh
                         </Button>
                       </Alert.Content>
-                      <Button className="hidden sm:block" size="sm" variant="primary">
+                      <Button className="relative hidden shrink-0 sm:inline-flex" 
+                        size="sm" variant="primary"
+                      >
                         Refresh
                       </Button>
+                      <CloseButton variant="ghost" className="relative" />
                     </Alert>
+
+                    {/* Success - Important information with action */}
+                    <Alert
+                      className="relative overflow-hidden rounded-xl border border-success/20 bg-linear-to-br from-success/10 via-surface to-surface-secondary shadow-sm dark:border-success/30 dark:from-success/15 dark:via-surface dark:to-success/5"
+                      status="success"
+                    >
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute -top-8 -right-8 size-28 rounded-full bg-success/15 blur-2xl dark:bg-success/25"
+                      />
+                      <Alert.Indicator className="relative" />
+                      <Alert.Content className="relative">
+                        <Alert.Title>Session scheduled successfully</Alert.Title>
+                        <Alert.Description>
+                          Your session has been confirmed successfully. You can view the details in your schedule.
+                        </Alert.Description>
+                        <Button
+                          className="mt-3 sm:hidden bg-success text-success-foreground"
+                          size="sm"
+                          variant="tertiary"
+                        >
+                          View session
+                        </Button>
+                      </Alert.Content>
+                      <Button className="relative hidden shrink-0 sm:inline-flex bg-success text-success-foreground" 
+                        size="sm" variant="tertiary"
+                      >
+                        View session
+                      </Button>
+                      <CloseButton variant="ghost" className="relative" />
+                    </Alert>
+
+                    {/* Danger - Important information with action */}
+                    <Alert
+                      className="relative overflow-hidden rounded-xl border border-danger/20 bg-linear-to-br from-danger/10 via-surface to-surface-secondary shadow-sm dark:border-danger/30 dark:from-danger/15 dark:via-surface dark:to-danger/5"
+                      status="danger"
+                    >
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute -top-8 -right-8 size-28 rounded-full bg-danger/15 blur-2xl dark:bg-danger/25"
+                      />
+                      <Alert.Indicator className="relative" />
+                      <Alert.Content className="relative">
+                        <Alert.Title>Unable to connect to server</Alert.Title>
+                        <Alert.Description>
+                          We're experiencing connection issues. Please try the following:
+                            <ul className="mt-2 list-inside list-disc space-y-1 text-sm">
+                              <li>Check your internet connection</li>
+                              <li>Refresh the page</li>
+                              <li>Clear your browser cache</li>
+                            </ul>
+                        </Alert.Description>
+                        <Button
+                          className="mt-3 sm:hidden" size="sm" variant="danger"
+                        >
+                          Retry
+                        </Button>
+                      </Alert.Content>
+                      <Button className="relative hidden shrink-0 sm:inline-flex" size="sm" variant="danger"
+                      >danger
+                        Retry
+                      </Button>
+                      <CloseButton variant="ghost" className="relative" />
+                    </Alert>
+                    
                   </div>
                 </Drawer.Body>
-                <Drawer.Footer>
-                  {/* <Button slot="close">Confirm</Button> */}
-                </Drawer.Footer>
+                {/* <Drawer.Footer>
+                  <Button slot="close">Confirm</Button>
+                </Drawer.Footer> */}
               </Drawer.Dialog>
             </Drawer.Content>
           </Drawer.Backdrop>
@@ -152,7 +245,7 @@ const Home = () => {
           {quickActions.map(({ label, icon: Icon, onPress }) => (
             <Button
               key={label}
-              className="h-25 w-full bg-overlay text-black text-[12px] font-semibold text-wrap leading-none flex flex-col items-center justify-center gap-1 drop-shadow-sm rounded-2xl"
+              className="h-25 w-full bg-overlay text-default-foreground text-[12px] font-semibold text-wrap leading-none flex flex-col items-center justify-center gap-1 drop-shadow-sm rounded-2xl"
               onPress={onPress}
             >
               {Icon && <Icon className="size-6" />}

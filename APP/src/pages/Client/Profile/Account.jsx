@@ -340,7 +340,7 @@ function PhoneForm({ user, onSaved }) {
         type="tel"
         inputMode="tel"
         autoComplete="tel-national"
-        placeholder="(71) 99999-9999"
+        placeholder="(DDD) 99999-9999"
         value={phone}
         onChange={(v) => setPhone((prev) => maskedChange(v, prev, formatPhone))}
         description="Usamos para confirmar e lembrar das suas sessões."
@@ -379,16 +379,19 @@ function BirthdateForm({ user, onSaved }) {
               </DatePicker.Trigger>
             </DateField.Suffix>
           </DateField.Group>
-          <Description>Digite a data ou toque no calendário. Toque no ano para mudar rápido.</Description>
+          <Description>Digite a data ou toque no calendário.</Description>
           <DatePicker.Popover>
-            <Calendar aria-label="Data de nascimento" defaultFocusedValue={value ? undefined : parseDate("1990-01-01")}>
+            <Calendar aria-label="Data de nascimento" 
+              defaultFocusedValue={value ? undefined : parseDate("2000-01-01")}
+              className="w-full max-w-sm"
+            >
               <Calendar.Header>
                 <Calendar.YearPickerTrigger>
                   <Calendar.YearPickerTriggerHeading />
                   <Calendar.YearPickerTriggerIndicator />
                 </Calendar.YearPickerTrigger>
-                <Calendar.NavButton slot="previous" />
-                <Calendar.NavButton slot="next" />
+                <Calendar.NavButton slot="previous" className="size-10" />
+                <Calendar.NavButton slot="next" className="size-10" />
               </Calendar.Header>
               <Calendar.Grid>
                 <Calendar.GridHeader>{(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}</Calendar.GridHeader>
@@ -442,11 +445,11 @@ function PasswordForm({ onDone }) {
       />
       <Field label="Confirmar nova senha" type={type} autoComplete="new-password" value={confirm} onChange={setConfirm} />
       <Switch isSelected={show} onChange={setShow}>
-        <Switch.Control>
-          <Switch.Thumb />
-        </Switch.Control>
         <Switch.Content>
-          <Label>Mostrar senhas</Label>
+          <Switch.Control>
+            <Switch.Thumb />
+          </Switch.Control>
+          Mostrar senhas
         </Switch.Content>
       </Switch>
       <SaveButton pending={pending} disabled={!current || !next || !confirm}>
@@ -582,17 +585,17 @@ function PhotoForm({ user, onSaved }) {
 
       <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={pickFile} aria-label="Escolher foto" />
 
-      <div className="grid w-full gap-2">
-        <Button variant={preview ? "tertiary" : "primary"} isPending={reading} isDisabled={pending} onPress={() => inputRef.current?.click()}>
+      <div className="flex justify-between w-full gap-2">
+        <Button variant={preview ? "tertiary" : "primary"} isPending={reading} isDisabled={pending} onPress={() => inputRef.current?.click()} className="flex-1">
           {preview ? "Escolher outra foto" : user.avatarUrl ? "Trocar foto" : "Escolher foto"}
         </Button>
         {preview && (
-          <Button isPending={pending} onPress={save}>
+          <Button isPending={pending} onPress={save} className="flex-1">
             Salvar foto
           </Button>
         )}
         {!preview && user.avatarUrl && (
-          <Button variant="danger-soft" isPending={pending} onPress={remove}>
+          <Button variant="danger-soft" isPending={pending} onPress={remove} className="flex-1">
             Remover foto
           </Button>
         )}

@@ -4,13 +4,14 @@ import { useAuth } from '../../../context/AuthContext';
 import { assetUrl } from '../../../api/api';
 import { PendingAnchor, PendingMark, getPendingFields, useImageReady } from './ProfilePending';
 import { TermsCard } from './Terms';
+import ThemeSwitcher from "../../../components/ThemeSwitcher";
 import { WHATSAPP_NUMBER } from '../config';
 
 import { Avatar, Button, Modal, Separator, AlertDialog, Spinner } from '@heroui/react';
 import {
   DoorOpen, ChevronRight, BadgeCheck, LockKeyhole, MapPinned,
   BellRing, RectangleEllipsis, Headset, BookOpenText, Phone,
-  Cake,
+  Cake, SunMoon,
 } from 'lucide-react';
 
 // -----------------------------------------------------------------------
@@ -47,7 +48,7 @@ function ProfileMenuButton({ icon: Icon, label, to, onPress, value, pending = fa
 function TermsMenuTrigger() {
   return (
     <Modal>
-      <Modal.Trigger className="flex h-18 w-full items-center justify-between bg-overlay px-4 text-left transition-colors hover:bg-surface-secondary">
+      <Modal.Trigger className="flex h-18 w-full items-center justify-between bg-overlay rounded-3xl px-4 text-left transition-colors hover:bg-surface-secondary">
         <div className="flex items-center gap-2">
           <BookOpenText size={16} />
           <h2 className="font-medium text-sm">Política de Privacidade</h2>
@@ -70,6 +71,21 @@ function TermsMenuTrigger() {
       </Modal.Backdrop>
     </Modal>
   );
+}
+
+function ThemeSelect() {
+  return(
+    <div className="flex min-h-18 w-full items-center justify-between gap-4 rounded-xl bg-overlay px-4">
+      <div className="flex min-w-0 items-center gap-2">
+        <SunMoon size={18} className="shrink-0" />
+        <h2 className="text-sm font-medium">Tema</h2>
+      </div>
+
+      <div className="ml-auto flex shrink-0 items-center">
+        <ThemeSwitcher />
+      </div>
+    </div>   
+  )
 }
 
 // Uma seção = título (opcional) + lista de itens, com separador entre
@@ -132,6 +148,7 @@ function buildProfileSections({ user, pendingFields }) {
       items: [
         { icon: BellRing, label: "Preferência de Notificações", to: "/user/account?editar=notificacoes" },
         { label: "Política de Privacidade", render: () => <TermsMenuTrigger /> },
+        { label: "Tema", render: () => <ThemeSelect /> },
       ],
     },
     {
@@ -201,7 +218,6 @@ const Profile = () => {
         </div>
       ) : (
       <div className="grid gap-10">
-        {/* USER - dados reais do cliente logado, via AuthContext */}
         <div className="h-auto bg-overlay rounded-2xl">
           <Button
             variant="tertiary"

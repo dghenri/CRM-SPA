@@ -27,7 +27,7 @@ export default function MobileNav({ title, onBack, leftSlot, rightSlot }) {
 
     <header
       dir="ltr"
-      className="fixed inset-x-0 top-0 z-30 grid h-17 grid-cols-[minmax(2.5rem,auto)_1fr_minmax(2.5rem,auto)] items-center gap-2  bg-black/30 px-3 backdrop-blur-lg drop-shadow-md"
+      className="fixed inset-x-0 top-0 z-30 h-17 grid grid-cols-[minmax(2.5rem,auto)_1fr_minmax(2.5rem,auto)] items-center gap-2 bg-overlay/30 backdrop-blur-lg drop-shadow-md px-3"
       style={{ paddingTop: "env(safe-area-inset-top)" }}
     >
       <div className="col-start-1 flex items-center justify-start">
@@ -35,9 +35,9 @@ export default function MobileNav({ title, onBack, leftSlot, rightSlot }) {
           <Button
             isIconOnly
             size="lg"
-            variant="secondary"
+            variant="ghost"
             aria-label="Voltar"
-            className="text-white outline border border-border/15 bg-white/20 mix-blend-difference"
+            className="text-default-foreground border-0"
             onPress={onBack}
           >
             <ArrowLeft className="size-7" />
@@ -47,11 +47,11 @@ export default function MobileNav({ title, onBack, leftSlot, rightSlot }) {
         )}
       </div>
 
-      <h1 className="col-start-2 line-clamp-1 text-center text-xl font-bold drop-shadow-4xl text-white mix-blend-difference">
+      <h1 className="col-start-2 line-clamp-1 text-center text-xl font-bold drop-shadow-4xl text-default-foreground">
         {title}
       </h1>
 
-      <div className="col-start-3 flex items-center justify-end gap-2 mix-blend-difference">{rightSlot}</div>
+      <div className="col-start-3 flex items-center justify-end gap-2">{rightSlot}</div>
     </header>
   );
 }

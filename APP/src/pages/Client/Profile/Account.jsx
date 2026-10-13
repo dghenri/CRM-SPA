@@ -187,7 +187,7 @@ function Field({ label, value, onChange, description, pending = false, isDisable
         {label}
         {pending && <PendingMark />}
       </Label>
-      <Input {...inputProps} />
+      <Input className="bg-surface-secondary" {...inputProps} />
       {description && <Description>{description}</Description>}
     </TextField>
   );
@@ -283,7 +283,7 @@ function NameForm({ user, onSaved }) {
           Gênero
           {!user.gender && <PendingMark />}
         </Label>
-        <Select.Trigger>
+        <Select.Trigger className="bg-surface-secondary">
           <Select.Value />
           <Select.Indicator />
         </Select.Trigger>
@@ -371,7 +371,7 @@ function BirthdateForm({ user, onSaved }) {
             Data de nascimento
             {!user.birthdate && <PendingMark />}
           </Label>
-          <DateField.Group fullWidth className="border border-border">
+          <DateField.Group fullWidth className="h-12 bg-surface-secondary border border-border">
             <DateField.Input>{(segment) => <DateField.Segment segment={segment} />}</DateField.Input>
             <DateField.Suffix>
               <DatePicker.Trigger>

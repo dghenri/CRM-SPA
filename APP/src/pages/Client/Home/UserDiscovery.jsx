@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@heroui/react";
 import Grainient from "../../../components/Grainient";
-import { Tag } from "lucide-react";
 
 const cards = [
   {
@@ -152,7 +151,6 @@ export default function UserDiscovery() {
       aria-label="Novidades"
       tabIndex={0}
       {...viewportProps}
-      // touch-action: o scroll vertical da página continua funcionando; o horizontal é do carrossel
       className="relative mb-2 h-55 touch-pan-y cursor-grab select-none overflow-hidden rounded-2xl bg-black outline-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-white/60"
     >
       {/* Background */}
@@ -238,7 +236,7 @@ export default function UserDiscovery() {
             aria-current={i === index}
             onClick={() => goTo(i)}
             // área de toque maior que o dot em si
-            className="group flex h-6 cursor-pointer items-center px-[3px]"
+            className="group flex h-6 cursor-pointer items-center px-1"
           >
             <span
               className={`block h-1.5 rounded-full transition-all duration-300 ${

@@ -33,12 +33,12 @@ function ServiceCard({ service, favorited, onToggleFavorite, onSelect }) {
       }}
       className="group w-full cursor-pointer"
     >
-      <div className="overflow-hidden rounded-[26px] bg-white shadow-md ring-1 ring-black/5 transition-shadow duration-300 group-hover:shadow-xl">
+      <div className="overflow-hidden rounded-[26px] bg-overlay shadow-md ring-1 ring-black/5 transition-shadow duration-300 group-hover:shadow-xl">
         <div className="relative">
           <img
             src={service.image}
             alt={service.title}
-            className={`h-[180px] w-full object-cover ${
+            className={`h-56 w-full object-cover ${
               !service.available ? "grayscale opacity-70" : ""
             }`}
           />
@@ -68,15 +68,9 @@ function ServiceCard({ service, favorited, onToggleFavorite, onSelect }) {
           </div>
 
           <div className="mt-4 flex items-center gap-2">
-            {/*
-              onClick com stopPropagation em AMBOS os botões: o div do card
-              tem onClick pra navegar pro detalhe, e o clique nativo borbulha
-              pra ele mesmo depois do onPress do botão disparar. Sem isso,
-              favoritar (ou agendar) também dispara a navegação do card.
-            */}
             <Button
-              variant="primary"
-              className="flex-1 justify-center rounded-full bg-foreground font-semibold text-white hover:bg-foreground/90"
+              variant="tertiary"
+              className="flex-1 justify-center rounded-full bg-foreground font-semibold text-default hover:bg-foreground/90"
               onPress={handleBook}
               onClick={(e) => e.stopPropagation()}
             >

@@ -29,7 +29,7 @@ export default function SchedulingList() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="fixed inset-x-0 top-0 z-30 flex items-center justify-between bg-overlay border-b border-neutral-100 p-5">
+      <div className="fixed inset-x-0 top-0 z-30 flex items-center justify-between bg-overlay border-b border-border/50 p-5">
         <div>
           <h2 className="font-serif text-2xl font-bold text-foreground">Agendamentos</h2>
           <span className="font-semibold">Histórico</span>

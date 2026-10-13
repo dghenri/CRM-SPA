@@ -34,6 +34,7 @@ export default function ServiceDetailPage() {
 
   useEffect(() => {
     let cancelled = false;
+    document.body.style.backgroundColor = 'var(--overlay)'; 
 
     api
       .get("/services")
@@ -54,6 +55,8 @@ export default function ServiceDetailPage() {
       });
 
     return () => {
+      // limpa a cor ao sair da página
+      document.body.style.backgroundColor = ''; 
       cancelled = true;
     };
   }, [id]);
@@ -103,10 +106,10 @@ export default function ServiceDetailPage() {
       <Button
         isIconOnly
         size="lg"
-        variant="secondary"
+        variant="ghost"
         aria-label="Favorite"
         className={`rounded-full ${
-          favorited ? "bg-danger text-white hover:bg-danger/90" : "text-white outline border border-border/15 bg-white/20"
+          favorited ? "text-danger hover:bg-danger/90" : "text-default-foreground border-0"
         }`}
         onPress={toggleFavorite}
       >
@@ -116,7 +119,7 @@ export default function ServiceDetailPage() {
   );
 
   return (
-    <div className="flex h-screen flex-col bg-white">
+    <div className="flex h-screen flex-col bg-overlay">
       <MobileNav onBack={() => navigate(-1)} title={"Detalhes"} rightSlot={actionButtons} />
 
       {/* pb-24 dá espaço pro conteúdo não ficar escondido atrás da barra
@@ -138,7 +141,7 @@ export default function ServiceDetailPage() {
               <img
                 src={service.image}
                 alt={service.title}
-                className={`h-[490px] -mt-17 w-full object-cover rounded-b-4xl ${
+                className={`h-152 -mt-17 w-full object-cover rounded-b-4xl ${
                   !service.available ? "grayscale opacity-70" : ""
                 }`}
               />

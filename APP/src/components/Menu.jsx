@@ -55,9 +55,9 @@ const navItems = [
 const INK_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
 const INK_DURATION = '480ms';
 
-const OUTLINE_COLOR = '#474747';
-const FILL_COLOR = '#222222';
-const BG_COLOR = '#FFFFFF'; // mesma cor do fundo do menu (bg-white no <nav>) —
+const OUTLINE_COLOR = 'var(--muted)';
+const FILL_COLOR = 'var(--default-foreground)';
+const BG_COLOR = 'var(--overlay)';
 
 const InkIcon = ({ glyph, active, size = 24 }) => {
   const g = GLYPHS[glyph];
@@ -184,7 +184,7 @@ const Menu = ({ client }) => {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-50 border-t border-neutral-100 bg-white pb-[env(safe-area-inset-bottom)]">
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-border/50 bg-overlay pb-[env(safe-area-inset-bottom)]">
       <ul className="flex items-center justify-around px-2 py-2">
         {navItems.map(({ key, label, glyph, path, isProfile }) => {
           const active = isActive(path);
@@ -203,7 +203,7 @@ const Menu = ({ client }) => {
                 {isProfile ? (
                   <Avatar
                     size="sm"
-                    className={`${active ? 'ring-2 ring-offset-2 ring-offset-white ring-focus' : ''}`}
+                    className={`${active ? 'ring-2 ring-offset-2 ring-offset-overlay ring-focus' : ''}`}
                     style={{ transition: `box-shadow ${INK_DURATION} ${INK_EASE}` }}
                   >
                     {user?.avatarUrl && <Avatar.Image alt={user?.name} src={assetUrl(user.avatarUrl)} />}

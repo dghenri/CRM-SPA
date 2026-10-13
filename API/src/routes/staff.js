@@ -161,9 +161,102 @@ router.put('/staff/:id', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error(error);
 
+    // P2002 = violação de campo único (email já cadastrado em outro staff)
+    if (error.code === "P2002") {
+      return res.status(409).json({ error: "Este email já está em uso." });
+    }
+
     return res.status(500).json({
       message: "Error updating user.",
     });
+  }
+});
+
+//------------------------------------------------------------- AVAILABILITY (protected)
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+// dia 0-6, horário HH:mm, fim > início, sem sobreposição no mesmo dia
+function validateAvailability(list) {
+  if (!Array.isArray(list)) return "availability deve ser uma lista.";
+
+  const byDay = {};
+  for (const item of list) {
+    const { weekday, startTime, endTime } = item || {};
+    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) return "Dia da semana inválido.";
+    if (!TIME_RE.test(startTime) || !TIME_RE.test(endTime)) return "Horário inválido (use HH:mm).";
+    if (endTime <= startTime) return "O fim precisa ser depois do início.";
+    (byDay[weekday] ||= []).push({ startTime, endTime });
+  }
+
+  for (const intervals of Object.values(byDay)) {
+    intervals.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    for (let i = 1; i < intervals.length; i++) {
+      if (intervals[i].startTime < intervals[i - 1].endTime) return "Horários sobrepostos no mesmo dia.";
+    }
+  }
+  return null;
+}
+
+const listAvailability = (staffId) =>
+  prisma.staffAvailability.findMany({
+    where: { staffId },
+    orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
+  });
+
+// só a própria funcionária ou o MajorAdmin acessam a agenda -
+// role lida do banco, como no PUT acima
+async function canManageAvailability(req) {
+  const requester = await prisma.staff.findUnique({ where: { id: req.user.id } });
+  if (!requester) return false;
+  return requester.role === "MajorAdmin" || requester.id === req.params.id;
+}
+
+router.get('/staff/:id/availability', authenticateToken, async (req, res) => {
+  try {
+    if (!(await canManageAvailability(req))) {
+      return res.status(403).json({ error: "Sem permissão para ver esta disponibilidade." });
+    }
+
+    res.status(200).json(await listAvailability(req.params.id));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro ao buscar disponibilidade." });
+  }
+});
+
+// substitui a agenda inteira pelo que veio no body
+router.put('/staff/:id/availability', authenticateToken, async (req, res) => {
+  try {
+    if (!(await canManageAvailability(req))) {
+      return res.status(403).json({ error: "Sem permissão para editar esta disponibilidade." });
+    }
+
+    const { availability } = req.body;
+    const validationError = validateAvailability(availability);
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
+    }
+
+    const staffId = req.params.id;
+
+    // sem $transaction: Mongo só aceita transação em replica set
+    // (Atlas aceita; se o seu for local standalone, não)
+    await prisma.staffAvailability.deleteMany({ where: { staffId } });
+    if (availability.length > 0) {
+      await prisma.staffAvailability.createMany({
+        data: availability.map(({ weekday, startTime, endTime }) => ({
+          staffId,
+          weekday,
+          startTime,
+          endTime,
+        })),
+      });
+    }
+
+    res.status(200).json(await listAvailability(staffId));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Erro ao salvar disponibilidade." });
   }
 });
 

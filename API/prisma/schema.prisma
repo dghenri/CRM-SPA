@@ -67,10 +67,28 @@ model Staff {
   appointments Appointment[]
   services     Service[]
 
+  // dias/horários em que a funcionária atende (vários intervalos por dia)
+  availability StaffAvailability[]
+
   // estoque
   executedMovements StockMovement[] @relation("MovementExecutor")
   stockRequests     StockRequest[]  @relation("RequestedBy")
   reviewedRequests  StockRequest[]  @relation("ReviewedBy")
+}
+
+// Disponibilidade semanal da funcionária. Um registro = um intervalo de
+// trabalho num dia da semana. Vários registros no mesmo dia permitem pausas
+// (ex: 08:00-12:00 e 14:00-18:00). Dia sem registro = não trabalha.
+model StaffAvailability {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  weekday   Int // 0 = domingo ... 6 = sábado (mesmo padrão do Date.getDay())
+  startTime String // "HH:mm" (24h)
+  endTime   String // "HH:mm" (24h), sempre maior que startTime
+
+  staffId String @db.ObjectId
+  staff   Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
 }
 
 model User {

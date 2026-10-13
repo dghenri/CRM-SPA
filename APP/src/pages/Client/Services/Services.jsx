@@ -184,7 +184,7 @@ const Services = () => {
   return (
     <div className="flex h-full flex-col pt-35">
       {/* HEAD */}
-      <div className="fixed inset-x-0 top-0 z-30 items-center justify-between bg-overlay border-b border-neutral-100">
+      <div className="fixed inset-x-0 top-0 z-30 items-center justify-between bg-overlay border-b border-border/50">
         <div className="p-5 pb-0">
           <h2 className="font-serif text-2xl font-bold text-foreground">Procedimentos</h2>
         </div>
@@ -219,7 +219,7 @@ const Services = () => {
               <Modal.Container>
                 <Modal.Dialog className="sm:max-w-90">
                   <Modal.CloseTrigger />
-                  <Modal.Header>
+                  <Modal.Header className="mb-4">
                     <Modal.Icon className="bg-default text-foreground">
                       <ListFilter className="size-5" />
                     </Modal.Icon>
@@ -231,7 +231,7 @@ const Services = () => {
                       onPress={() => setFavoritesOnly((v) => !v)}
                       className={`rounded-full border-none ${
                         favoritesOnly
-                          ? "bg-foreground text-white"
+                          ? "bg-black text-white"
                           : "bg-surface-secondary text-foreground"
                       }`}
                     >
@@ -260,7 +260,7 @@ const Services = () => {
                               <>
                                 <Slider.Fill />
                                 {state.values.map((_, i) => (
-                                  <Slider.Thumb key={i} index={i} />
+                                  <Slider.Thumb className="bg-white" key={i} index={i} />
                                 ))}
                               </>
                             )}
@@ -282,7 +282,7 @@ const Services = () => {
                         ))}
                       </div>
                     ) : (
-                      <p className="mt-5 text-sm text-default-500">
+                      <p className="mt-5 text-sm text-muted">
                         Nenhuma categoria disponível no momento.
                       </p>
                     )}
@@ -295,7 +295,7 @@ const Services = () => {
                       onChange={setSelectedProfessional}
                     >
                       <Label>Profissional</Label>
-                      <Select.Trigger>
+                      <Select.Trigger className="bg-surface-secondary border border-border">
                         <Select.Value />
                         <Select.Indicator />
                       </Select.Trigger>
@@ -313,7 +313,7 @@ const Services = () => {
                   </Modal.Body>
                   <Modal.Footer>
                     <Button
-                      variant="secondary"
+                      variant="tertiary"
                       className="flex-1"
                       onPress={clearFilters}
                       isDisabled={activeFilterCount === 0}

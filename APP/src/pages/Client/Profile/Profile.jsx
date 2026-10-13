@@ -80,7 +80,7 @@ function ProfileSection({ title, items }) {
   return (
     <div>
       {title && (
-        <h1 className="mb-2 font-medium text-sm text-muted tracking-wide uppercase">{title}</h1>
+        <h1 className="mb-2 font-medium text-sm text-muted tracking-wide">{title}</h1>
       )}
       <div className="h-auto bg-overlay rounded-2xl">
         {items.map((item, i) => (
@@ -119,9 +119,8 @@ function buildWhatsAppUrl() {
 function buildProfileSections({ user, pendingFields }) {
   return [
     {
-      title: "Informações e segurança",
+      title: "Configurações da conta",
       items: [
-        // cada botão abre a página Account já na seção correspondente (?editar=...)
         { icon: MapPinned, label: "Endereços", to: "/user/account?editar=enderecos" },
         { icon: Phone, label: "Telefone", to: "/user/account?editar=telefone", value: user?.phone, pending: pendingFields.phone },
         { icon: Cake, label: "Data de nascimento", to: "/user/account?editar=nascimento", value: formatBirthdate(user?.birthdate), pending: pendingFields.birthdate },
@@ -129,10 +128,15 @@ function buildProfileSections({ user, pendingFields }) {
       ],
     },
     {
-      title: "Mais",
+      title: "Configurações do aplicativo",
       items: [
         { icon: BellRing, label: "Preferência de Notificações", to: "/user/account?editar=notificacoes" },
         { label: "Política de Privacidade", render: () => <TermsMenuTrigger /> },
+      ],
+    },
+    {
+      title: "Suporte",
+      items: [
         { icon: Headset, label: "Ajuda e Suporte", onPress: () => window.open(buildWhatsAppUrl(), "_blank", "noopener,noreferrer") },
       ],
     },
@@ -142,16 +146,14 @@ function buildProfileSections({ user, pendingFields }) {
 const Profile = () => {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
-
   const pendingFields = getPendingFields(loading ? null : user);
-  // espera a foto carregar antes de montar a tela (não aparece "depois" nem pisca o aviso)
   const avatarReady = useImageReady(assetUrl(user?.avatarUrl), { wait: !loading && !!user });
   const PROFILE_SECTIONS = buildProfileSections({ user, pendingFields });
 
   return (
     <div className="flex h-full flex-col pt-34 pb-20 mx-6">
       {/* HEAD */}
-      <div className="fixed inset-x-0 top-0 z-30 flex items-center justify-between bg-overlay border-b border-neutral-100 p-5">
+      <div className="fixed inset-x-0 top-0 z-30 flex items-center justify-between bg-overlay border-b border-border/50 p-5">
         <div>
           <h2 className="font-serif text-2xl font-bold text-foreground">Perfil</h2>
           <span className="font-semibold">Configurações</span>

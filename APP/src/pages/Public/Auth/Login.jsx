@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useNavigate } from "react-router-dom";
-import api from "../../api/api"
-import { useAuth } from "../../context/AuthContext";
-import { decodeToken } from "../../utils/jwt";
+import api from "../../../api/api"
+import { useAuth } from "../../../context/AuthContext";
+import { decodeToken } from "../../../utils/jwt";
 
-import Carousel from "../../components/Carousel";
+import Carousel from "../../../components/Carousel";
 
 import {
   Card,

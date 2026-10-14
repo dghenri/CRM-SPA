@@ -2,9 +2,9 @@ import { useEffect } from "react";
 import { Button, Separator, } from "@heroui/react";
 import { Sparkles, CalendarCheck, ShieldCheck, ArrowRight, Copyright, } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import Navbar from "../../components/Navbar";
-import ClientServicesPage from "../../components/LandingServices";
-import SpecularButton from "../../components/SpecularButton"
+import Navbar from "../../../components/Navbar";
+import ClientServicesPage from "../../../components/LandingServices";
+import SpecularButton from "../../../components/SpecularButton"
 
 /* Adicionar uma banner de aviso de cupom para as primeiras sessões aqui */
 const HIGHLIGHTS = [

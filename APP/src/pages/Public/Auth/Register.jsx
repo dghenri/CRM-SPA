@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react'
-import Carousel from "../../components/Carousel";
+import Carousel from "../../../components/Carousel";
 import { Link, useNavigate } from "react-router-dom";
-import api from '../../api/api';
-import { useAuth } from "../../context/AuthContext";
-import { decodeToken } from "../../utils/jwt";
-import formatCpf, { isValidCpf } from "../../utils/formatCpf"
-import formatName from "../../utils/formatName"
+import api from '../../../api/api';
+import { useAuth } from "../../../context/AuthContext";
+import { decodeToken } from "../../../utils/jwt";
+import formatCpf, { isValidCpf } from "../../../utils/formatCpf"
+import formatName from "../../../utils/formatName"
 
 import {
   Card,

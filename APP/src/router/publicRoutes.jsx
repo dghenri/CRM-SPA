@@ -1,9 +1,9 @@
 import { Route } from "react-router-dom";
 
-import LandingPage from "../pages/Landing/Landing";
-import Login from "../pages/Auth/Login";
-import Register from "../pages/Auth/Register";
-import Recovery from "../pages/Auth/RecoveryPassword";
+import LandingPage from "../pages/Public/Landing/Landing";
+import Login from "../pages/Public/Auth/Login";
+import Register from "../pages/Public/Auth/Register";
+import Recovery from "../pages/Public/Auth/RecoveryPassword";
 
 // Rotas públicas: acessíveis sem autenticação
 export const publicRoutes = [

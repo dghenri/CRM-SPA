@@ -209,7 +209,7 @@ function FormCard({ onSubmit, children }) {
 
 function SaveButton({ pending, disabled, children = "Salvar" }) {
   return (
-    <Button type="submit" className="w-full" isPending={pending} isDisabled={disabled}>
+    <Button type="submit" className="w-full flex-1" isPending={pending} isDisabled={disabled}>
       {children}
     </Button>
   );
@@ -502,21 +502,26 @@ function NotificationsForm({ user, onSaved }) {
     <FormCard onSubmit={submit}>
       <ErrorAlert message={error} />
       {NOTIFICATION_GROUPS.map((group) => (
-        <div key={group.title} className="grid gap-3">
+        <div key={group.title} className="grid gap-6">
           <h3 className="text-sm font-medium uppercase tracking-wide text-muted">{group.title}</h3>
           {group.items.map((item) => (
             <Switch
               key={item.key}
-              className="w-full flex-row-reverse justify-between gap-3"
+              className="w-full"
               isSelected={prefs[item.key]}
-              onChange={(checked) => setPrefs((p) => ({ ...p, [item.key]: checked }))}
+              onChange={(checked) =>
+                setPrefs((p) => ({ ...p, [item.key]: checked }))
+              }
             >
-              <Switch.Control>
-                <Switch.Thumb />
-              </Switch.Control>
-              <Switch.Content>
-                <Label>{item.label}</Label>
-                <Description>{item.description}</Description>
+              <Switch.Content className="flex w-full flex-row items-center justify-between gap-4">
+                <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
+                  <Label>{item.label}</Label>
+                  <Description>{item.description}</Description>
+                </div>
+
+                <Switch.Control className="shrink-0">
+                  <Switch.Thumb />
+                </Switch.Control>
               </Switch.Content>
             </Switch>
           ))}
@@ -729,7 +734,7 @@ function AddressForm({ address, isFirst, onCancel, onSaved }) {
         <Field label="Cidade" autoComplete="address-level2" value={form.city} onChange={set("city")} maxLength={100} />
         <Select aria-label="Estado" placeholder="UF" value={form.state || null} onChange={(key) => set("state")(key ?? "")}>
           <Label>Estado</Label>
-          <Select.Trigger>
+          <Select.Trigger className="bg-surface-secondary">
             <Select.Value />
             <Select.Indicator />
           </Select.Trigger>
@@ -748,21 +753,21 @@ function AddressForm({ address, isFirst, onCancel, onSaved }) {
 
       {/* o primeiro endereço é sempre o principal; quem já é principal não pode "desmarcar" */}
       {!isFirst && !address?.isDefault && (
-        <Switch isSelected={form.isDefault} onChange={set("isDefault")}>
-          <Switch.Control>
-            <Switch.Thumb />
-          </Switch.Control>
+        <Switch isSelected={form.isDefault} onChange={set("isDefault")} className="mt-4">
           <Switch.Content>
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
             <Label>Usar como endereço principal</Label>
           </Switch.Content>
         </Switch>
       )}
 
-      <div className="grid gap-2">
-        <SaveButton pending={pending}>{isEdit ? "Salvar alterações" : "Adicionar endereço"}</SaveButton>
-        <Button variant="tertiary" isDisabled={pending} onPress={onCancel}>
+      <div className="flex justify-between w-full gap-2 mt-4">
+        <Button variant="tertiary" isDisabled={pending} onPress={onCancel} className="flex-1">
           Cancelar
         </Button>
+        <SaveButton pending={pending}>{isEdit ? "Salvar alterações" : "Adicionar endereço"}</SaveButton>
       </div>
     </FormCard>
   );

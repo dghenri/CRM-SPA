@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma.js';
 import { toPublicUser } from '../lib/serializers.js';
 import { duplicateFieldMessage, isValidCpf } from '../lib/validators.js';
 import { authenticateToken, requireStaff, requireUser } from '../middleware/auth.js';
+import { grantWelcomeCoupon } from '../services/welcomeCoupon.js';
 
 const router = Router();
 
@@ -38,6 +39,15 @@ router.post('/auth/user/register', async (req, res) => {
         password: hashedPassword,
       },
     });
+
+    // cupom de boas-vindas (BEMVINDO30) já na carteira do cliente novo. Se falhar
+    // por qualquer motivo, o cadastro continua valendo - o cupom não pode
+    // impedir ninguém de criar a conta.
+    try {
+      await grantWelcomeCoupon(customer.id);
+    } catch (couponError) {
+      console.error("Falha ao entregar cupom de boas-vindas:", couponError);
+    }
 
     res.status(201).json(toPublicUser(customer));
   } catch (error) {

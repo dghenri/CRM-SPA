@@ -2,40 +2,17 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@heroui/react";
 import Grainient from "../../../components/Grainient";
+import { useBanners } from "../../../hooks/useBanners";
 
-const cards = [
-  {
-    id: 1,
-    type: "coupon",
-    title: "Bem-vindo ao Riviera",
-    buttonLabel: "Resgatar cupom",
-    path: "/user/coupons",
-    description: (
-      <>
-        Resgate agora o seu cupom <strong className="font-serif">BEMVINDO30</strong> com 30% de
-        desconto na sua primeira sessão.
-      </>
-    ),
-  },
-  {
-    id: 4,
-    type: "appointment",
-    title: "Agende sua primeira sessão",
-    buttonLabel: "Agendar",
-    path: "/user/services",
-    description:
-      "Escolha o serviço, profissional e horário que melhor combina com você.",
-  },
-  {
-    id: 5,
-    type: "profile",
-    title: "Complete seu perfil",
-    buttonLabel: "Continuar",
-    path: "/user/profile",
-    description:
-      "Adicione algumas informações para termos uma experiência ainda mais personalizada.",
-  },
-];
+// Card exibido quando não há nenhum banner ativo (perfil completo, cupom usado
+// e nada criado pela equipe) - assim a área nunca fica vazia.
+const FALLBACK_CARD = {
+  id: "fallback",
+  title: "Bem-vindo ao Riviera",
+  description: "Escolha o procedimento, a data e o horário que melhor combinam com você.",
+  buttonLabel: "Agendar",
+  path: "/user/services",
+};
 
 /* ------------------------------ carrossel -------------------------------- */
 const AUTOPLAY_MS = 5000; // tempo de cada card
@@ -64,10 +41,15 @@ function useCarousel(count) {
   // autoplay: reinicia a contagem a cada troca (inclusive as feitas pelo usuário)
   useEffect(() => {
     const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (reduce || dragging || hovered) return;
+    if (reduce || dragging || hovered || count < 2) return;
     const timer = setTimeout(() => setIndex((i) => (i + 1) % count), AUTOPLAY_MS);
     return () => clearTimeout(timer);
   }, [index, dragging, hovered, count]);
+
+  // a quantidade de cards muda (perfil completado, banner desligado...): nunca fica num índice que não existe mais
+  useEffect(() => {
+    setIndex((i) => (i >= count ? Math.max(0, count - 1) : i));
+  }, [count]);
 
   const onPointerDown = (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -140,6 +122,8 @@ function useCarousel(count) {
 }
 
 export default function UserDiscovery() {
+  const { banners, isLoading } = useBanners();
+  const cards = banners.length > 0 || isLoading ? banners : [FALLBACK_CARD];
   const { index, goTo, dragX, dragging, viewportRef, viewportProps } = useCarousel(cards.length);
   const navigate = useNavigate();
 
@@ -209,22 +193,24 @@ export default function UserDiscovery() {
 
                 <p className="pr-30 text-sm text-white">{card.description}</p>
 
-                <Button
-                  variant="tertiary"
-                  className="absolute bottom-0 left-0"
-                  tabIndex={isCurrent ? 0 : -1}
-                  onPress={() => navigate(card.path)}
-                >
-                  {card.buttonLabel}
-                </Button>
+                {card.buttonLabel && card.path && (
+                  <Button
+                    variant="tertiary"
+                    className="absolute bottom-0 left-0"
+                    tabIndex={isCurrent ? 0 : -1}
+                    onPress={() => navigate(card.path)}
+                  >
+                    {card.buttonLabel}
+                  </Button>
+                )}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Steps */}
-      <div
+      {/* Steps (só com mais de um card) */}
+      {cards.length > 1 && <div
         className="absolute bottom-0 left-1/2 z-20 flex h-9 -translate-x-1/2 items-center"
         onPointerDown={(e) => e.stopPropagation()}
       >
@@ -245,7 +231,7 @@ export default function UserDiscovery() {
             />
           </button>
         ))}
-      </div>
+      </div>}
     </div>
   );
 }

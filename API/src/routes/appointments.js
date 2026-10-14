@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { broadcastAppointmentsChanged, broadcastStockChanged } from '../lib/realtime.js';
 import { isPaymentMethod } from '../lib/payments.js';
+import { PROFILE_FIELD_LABELS, PROFILE_FIELD_SECTIONS, getMissingProfileFields } from '../lib/profile.js';
 import { toPublicUser } from '../lib/serializers.js';
 import { authenticateToken, requireStaff, requireUser } from '../middleware/auth.js';
+import { notifyAppointmentCreated, notifyAppointmentStatus } from '../services/notifications.js';
 import { revertAppointmentConsumption, syncAppointmentStock } from '../services/recipes.js';
 import { StockError } from '../services/stock.js';
 
@@ -93,6 +95,17 @@ router.post('/appointments', authenticateToken, async (req, res) => {
       if (!serviceId || !service.available) {
         return res.status(400).json({ error: "Selecione um serviço disponível." });
       }
+      // cliente só agenda com o perfil completo (telefone e data de nascimento)
+      const me = await prisma.user.findUnique({ where: { id: req.user.id } });
+      const missing = getMissingProfileFields(me);
+      if (missing.length > 0) {
+        return res.status(403).json({
+          error: `Complete seu perfil (${missing.map((f) => PROFILE_FIELD_LABELS[f]).join(" e ")}) para agendar.`,
+          code: "PROFILE_INCOMPLETE",
+          missing,
+          editSection: PROFILE_FIELD_SECTIONS[missing[0]],
+        });
+      }
       data.customer = { connect: { id: req.user.id } };
     } else {
       // equipe: cliente é opcional (evento avulso na agenda)
@@ -103,6 +116,7 @@ router.post('/appointments', authenticateToken, async (req, res) => {
       include: { service: true, customer: true, professional: { select: { id: true, name: true } } },
     });
 
+    await notifyAppointmentCreated(appointment); // aparece no sino do cliente (além do toast)
     broadcastAppointmentsChanged();
     res.status(201).json({ ...appointment, customer: toPublicUser(appointment.customer) });
   } catch (error) {
@@ -147,7 +161,7 @@ router.put('/appointments/:id', authenticateToken, requireStaff, async (req, res
       data.professional = professionalId ? { connect: { id: professionalId } } : { disconnect: true };
     }
 
-    const { appointment, stock } = await prisma.$transaction(async (tx) => {
+    const { appointment, stock, previousStatus } = await prisma.$transaction(async (tx) => {
       const before = await tx.appointment.findUnique({ where: { id: req.params.id } });
       if (!before) {
         const notFound = new Error("Agendamento não encontrado.");
@@ -156,9 +170,10 @@ router.put('/appointments/:id', authenticateToken, requireStaff, async (req, res
       }
       const appointment = await tx.appointment.update({ where: { id: req.params.id }, data, include: APPOINTMENT_INCLUDE });
       const stock = await syncAppointmentStock(tx, { before, after: appointment, staffId: req.user.id });
-      return { appointment, stock };
+      return { appointment, stock, previousStatus: before.status };
     });
 
+    await notifyAppointmentStatus(appointment, previousStatus);
     broadcastAppointmentsChanged();
     if (stock.changed) broadcastStockChanged();
     res.status(200).json({ ...appointment, customer: toPublicUser(appointment.customer), stockWarnings: stock.warnings });
@@ -262,7 +277,7 @@ router.patch('/appointments/:id/status', authenticateToken, requireStaff, async 
       return res.status(400).json({ error: "Status inválido." });
     }
 
-    const { appointment, stock } = await prisma.$transaction(async (tx) => {
+    const { appointment, stock, previousStatus } = await prisma.$transaction(async (tx) => {
       const before = await tx.appointment.findUnique({ where: { id: req.params.id } });
       if (!before) {
         const notFound = new Error("Agendamento não encontrado.");
@@ -271,9 +286,10 @@ router.patch('/appointments/:id/status', authenticateToken, requireStaff, async 
       }
       const appointment = await tx.appointment.update({ where: { id: req.params.id }, data: { status }, include: APPOINTMENT_INCLUDE });
       const stock = await syncAppointmentStock(tx, { before, after: appointment, staffId: req.user.id });
-      return { appointment, stock };
+      return { appointment, stock, previousStatus: before.status };
     });
 
+    await notifyAppointmentStatus(appointment, previousStatus);
     broadcastAppointmentsChanged();
     if (stock.changed) broadcastStockChanged();
     res.status(200).json({ ...appointment, customer: toPublicUser(appointment.customer), stockWarnings: stock.warnings });
@@ -320,6 +336,10 @@ router.delete('/appointments/:id', authenticateToken, async (req, res) => {
       return reverted;
     });
 
+    // a equipe removeu a sessão de um cliente: avisa no sino (quando é o próprio cliente, ele já sabe)
+    if (isStaff && appointment.customerId && appointment.status !== "Cancelled") {
+      await notifyAppointmentStatus({ ...appointment, status: "Cancelled" }, appointment.status);
+    }
     broadcastAppointmentsChanged();
     if (reverted) broadcastStockChanged();
     res.status(200).json({ message: "Agendamento cancelado com sucesso." });

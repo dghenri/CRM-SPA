@@ -11,6 +11,7 @@ import Services from "../pages/Staff/Services/Services";
 import Coupons from "../pages/Staff/Coupons/Coupons";
 import Storage from "../pages/Staff/Stock/Stock";
 import Revenue from "../pages/Staff/Revenue/Revenue";
+import Communication from "../pages/Staff/Communication/Communication";
 
 import Settings from "../pages/Staff/Profile/Settings";
 import Profile from "../pages/Staff/Profile/Profile";
@@ -39,6 +40,7 @@ export const staffRoutes = (
       <Route path="coupons" element={<Coupons />} />
       <Route path="storage" element={<Storage />} />
       <Route path="revenue" element={<Revenue />} />
+      <Route path="communication" element={<Communication />} />
 
       {/* ADMIN - só cargo MajorAdmin acessa; Farmaceutica/Massoterapeuta
           que tentarem entrar direto pela URL voltam pra "/staff/dashboard" */}

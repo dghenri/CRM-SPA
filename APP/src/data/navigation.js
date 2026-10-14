@@ -11,6 +11,7 @@ import {
   Ticket,
   ShelvingUnit,
   Receipt,
+  Megaphone,
 } from "lucide-react";
 
 // Cargos existentes em prisma.Staff.role - usados pra filtrar quais itens
@@ -72,6 +73,15 @@ export const mainItems = [
     tooltip: "Receita",
     Icon: Receipt,
     to: "/staff/revenue",
+    badge: 0,
+    roles: ALL_STAFF_ROLES,
+  },
+  {
+    key: "comunicação",
+    label: "Comunicação",
+    tooltip: "Comunicação",
+    Icon: Megaphone,
+    to: "/staff/communication",
     badge: 0,
     roles: ALL_STAFF_ROLES,
   },

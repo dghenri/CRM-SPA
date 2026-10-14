@@ -136,6 +136,11 @@ model User {
   // Json: novas preferências entram sem migration.
   notificationPrefs Json?
 
+  // Avisos do sistema (ex: "agende sua primeira sessão") que o cliente dispensou
+  // no sino. Guarda só a chave do aviso; avisos que dependem de ação
+  // obrigatória (completar o perfil) não podem ser dispensados.
+  dismissedAlertKeys String[]
+
   addresses Address[]
 }
 
@@ -420,4 +425,81 @@ model RecipeItem {
   product   Product @relation(fields: [productId], references: [id])
 
   @@unique([serviceId, productId])
+}
+
+
+//=============================================================== NOTIFICAÇÕES E BANNERS
+// Cor/ênfase do aviso (mesmos status do <Alert> do HeroUI)
+enum NotificationStatus {
+  Default
+  Accent
+  Success
+  Warning
+  Danger
+}
+
+// Categoria do disparo da equipe: decide se respeita a preferência do cliente
+// (User.notificationPrefs). General = sempre entrega.
+enum NotificationCategory {
+  General
+  Promotions
+  News
+}
+
+// Notificação guardada de UM cliente (aparece no sino da Home).
+// Sem relação formal com User de propósito: assim excluir um cliente não
+// esbarra em integridade referencial (as notificações dele ficam órfãs e
+// inofensivas). Dispensar = apagar a linha.
+model Notification {
+  id          String               @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String               @db.ObjectId
+  status      NotificationStatus   @default(Default)
+  category    NotificationCategory @default(General)
+  title       String
+  description String?
+  actionLabel String?
+  actionPath  String? // rota interna do app, ex: /user/scheduling
+  // de onde veio: "appointment-created", "appointment-confirmed"... ou "broadcast" (disparo da equipe)
+  kind        String?
+  broadcastId String?              @db.ObjectId
+  readAt      DateTime?
+  createdAt   DateTime             @default(now())
+
+  @@index([userId, createdAt])
+  @@index([broadcastId])
+}
+
+// Registro de um disparo manual da equipe (a "mensagem original"); cada
+// cliente atingido recebe uma Notification com o mesmo broadcastId.
+model NotificationBroadcast {
+  id             String               @id @default(auto()) @map("_id") @db.ObjectId
+  title          String
+  description    String?
+  status         NotificationStatus   @default(Default)
+  category       NotificationCategory @default(General)
+  actionLabel    String?
+  actionPath     String?
+  audience       String // "all" | "selected"
+  recipientCount Int                  @default(0)
+  createdById    String?              @db.ObjectId
+  createdByName  String?
+  createdAt      DateTime             @default(now())
+}
+
+// Banner do carrossel da Home do cliente, criado pela equipe.
+// (Os banners "inteligentes" - perfil incompleto, cupom de boas-vindas - são
+// calculados pelo servidor e não ficam nesta tabela.)
+model Banner {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  description String?
+  buttonLabel String?
+  path        String? // rota interna do app
+  isActive    Boolean   @default(true)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  order       Int       @default(0) // menor aparece primeiro
+  createdByName String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }

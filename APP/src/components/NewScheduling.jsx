@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button, Spinner, toast } from "@heroui/react";
 import { CalendarCheck2, ChevronLeft, ArrowRight } from "lucide-react";
+import api from "../api/api";
 import { useBookingFlow } from "../hooks/useBookingFlow";
 import { BookingStepOne, BookingStepTwo, BookingStepPayment, BookingStepConfirmation } from "./BookingFlowFields";
 import Steps from "./Steps";
@@ -19,6 +21,34 @@ export default function SchedulingNewPage() {
   const initialServiceId = idFromRoute ?? location.state?.serviceId ?? null;
 
   const flow = useBookingFlow({ initialServiceId });
+
+  // Só agenda quem tem o perfil completo (telefone e data de nascimento).
+  // Confere ao entrar e leva direto para a seção que falta; o back-end também
+  // recusa (403) se alguém tentar burlar essa tela.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get("/users/me")
+      .then((me) => {
+        if (cancelled) return;
+        const missingPhone = !String(me?.phone ?? "").trim();
+        const missingBirthdate = !me?.birthdate;
+        if (!missingPhone && !missingBirthdate) return;
+
+        toast("Complete seu perfil para agendar", {
+          description: "Precisamos do seu telefone e da data de nascimento.",
+          variant: "danger",
+        });
+        navigate(`/user/account?editar=${missingPhone ? "telefone" : "nascimento"}`, { replace: true });
+      })
+      .catch(() => {
+        /* sem rede: segue, o back-end valida na confirmação */
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleContinue = () => {
     const result =

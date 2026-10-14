@@ -180,8 +180,8 @@ const CHART_RANGES = [
 ];
 // período dos cards de cupons e clientes
 const CARD_PERIODS = [
-  { id: "7D", label: "7D", title: "últimos 7 dias" },
-  { id: "30D", label: "30D", title: "últimos 30 dias" },
+  { id: "1W", label: "1W", title: "últimos 7 dias" },
+  { id: "1M", label: "1M", title: "últimos 30 dias" },
   { id: "3M", label: "3M", title: "últimos 90 dias" },
   { id: "1Y", label: "1Y", title: "últimos 12 meses" },
   { id: "ALL", label: "All", title: "todo o período" },
@@ -378,7 +378,7 @@ function ShareBar({ pct }) {
 }
 
 function CouponsCard({ tick }) {
-  const [period, setPeriod] = useState("30D");
+  const [period, setPeriod] = useState("1M");
   const [sort, setSort] = useState("uses");
   const { data, loading, error } = useInsight(`/admin/overview/coupons?period=${period}&sort=${sort}`, tick);
 
@@ -455,7 +455,7 @@ const CUSTOMER_SORTS = [
 ];
 
 function TopCustomersCard({ tick }) {
-  const [period, setPeriod] = useState("30D");
+  const [period, setPeriod] = useState("1M");
   const [sort, setSort] = useState("sessions");
   const { data, loading, error } = useInsight(`/admin/overview/top-customers?period=${period}&sort=${sort}`, tick);
   const items = data?.items ?? [];

@@ -30,7 +30,7 @@ const round2 = (n) => Math.round(n * 100) / 100;
 const CHART_RANGES = ["1D", "1W", "1M", "3M", "1Y", "ALL"];
 
 // janela dos cards de cupom/clientes: { start (ou null = tudo), end = agora }
-const CARD_PERIODS = { "7D": 7, "30D": 30, "3M": 90, "1Y": 365, ALL: null };
+const CARD_PERIODS = { "1W": 7, "1M": 30, "3M": 90, "1Y": 365, ALL: null };
 function periodStart(period, now) {
   const days = CARD_PERIODS[period];
   if (days === null) return null;
@@ -203,7 +203,7 @@ const COUPON_SORTS = {
 
 router.get('/admin/overview/coupons', ...stockAuth, requireMajorAdmin, async (req, res) => {
   try {
-    const period = String(req.query.period || "30D").toUpperCase();
+    const period = String(req.query.period || "1M").toUpperCase();
     const sort = String(req.query.sort || "uses");
     if (!(period in CARD_PERIODS)) return res.status(400).json({ error: "Período inválido." });
     if (!(sort in COUPON_SORTS)) return res.status(400).json({ error: "Ordenação inválida." });
@@ -263,7 +263,7 @@ const CUSTOMER_SORTS = {
 
 router.get('/admin/overview/top-customers', ...stockAuth, requireMajorAdmin, async (req, res) => {
   try {
-    const period = String(req.query.period || "30D").toUpperCase();
+    const period = String(req.query.period || "1M").toUpperCase();
     const sort = String(req.query.sort || "sessions");
     if (!(period in CARD_PERIODS)) return res.status(400).json({ error: "Período inválido." });
     if (!(sort in CUSTOMER_SORTS)) return res.status(400).json({ error: "Ordenação inválida." });

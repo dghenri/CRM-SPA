@@ -2,11 +2,11 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button, Spinner, toast } from "@heroui/react";
 import { CalendarCheck2, ChevronLeft, ArrowRight } from "lucide-react";
 import { useBookingFlow } from "../hooks/useBookingFlow";
-import { BookingStepOne, BookingStepTwo, BookingStepThree } from "./BookingFlowFields";
+import { BookingStepOne, BookingStepTwo, BookingStepPayment, BookingStepConfirmation } from "./BookingFlowFields";
 import Steps from "./Steps";
 import MobileNav from "./MobileNav";
 
-const STEP_LABELS = ["Procedimento", "Data e horário", "Confirmação"];
+const STEP_LABELS = ["Procedimento", "Data e horário", "Pagamento", "Confirmação"];
 
 export default function SchedulingNewPage() {
   const navigate = useNavigate();
@@ -21,7 +21,20 @@ export default function SchedulingNewPage() {
   const flow = useBookingFlow({ initialServiceId });
 
   const handleContinue = () => {
-    const result = flow.step === 1 ? flow.goToDateTime() : flow.goToConfirmation();
+    const result =
+      flow.step === 1
+        ? flow.goToDateTime()
+        : flow.step === 2
+        ? flow.goToPayment()
+        : flow.goToConfirmation();
+    if (!result.ok) {
+      toast(result.message, { variant: "danger" });
+    }
+  };
+
+  // clique na numeração do Steps: voltar sempre pode; avançar só com as etapas anteriores prontas
+  const handleStepClick = (stepNumber) => {
+    const result = flow.goToStep(stepNumber);
     if (!result.ok) {
       toast(result.message, { variant: "danger" });
     }
@@ -75,7 +88,12 @@ export default function SchedulingNewPage() {
       <MobileNav onBack={handleBack} title="Agendamento" />
 
       <main className="flex-1 overflow-y-auto pt-20 pb-50">
-        <Steps steps={STEP_LABELS} currentStep={flow.step} />
+        <Steps
+          steps={STEP_LABELS}
+          currentStep={flow.step}
+          canGoToStep={flow.canGoToStep}
+          onStepClick={handleStepClick}
+        />
 
         <div className="px-5">
           {flow.isLoadingServices ? (
@@ -87,16 +105,18 @@ export default function SchedulingNewPage() {
             <BookingStepOne flow={flow} />
           ) : flow.step === 2 ? (
             <BookingStepTwo flow={flow} />
+          ) : flow.step === 3 ? (
+            <BookingStepPayment flow={flow} />
           ) : (
             <>
-              <BookingStepThree flow={flow} />
+              <BookingStepConfirmation flow={flow} />
               <button
                 type="button"
                 onClick={flow.goBack}
                 className="mt-4 flex items-center gap-1 text-sm font-semibold text-accent"
               >
                 <ChevronLeft size={16} />
-                Alterar data ou horário
+                Alterar pagamento ou cupom
               </button>
             </>
           )}
@@ -118,6 +138,16 @@ export default function SchedulingNewPage() {
           <Button
             variant="primary"
             isDisabled={!flow.selectedDate || !flow.selectedSlot}
+            className="h-15 w-full justify-center rounded-full text-lg font-semibold"
+            onPress={handleContinue}
+          >
+            Continuar
+            <ArrowRight />
+          </Button>
+        ) : flow.step === 3 ? (
+          <Button
+            variant="primary"
+            isDisabled={!flow.paymentMethod}
             className="h-15 w-full justify-center rounded-full text-lg font-semibold"
             onPress={handleContinue}
           >

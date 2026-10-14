@@ -1,6 +1,7 @@
-import { Button, Calendar, Chip, Spinner, Separator } from "@heroui/react";
+import { Button, Calendar, Chip, Label, Radio, RadioGroup, Spinner, Separator } from "@heroui/react";
 import { Clock, Banknote, OctagonAlert, Ban, KeyRound, Hash, Ticket, X } from "lucide-react";
 import ServiceSelectField from "./ServiceSelectField";
+import { PAYMENT_METHODS, getPaymentMethod } from "./paymentMethods";
 
 function formatPrice(value) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -61,13 +62,6 @@ export function BookingStepOne({ flow }) {
     selectedServiceId,
     selectedService,
     handleSelectService,
-    couponCode,
-    setCouponCode,
-    appliedCoupon,
-    couponError,
-    isApplyingCoupon,
-    applyCoupon,
-    removeCoupon,
   } = flow;
 
   return (
@@ -114,61 +108,6 @@ export function BookingStepOne({ flow }) {
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {selectedService && (
-        <div className="flex flex-col gap-2">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-default-500">
-            Cupom de desconto
-          </h3>
-
-          {appliedCoupon ? (
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-dashed border-accent bg-accent/5 p-3">
-              <div className="flex items-center gap-2 min-w-0">
-                <Ticket size={16} className="shrink-0 text-accent" />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-bold text-accent">{appliedCoupon.coupon.code}</p>
-                  <p className="text-xs text-muted">
-                    -{formatPrice(appliedCoupon.discountAmount)} de desconto aplicado
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={removeCoupon}
-                className="flex shrink-0 items-center gap-1 text-xs font-semibold text-danger"
-              >
-                <X size={14} />
-                Remover
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={couponCode}
-                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                placeholder="Digite o código do cupom"
-                className="h-12 flex-1 rounded-xl border border-default bg-default px-3 text-sm font-semibold uppercase tracking-wide outline-none placeholder:font-normal placeholder:normal-case focus:border-accent"
-              />
-              <Button
-                variant="outline"
-                isDisabled={!couponCode.trim() || isApplyingCoupon}
-                onPress={applyCoupon}
-                className="h-12 shrink-0 rounded-xl px-4 font-semibold"
-              >
-                {isApplyingCoupon ? <Spinner size="sm" color="current" /> : "Aplicar"}
-              </Button>
-            </div>
-          )}
-
-          {couponError && (
-            <div className="flex items-center gap-2 text-danger">
-              <OctagonAlert size={14} />
-              <p className="text-xs font-medium">{couponError}</p>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -303,15 +242,142 @@ export function BookingStepTwo({ flow }) {
   );
 }
 
-/** Passo 3: resumo e confirmação. */
-export function BookingStepThree({ flow }) {
-  const { selectedService, formattedDate, selectedSlot, confirmedAppointment, bookingCode, appliedCoupon } = flow;
+/** Passo 3: forma de pagamento e cupom de desconto. */
+export function BookingStepPayment({ flow }) {
+  const {
+    selectedService,
+    paymentMethod,
+    setPaymentMethod,
+    couponCode,
+    setCouponCode,
+    appliedCoupon,
+    couponError,
+    isApplyingCoupon,
+    applyCoupon,
+    removeCoupon,
+  } = flow;
+
+  if (!selectedService) return null;
+
+  const discountAmount = appliedCoupon?.discountAmount || 0;
+  const total = Math.max(selectedService.price - discountAmount, 0);
+
+  return (
+    <div className="flex flex-col gap-6">
+      <RadioGroup
+        name="paymentMethod"
+        value={paymentMethod}
+        onChange={setPaymentMethod}
+        className="mt-2 gap-2"
+      >
+        <Label className="text-sm font-semibold uppercase tracking-wide text-default-500">
+          Forma de pagamento
+        </Label>
+        {PAYMENT_METHODS.map(({ id, label, description, icon: Icon }) => (
+          <Radio key={id} value={id}>
+            <Radio.Content
+              className={`flex w-full items-center gap-3 rounded-2xl border p-3 transition-colors ${
+                paymentMethod === id ? "border-accent bg-accent/5" : "border-default bg-default"
+              }`}
+            >
+              <Radio.Control>
+                <Radio.Indicator />
+              </Radio.Control>
+              <Icon size={18} className="shrink-0 text-muted" />
+              <div className="min-w-0 flex-1">
+                <Label className="text-sm font-semibold">{label}</Label>
+                <p className="text-xs text-muted">{description}</p>
+              </div>
+            </Radio.Content>
+          </Radio>
+        ))}
+      </RadioGroup>
+
+      <div className="flex flex-col gap-2">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-default-500">
+          Cupom de desconto
+        </h3>
+
+        {appliedCoupon ? (
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-dashed border-accent bg-accent/5 p-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Ticket size={16} className="shrink-0 text-accent" />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold text-accent">{appliedCoupon.coupon.code}</p>
+                <p className="text-xs text-muted">
+                  -{formatPrice(appliedCoupon.discountAmount)} de desconto aplicado
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={removeCoupon}
+              className="flex shrink-0 items-center gap-1 text-xs font-semibold text-danger"
+            >
+              <X size={14} />
+              Remover
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={couponCode}
+              onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+              placeholder="Digite o código do cupom"
+              className="h-12 flex-1 rounded-xl border border-default bg-default px-3 text-base font-semibold uppercase tracking-wide outline-none placeholder:font-normal placeholder:normal-case focus:border-accent"
+            />
+            <Button
+              variant="outline"
+              isDisabled={!couponCode.trim() || isApplyingCoupon}
+              onPress={applyCoupon}
+              className="h-12 shrink-0 rounded-xl px-4 font-semibold"
+            >
+              {isApplyingCoupon ? <Spinner size="sm" color="current" /> : "Aplicar"}
+            </Button>
+          </div>
+        )}
+
+        {couponError && (
+          <div className="flex items-center gap-2 text-danger">
+            <OctagonAlert size={14} />
+            <p className="text-xs font-medium">{couponError}</p>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between rounded-2xl bg-default p-3">
+        <span className="text-sm text-muted">Total a pagar</span>
+        <div className="flex items-baseline gap-2">
+          {discountAmount > 0 && (
+            <span className="text-xs text-muted line-through">{formatPrice(selectedService.price)}</span>
+          )}
+          <span className="text-base font-bold text-foreground">{formatPrice(total)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Passo 4: resumo e confirmação. */
+export function BookingStepConfirmation({ flow }) {
+  const {
+    selectedService,
+    formattedDate,
+    selectedSlot,
+    confirmedAppointment,
+    bookingCode,
+    appliedCoupon,
+    paymentMethod,
+  } = flow;
 
   if (!selectedService) return null;
 
   const displayCode = confirmedAppointment?.code ?? bookingCode;
   const discountAmount = appliedCoupon?.discountAmount || 0;
   const total = Math.max(selectedService.price - discountAmount, 0);
+  const selectedPayment = getPaymentMethod(confirmedAppointment?.paymentMethod ?? paymentMethod);
+  const PaymentIcon = selectedPayment?.icon;
 
   return (
     <div className="flex flex-col gap-3">
@@ -364,6 +430,14 @@ export function BookingStepThree({ flow }) {
               </div>
             </>
           )}
+          <Separator />
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted">Pagamento</span>
+            <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              {PaymentIcon && <PaymentIcon size={14} />}
+              {selectedPayment?.label ?? "Não informado"}
+            </span>
+          </div>
           <Separator className="h-0 border-t-2 border-dotted border-default-400 bg-transparent" />
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted">Valor</span>

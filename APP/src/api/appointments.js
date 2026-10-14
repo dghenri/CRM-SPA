@@ -36,11 +36,14 @@ export async function fetchBusyWindows(serviceId, from, to) {
  * agendamento existir de fato - o back tenta usar esse valor e só sorteia
  * outro se, por coincidência, ele já estiver em uso.
  *
+ * `paymentMethod`: "Pix" | "CreditCard" | "DebitCard" | "Cash" - obrigatório
+ * pro cliente (o back responde 400 sem ele); alimenta a página de receita.
+ *
  * Nasce com status "Scheduled" (default do schema.prisma - o POST
  * /appointments do server.js nunca sobrescreve status na criação). Só vira
  * "Confirmed" depois que o cliente paga o sinal e a equipe confirma manualmente.
  */
-export async function createAppointment({ serviceId, title, date, endDate, notes, code }) {
+export async function createAppointment({ serviceId, title, date, endDate, notes, code, paymentMethod }) {
   return api.post("/appointments", {
     serviceId,
     title,
@@ -48,5 +51,6 @@ export async function createAppointment({ serviceId, title, date, endDate, notes
     endDate: new Date(endDate).toISOString(),
     notes,
     code,
+    paymentMethod,
   });
 }

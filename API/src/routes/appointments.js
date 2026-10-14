@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { broadcastAppointmentsChanged, broadcastStockChanged } from '../lib/realtime.js';
+import { isPaymentMethod } from '../lib/payments.js';
 import { toPublicUser } from '../lib/serializers.js';
 import { authenticateToken, requireStaff, requireUser } from '../middleware/auth.js';
 import { revertAppointmentConsumption, syncAppointmentStock } from '../services/recipes.js';
@@ -50,7 +51,7 @@ async function createAppointmentWithUniqueCode(data, preferredCode, options, att
 //   ex: evento avulso na agenda), com título e cor personalizados.
 router.post('/appointments', authenticateToken, async (req, res) => {
   try {
-    const { title, date, endDate, color, notes, serviceId, customerId, professionalId, code } = req.body;
+    const { title, date, endDate, color, notes, serviceId, customerId, professionalId, code, paymentMethod } = req.body;
 
     if (!date || !endDate) {
       return res.status(400).json({ error: "Informe a data de início e término." });
@@ -64,12 +65,21 @@ router.post('/appointments', authenticateToken, async (req, res) => {
       }
     }
 
+    // forma de pagamento: obrigatória pro cliente, opcional pra equipe (evento avulso)
+    if (paymentMethod != null && paymentMethod !== "" && !isPaymentMethod(paymentMethod)) {
+      return res.status(400).json({ error: "Forma de pagamento inválida." });
+    }
+    if (req.user.type === "user" && !paymentMethod) {
+      return res.status(400).json({ error: "Escolha a forma de pagamento." });
+    }
+
     const data = {
       title: (title?.trim() || service?.title || "Sem título"),
       date: new Date(date),
       endDate: new Date(endDate),
       color: color || "blue",
       notes,
+      paymentMethod: paymentMethod || null,
     };
 
     if (serviceId) data.service = { connect: { id: serviceId } };
@@ -107,10 +117,13 @@ const APPOINTMENT_INCLUDE = { service: true, customer: true, professional: { sel
 //------------------------------------------------------------- PUT ROUTE (equipe edita um agendamento completo)
 router.put('/appointments/:id', authenticateToken, requireStaff, async (req, res) => {
   try {
-    const { title, date, endDate, color, notes, status, serviceId, customerId, professionalId } = req.body;
+    const { title, date, endDate, color, notes, status, serviceId, customerId, professionalId, paymentMethod } = req.body;
 
     if (status !== undefined && !APPOINTMENT_STATUSES.includes(status)) {
       return res.status(400).json({ error: "Status inválido." });
+    }
+    if (paymentMethod != null && paymentMethod !== "" && !isPaymentMethod(paymentMethod)) {
+      return res.status(400).json({ error: "Forma de pagamento inválida." });
     }
 
     const data = {};
@@ -120,6 +133,8 @@ router.put('/appointments/:id', authenticateToken, requireStaff, async (req, res
     if (color !== undefined) data.color = color;
     if (notes !== undefined) data.notes = notes;
     if (status !== undefined) data.status = status;
+    // valor vazio ("" ou null) limpa a forma de pagamento
+    if (paymentMethod !== undefined) data.paymentMethod = paymentMethod || null;
 
     // connect/disconnect explícito: valor vazio ("" ou null) desvincula
     if (serviceId !== undefined) {

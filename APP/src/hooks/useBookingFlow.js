@@ -14,6 +14,8 @@ function minutesToLabel(minutes) {
   return `${h}:${m}`;
 }
 
+export const TOTAL_STEPS = 4; // procedimento > data e horário > pagamento > confirmação
+
 const CODE_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 /** Gera um código de 6 letras maiúsculas (ex: "QQJZTF") pra exibir na tela de confirmação. */
@@ -89,6 +91,7 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmedAppointment, setConfirmedAppointment] = useState(null); // guarda o agendamento criado (com o código confirmado pelo back-end)
   const [bookingCode, setBookingCode] = useState(null); // código de 6 letras já mostrado no resumo, antes de confirmar
+  const [paymentMethod, setPaymentMethod] = useState(null); // "Pix" | "CreditCard" | "DebitCard" | "Cash"
 
   // Cupom: primeiro é validado (/coupons/validate, não consome nada) contra o
   // serviço escolhido; só é de fato consumido (/coupons/apply) quando o
@@ -233,15 +236,55 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
     return { ok: true };
   }
 
-  /** Passo 2 -> 3. Retorna { ok: false, message } se faltar algo, ou avança pra confirmação. */
+  /** Passo 2 -> 3 (pagamento). Retorna { ok: false, message } se faltar a data ou o horário. */
+  function goToPayment() {
+    if (!selectedService || !selectedDate || !selectedSlot) {
+      return { ok: false, message: "Selecione a data e o horário." };
+    }
+    setStep(3);
+    return { ok: true };
+  }
+
+  /** Passo 3 -> 4 (confirmação). Retorna { ok: false, message } se faltar a forma de pagamento. */
   function goToConfirmation() {
     if (!selectedService || !selectedDate || !selectedSlot) {
       return { ok: false, message: "Selecione a data e o horário." };
     }
+    if (!paymentMethod) {
+      return { ok: false, message: "Escolha a forma de pagamento." };
+    }
     // gera o código só na primeira vez que chega na confirmação - se o
     // cliente voltar e avançar de novo, mantém o mesmo código
     setBookingCode((current) => current ?? generateBookingCode());
-    setStep(3);
+    setStep(4);
+    return { ok: true };
+  }
+
+  /**
+   * O que falta preencher pra poder abrir uma etapa (null = pode abrir).
+   * Voltar é sempre permitido; avançar exige as etapas anteriores prontas.
+   */
+  function getStepBlocker(target) {
+    if (confirmedAppointment) return "O agendamento já foi confirmado.";
+    if (target >= 2 && !selectedService) return "Selecione o procedimento.";
+    if (target >= 3 && (!selectedDate || !selectedSlot)) return "Selecione a data e o horário.";
+    if (target >= 4 && !paymentMethod) return "Escolha a forma de pagamento.";
+    return null;
+  }
+
+  /** Usado pelo Stepper pra desabilitar etapas ainda inacessíveis. */
+  function canGoToStep(target) {
+    return target >= 1 && target <= TOTAL_STEPS && getStepBlocker(target) === null;
+  }
+
+  /** Navega direto pra uma etapa (clique na numeração). Retorna { ok } ou { ok: false, message }. */
+  function goToStep(target) {
+    if (target === step) return { ok: true };
+    if (target < 1 || target > TOTAL_STEPS) return { ok: false, message: "Etapa inválida." };
+    const message = getStepBlocker(target);
+    if (message) return { ok: false, message };
+    if (target === 4) return goToConfirmation();
+    setStep(target);
     return { ok: true };
   }
 
@@ -259,6 +302,9 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
     if (!selectedService || !selectedDate || !selectedSlot) {
       throw new Error("Selecione o procedimento, a data e o horário.");
     }
+    if (!paymentMethod) {
+      throw new Error("Escolha a forma de pagamento.");
+    }
 
     setIsSubmitting(true);
     try {
@@ -275,7 +321,7 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
       if (hasConflict) {
         setBusyWindows(freshBusy);
         setSelectedSlot(null);
-        setStep(2);
+        setStep(2); // horário foi tomado: volta pra escolher outro
         return { ok: false, conflict: true };
       }
 
@@ -285,6 +331,7 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
         date: selectedSlot.start,
         endDate: selectedSlot.end,
         code: bookingCode,
+        paymentMethod,
       });
 
       // o back-end tenta usar o `code` enviado; se por acaso já estiver em
@@ -337,6 +384,8 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
     isSubmitting,
     confirmedAppointment,
     bookingCode,
+    paymentMethod,
+    setPaymentMethod,
     couponCode,
     setCouponCode,
     appliedCoupon,
@@ -345,7 +394,11 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
     applyCoupon,
     removeCoupon,
     goToDateTime,
+    goToPayment,
     goToConfirmation,
+    goToStep,
+    canGoToStep,
+    isConfirmed: Boolean(confirmedAppointment),
     goBack,
     confirmBooking,
   };

@@ -48,6 +48,14 @@ enum AppointmentStatus {
   NoShow
 }
 
+// forma de pagamento escolhida no agendamento (usada na página de receita/faturamento)
+enum PaymentMethod {
+  Pix
+  CreditCard
+  DebitCard
+  Cash
+}
+
 model Staff {
   id        String      @id @default(auto()) @map("_id") @db.ObjectId
   email     String      @unique
@@ -217,6 +225,8 @@ model Appointment {
   color     String            @default("blue")
   status    AppointmentStatus @default(Scheduled)
   notes     String?
+  // por onde o dinheiro entra (nulo = agendamentos antigos / eventos avulsos)
+  paymentMethod PaymentMethod?
   // quando o profissional clicou em "Iniciar atendimento" (nulo = ainda não iniciado)
   startedAt DateTime?
   createdAt DateTime          @default(now())

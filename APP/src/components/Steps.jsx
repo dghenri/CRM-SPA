@@ -6,21 +6,36 @@ import { Check } from "lucide-react";
  * então este componente segue a linguagem visual do design system
  * (cores accent/success, Chip-like, tipografia consistente).
  *
- * @param {string[]} steps - rótulos de cada etapa, ex: ["Data e horário", "Confirmação"]
+ * @param {string[]} steps - rótulos de cada etapa, ex: ["Procedimento", "Data e horário", "Pagamento", "Confirmação"]
  * @param {number} currentStep - etapa atual, começando em 1
+ * @param {(stepNumber: number) => void} [onStepClick] - se informado, a numeração vira clicável
+ * @param {(stepNumber: number) => boolean} [canGoToStep] - define quais etapas podem ser abertas (as demais ficam desabilitadas)
  */
-export default function Steps({ steps, currentStep }) {
+export default function Steps({ steps, currentStep, onStepClick, canGoToStep }) {
   return (
-    <div className="flex items-center px-5 py-4">
+    <div className="flex items-start px-5 py-4">
       {steps.map((label, index) => {
         const stepNumber = index + 1;
         const isCompleted = stepNumber < currentStep;
         const isActive = stepNumber === currentStep;
         const isLast = stepNumber === steps.length;
+        const isInteractive = Boolean(onStepClick);
+        const isReachable = !canGoToStep || canGoToStep(stepNumber);
 
         return (
-          <div key={label} className={`flex items-center ${isLast ? "" : "flex-1"}`}>
-            <div className="flex flex-col items-center gap-1.5">
+          // células de largura igual: o centro do círculo fica sempre em 50% da célula,
+          // então a linha pode ser posicionada com folga fixa, não importa o tamanho do rótulo
+          <div key={label} className="relative flex min-w-0 flex-1 justify-center">
+            <button
+              type="button"
+              disabled={!isInteractive || !isReachable || isActive}
+              onClick={() => onStepClick?.(stepNumber)}
+              aria-current={isActive ? "step" : undefined}
+              aria-label={`Etapa ${stepNumber}: ${label}`}
+              className={`flex max-w-full flex-col items-center gap-1.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                isInteractive && isReachable && !isActive ? "cursor-pointer" : "cursor-default"
+              } ${isInteractive && !isReachable && !isCompleted ? "opacity-50" : ""}`}
+            >
               <div
                 className={`flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-colors ${
                   isCompleted
@@ -33,17 +48,20 @@ export default function Steps({ steps, currentStep }) {
                 {isCompleted ? <Check size={16} /> : stepNumber}
               </div>
               <span
-                className={`whitespace-nowrap text-xs font-medium ${
+                className={`text-center text-xs font-medium leading-tight ${
                   isActive || isCompleted ? "text-foreground" : "text-muted"
                 }`}
               >
                 {label}
               </span>
-            </div>
+            </button>
 
             {!isLast && (
               <div
-                className={`-mx-6 h-0.5 flex-1 rounded-full transition-colors mb-6 ${
+                aria-hidden="true"
+                // começa a 6px do círculo atual (16px = raio) e termina a 6px do próximo
+                style={{ left: "calc(50% + 22px)", width: "calc(100% - 44px)" }}
+                className={`absolute top-[15px] h-0.5 rounded-full transition-colors ${
                   isCompleted ? "bg-success" : "bg-default"
                 }`}
               />

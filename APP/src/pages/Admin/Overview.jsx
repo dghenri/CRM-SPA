@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Button, Card, Chip, Label, Modal, TextArea, TextField, toast } from "@heroui/react";
+import { useCallback, useEffect, useState } from "react";
+import { Alert, Avatar, Button, Card, Chip, Label, Modal, TextArea, TextField, toast } from "@heroui/react";
 import {
   AlertTriangle,
   CalendarCheck,
@@ -8,6 +8,8 @@ import {
   PackageCheck,
   Receipt,
   Repeat,
+  Ticket,
+  Trophy,
   TrendingDown,
   TrendingUp,
   UserPlus,
@@ -58,6 +60,8 @@ const brlCompact = new Intl.NumberFormat("pt-BR", {
 const fmtNum = (n) => Number(n ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 const fmtQty = (n, unit) => `${fmtNum(n)} ${UNIT_LABEL[unit] ?? ""}`.trim();
 const fmtPercent = (n) => `${Number(n ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+const initials = (name = "") =>
+  name.trim().split(/\s+/).slice(0, 2).map((n) => n[0]?.toUpperCase()).join("");
 const fmtDateTime = (d) => (d ? new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—");
 
 function describeItem(type, item) {
@@ -138,16 +142,83 @@ const METRICS = {
   },
   sessions: {
     label: "Sessões",
-    full: (v) => `${fmtNum(v)} sessões`,
+    full: (v) => `${fmtNum(v)} ${Number(v) === 1 ? "sessão" : "sessões"}`,
     axis: (v) => fmtNum(Math.round(v * 10) / 10),
   },
 };
 
-function BarChart({ series, metric }) {
+/* ------------------------------ filtros de período ----------------------- */
+// Filtro em texto (1D 1W 1M ...): o selecionado fica azul. Também usado nos cards.
+function RangeTabs({ options, value, onChange, label }) {
+  return (
+    <div role="group" aria-label={label} className="flex flex-wrap items-center gap-x-4 gap-y-1">
+      {options.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          aria-pressed={value === o.id}
+          onClick={() => onChange(o.id)}
+          className={`rounded text-sm font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-focus ${
+            value === o.id ? "text-accent" : "text-muted hover:text-foreground"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// período do gráfico (o back-end escolhe a granularidade: hora, dia, semana ou mês)
+const CHART_RANGES = [
+  { id: "1D", label: "1D", title: "hoje, por hora" },
+  { id: "1W", label: "1W", title: "últimos 7 dias" },
+  { id: "1M", label: "1M", title: "últimos 30 dias" },
+  { id: "3M", label: "3M", title: "últimas 13 semanas" },
+  { id: "1Y", label: "1Y", title: "últimos 12 meses" },
+  { id: "ALL", label: "All", title: "todo o período" },
+];
+// período dos cards de cupons e clientes
+const CARD_PERIODS = [
+  { id: "7D", label: "7D", title: "últimos 7 dias" },
+  { id: "30D", label: "30D", title: "últimos 30 dias" },
+  { id: "3M", label: "3M", title: "últimos 90 dias" },
+  { id: "1Y", label: "1Y", title: "últimos 12 meses" },
+  { id: "ALL", label: "All", title: "todo o período" },
+];
+
+// busca com cancelamento; `tick` muda quando o tempo real avisa que algo mudou.
+// Mantém o dado anterior na tela enquanto recarrega (sem piscar).
+function useInsight(path, tick) {
+  const [state, setState] = useState({ data: null, loading: true, error: "" });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState((prev) => ({ ...prev, loading: true }));
+    api(path)
+      .then((data) => !cancelled && setState({ data, loading: false, error: "" }))
+      .catch((e) => !cancelled && setState((prev) => ({ ...prev, loading: false, error: e.message })));
+    return () => {
+      cancelled = true;
+    };
+  }, [path, tick]);
+
+  return state;
+}
+
+function CardError({ message }) {
+  return <p className="py-6 text-center text-sm font-semibold text-danger">{message}</p>;
+}
+
+function BarChart({ series, metric, title }) {
   const [active, setActive] = useState(null);
   const m = METRICS[metric];
   const top = niceCeil(Math.max(0, ...series.map((s) => s[metric])));
   const ticks = [1, 0.75, 0.5, 0.25, 0];
+
+  // com muitas barras (30 dias, 13 semanas...) só alguns rótulos aparecem, sempre ancorados na última barra
+  const labelStep = Math.max(1, Math.ceil(series.length / 12));
+  const dense = series.length > 14;
 
   return (
     <div className="flex flex-col gap-2">
@@ -162,7 +233,7 @@ function BarChart({ series, metric }) {
         </div>
 
         {/* área do gráfico */}
-        <div className="relative h-56 flex-1" role="group" aria-label={`${m.label} por mês`}>
+        <div className="relative h-56 flex-1" role="group" aria-label={`${m.label}, ${title}`}>
           {ticks.map((t) => (
             <div
               key={t}
@@ -172,7 +243,7 @@ function BarChart({ series, metric }) {
             />
           ))}
 
-          <div className="absolute inset-0 flex items-end gap-1 sm:gap-2">
+          <div className={`absolute inset-0 flex items-end ${dense ? "gap-0.5" : "gap-1 sm:gap-2"}`}>
             {series.map((s, i) => {
               const value = s[metric];
               const isCurrent = i === series.length - 1;
@@ -181,16 +252,20 @@ function BarChart({ series, metric }) {
                 <button
                   key={s.key}
                   type="button"
-                  className="group relative flex h-full flex-1 items-end justify-center outline-none"
-                  aria-label={`${s.label} de ${s.year}: ${m.full(value)}`}
+                  className="group relative flex h-full min-w-0 flex-1 items-end justify-center outline-none"
+                  aria-label={`${s.tooltip}: ${m.full(value)}`}
                   onMouseEnter={() => setActive(i)}
                   onMouseLeave={() => setActive(null)}
                   onFocus={() => setActive(i)}
                   onBlur={() => setActive(null)}
                 >
                   {active === i && (
-                    <span className="pointer-events-none absolute -top-1 z-10 -translate-y-full whitespace-nowrap rounded-lg bg-foreground px-2 py-1 text-xs font-medium text-background shadow-md">
-                      {s.label}/{String(s.year).slice(2)} · {m.full(value)}
+                    <span
+                      className={`pointer-events-none absolute -top-1 z-10 -translate-y-full whitespace-nowrap rounded-lg bg-foreground px-2 py-1 text-xs font-medium text-background shadow-md ${
+                        i < series.length / 4 ? "left-0" : i > (series.length * 3) / 4 ? "right-0" : ""
+                      }`}
+                    >
+                      {s.tooltip} · {m.full(value)}
                     </span>
                   )}
                   <span
@@ -209,10 +284,12 @@ function BarChart({ series, metric }) {
       {/* eixo X */}
       <div className="flex gap-3" aria-hidden="true">
         <div className="w-14 shrink-0" />
-        <div className="flex flex-1 gap-1 sm:gap-2">
-          {series.map((s) => (
-            <span key={s.key} className="flex-1 text-center text-xs capitalize text-muted">
-              {s.label}
+        <div className={`flex flex-1 ${dense ? "gap-0.5" : "gap-1 sm:gap-2"}`}>
+          {series.map((s, i) => (
+            <span key={s.key} className="relative h-4 min-w-0 flex-1 text-xs capitalize text-muted">
+              {(series.length - 1 - i) % labelStep === 0 && (
+                <span className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap">{s.label}</span>
+              )}
             </span>
           ))}
         </div>
@@ -220,19 +297,19 @@ function BarChart({ series, metric }) {
 
       {/* versão em tabela para leitores de tela */}
       <table className="sr-only">
-        <caption>{m.label} por mês</caption>
+        <caption>
+          {m.label}, {title}
+        </caption>
         <thead>
           <tr>
-            <th scope="col">Mês</th>
+            <th scope="col">Período</th>
             <th scope="col">{m.label}</th>
           </tr>
         </thead>
         <tbody>
           {series.map((s) => (
             <tr key={s.key}>
-              <th scope="row">
-                {s.label}/{s.year}
-              </th>
+              <th scope="row">{s.tooltip}</th>
               <td>{m.full(s[metric])}</td>
             </tr>
           ))}
@@ -242,18 +319,25 @@ function BarChart({ series, metric }) {
   );
 }
 
-function ChartCard({ series }) {
+function ChartCard({ tick }) {
   const [metric, setMetric] = useState("revenue");
-  const [range, setRange] = useState(12);
-  const visible = useMemo(() => series.slice(-range), [series, range]);
+  const [range, setRange] = useState("1M");
+  const { data, loading, error } = useInsight(`/admin/overview/chart?range=${range}`, tick);
 
   const pill = (active) => (active ? "primary" : "tertiary");
+  const rangeTitle = CHART_RANGES.find((r) => r.id === range).title;
+  const total = data ? METRICS[metric].full(data.totals[metric]) : null;
 
   return (
     <Card className="rounded-2xl bg-surface-secondary">
-      <Card.Header className="flex-row flex-wrap items-center justify-between gap-3">
-        <Card.Title className="text-lg font-semibold">{METRICS[metric].label} por mês</Card.Title>
-        <div className="flex flex-wrap gap-2">
+      <Card.Header className="flex-row flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <Card.Title className="text-lg font-semibold">{METRICS[metric].label}</Card.Title>
+          <p className="text-xs font-semibold text-muted first-letter:uppercase">{rangeTitle}</p>
+          {total && <p className="text-2xl font-semibold tracking-tight">{total}</p>}
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          <RangeTabs label="Período do gráfico" options={CHART_RANGES} value={range} onChange={setRange} />
           <div className="flex gap-1" role="group" aria-label="Métrica">
             {Object.entries(METRICS).map(([key, v]) => (
               <Button key={key} size="sm" className="rounded-full" variant={pill(metric === key)} onPress={() => setMetric(key)}>
@@ -261,17 +345,185 @@ function ChartCard({ series }) {
               </Button>
             ))}
           </div>
-          <div className="flex gap-1" role="group" aria-label="Período">
-            {[6, 12].map((n) => (
-              <Button key={n} size="sm" className="rounded-full" variant={pill(range === n)} onPress={() => setRange(n)}>
-                {n} meses
+        </div>
+      </Card.Header>
+      <Card.Content>
+        {error && !data ? (
+          <CardError message={error} />
+        ) : data ? (
+          <div className={`transition-opacity ${loading ? "opacity-50" : ""}`} aria-busy={loading}>
+            <BarChart series={data.series} metric={metric} title={rangeTitle} />
+          </div>
+        ) : (
+          <p className="py-24 text-center text-sm font-medium text-muted">Carregando gráfico</p>
+        )}
+      </Card.Content>
+    </Card>
+  );
+}
+
+/* ------------------------------ card: cupons ----------------------------- */
+const COUPON_SORTS = [
+  { id: "uses", label: "Mais usados" },
+  { id: "discount", label: "Maior desconto" },
+  { id: "average", label: "Desconto médio" },
+];
+
+function ShareBar({ pct }) {
+  return (
+    <div className="h-1.5 overflow-hidden rounded-full bg-default" aria-hidden="true">
+      <div className="h-full rounded-full bg-accent" style={{ width: `${Math.max(pct, 3)}%` }} />
+    </div>
+  );
+}
+
+function CouponsCard({ tick }) {
+  const [period, setPeriod] = useState("30D");
+  const [sort, setSort] = useState("uses");
+  const { data, loading, error } = useInsight(`/admin/overview/coupons?period=${period}&sort=${sort}`, tick);
+
+  const items = data?.items ?? [];
+  // a barra e o destaque seguem o critério escolhido
+  const metricOf = (c) => (sort === "uses" ? c.uses : sort === "discount" ? c.discountTotal : c.averageDiscount);
+  const maxMetric = Math.max(0, ...items.map(metricOf));
+
+  return (
+    <Card className="rounded-2xl bg-surface-secondary">
+      <Card.Header className="flex-col items-stretch gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <Card.Title className="text-lg font-semibold">Cupons</Card.Title>
+          <Ticket size={18} className="text-muted" aria-hidden="true" />
+        </div>
+        <RangeTabs label="Período dos cupons" options={CARD_PERIODS} value={period} onChange={setPeriod} />
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Ordenar cupons">
+          {COUPON_SORTS.map((o) => (
+            <Button key={o.id} size="sm" className="rounded-full" variant={sort === o.id ? "primary" : "tertiary"} onPress={() => setSort(o.id)}>
+              {o.label}
+            </Button>
+          ))}
+        </div>
+        {data && (
+          <p className="text-xs font-semibold text-muted">
+            {fmtNum(data.totals.uses)} {data.totals.uses === 1 ? "uso" : "usos"} · {brl.format(data.totals.discountTotal)} em descontos
+          </p>
+        )}
+      </Card.Header>
+      <Card.Content>
+        {error && !data ? (
+          <CardError message={error} />
+        ) : !data ? (
+          <p className="py-6 text-center text-sm font-medium text-muted">Carregando cupons</p>
+        ) : items.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-6 text-center">
+            <Ticket className="text-muted" />
+            <span className="text-sm font-semibold text-muted">Nenhum cupom usado neste período</span>
+          </div>
+        ) : (
+          <ul className={`flex flex-col gap-4 transition-opacity ${loading ? "opacity-50" : ""}`}>
+            {items.map((c) => (
+              <li key={c.couponId} className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate font-serif text-sm font-bold">{c.code}</span>
+                    <Chip size="sm" variant="soft" color={c.archived ? "default" : "accent"}>
+                      {c.discountType === "Percentage" ? `${fmtNum(c.discountValue)}%` : brl.format(c.discountValue)}
+                    </Chip>
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold">
+                    {sort === "uses" && `${fmtNum(c.uses)} ${c.uses === 1 ? "uso" : "usos"}`}
+                    {sort === "discount" && brl.format(c.discountTotal)}
+                    {sort === "average" && brl.format(c.averageDiscount)}
+                  </span>
+                </div>
+                <ShareBar pct={maxMetric > 0 ? (metricOf(c) / maxMetric) * 100 : 0} />
+                <p className="text-xs text-muted">
+                  {fmtNum(c.uses)} {c.uses === 1 ? "uso" : "usos"} · {brl.format(c.discountTotal)} no total · média {brl.format(c.averageDiscount)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card.Content>
+    </Card>
+  );
+}
+
+/* ------------------------------ card: clientes que mais agendaram -------- */
+const CUSTOMER_SORTS = [
+  { id: "sessions", label: "Mais sessões" },
+  { id: "spent", label: "Maior gasto" },
+];
+
+function TopCustomersCard({ tick }) {
+  const [period, setPeriod] = useState("30D");
+  const [sort, setSort] = useState("sessions");
+  const { data, loading, error } = useInsight(`/admin/overview/top-customers?period=${period}&sort=${sort}`, tick);
+  const items = data?.items ?? [];
+
+  return (
+    <Card className="rounded-2xl bg-surface-secondary">
+      <Card.Header className="flex-row flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <Card.Title className="text-lg font-semibold">Clientes que mais agendaram</Card.Title>
+          <p className="text-xs font-semibold text-muted">Sessões no período, exceto canceladas</p>
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          <RangeTabs label="Período dos clientes" options={CARD_PERIODS} value={period} onChange={setPeriod} />
+          <div className="flex gap-1" role="group" aria-label="Ordenar clientes">
+            {CUSTOMER_SORTS.map((o) => (
+              <Button key={o.id} size="sm" className="rounded-full" variant={sort === o.id ? "primary" : "tertiary"} onPress={() => setSort(o.id)}>
+                {o.label}
               </Button>
             ))}
           </div>
         </div>
       </Card.Header>
       <Card.Content>
-        <BarChart series={visible} metric={metric} />
+        {error && !data ? (
+          <CardError message={error} />
+        ) : !data ? (
+          <p className="py-6 text-center text-sm font-medium text-muted">Carregando clientes</p>
+        ) : items.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-6 text-center">
+            <Trophy className="text-muted" />
+            <span className="text-sm font-semibold text-muted">Nenhuma sessão neste período</span>
+          </div>
+        ) : (
+          <ol className={`flex flex-col gap-2 transition-opacity ${loading ? "opacity-50" : ""}`}>
+            {items.map((c) => (
+              <li key={c.userId} className="flex items-center gap-3 rounded-xl bg-surface p-3">
+                <span
+                  className={`flex size-6 shrink-0 items-center justify-center text-sm font-bold ${c.rank === 1 ? "text-warning" : "text-muted"}`}
+                  aria-label={`${c.rank}º lugar`}
+                >
+                  {c.rank === 1 ? <Trophy size={18} aria-hidden="true" /> : c.rank}
+                </span>
+                <Avatar className="size-9 shrink-0">
+                  <Avatar.Fallback>{initials(c.name)}</Avatar.Fallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{c.name}</p>
+                  <p className="truncate text-xs text-muted">{c.email ?? "—"}</p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-semibold">
+                    {sort === "sessions" ? `${fmtNum(c.sessions)} ${c.sessions === 1 ? "sessão" : "sessões"}` : brl.format(c.spent)}
+                  </p>
+                  <p className="text-xs text-muted">
+                    {sort === "sessions"
+                      ? `${brl.format(c.spent)} gastos`
+                      : `${fmtNum(c.sessions)} ${c.sessions === 1 ? "sessão" : "sessões"}`}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+        {data && data.totalCustomers > items.length && (
+          <p className="mt-3 text-center text-xs text-muted">
+            Top {items.length} de {fmtNum(data.totalCustomers)} clientes com sessões no período
+          </p>
+        )}
       </Card.Content>
     </Card>
   );
@@ -456,6 +708,7 @@ export default function Overview() {
   const [loadError, setLoadError] = useState("");
   const [rejecting, setRejecting] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [tick, setTick] = useState(0); // sobe quando o tempo real avisa que algo mudou: cards e gráfico recarregam
 
   const load = useCallback(async () => {
     try {
@@ -489,7 +742,10 @@ export default function Overview() {
     ws.onmessage = (ev) => {
       try {
         const { type } = JSON.parse(ev.data);
-        if (type === "stock-changed" || type === "appointments-changed") load();
+        if (type === "stock-changed" || type === "appointments-changed") {
+          load();
+          setTick((t) => t + 1);
+        }
       } catch {
         /* mensagem que não é JSON: ignora */
       }
@@ -556,13 +812,14 @@ export default function Overview() {
                 <KpiCard key={config.key} config={config} card={overview.cards[config.key]} />
               ))}
             </div>
-            <ChartCard series={overview.series} />
+            <ChartCard tick={tick} />
+            <TopCustomersCard tick={tick} />
           </div>
 
           <div className="flex flex-col gap-6">
             <PendingRequestsCard requests={pending} busyId={busyId} onApprove={approve} onReject={setRejecting} />
             <StockAlertsCard products={products} />
-            {/* Resumo dos cupons aqui */}
+            <CouponsCard tick={tick} />
           </div>
         </div>
       )}

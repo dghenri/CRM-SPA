@@ -11,6 +11,7 @@ import couponsRoutes from './routes/coupons.js';
 import productsRoutes from './routes/products.js';
 import stockRoutes from './routes/stock.js';
 import overviewRoutes from './routes/overview.js';
+import overviewInsightsRoutes from './routes/overviewInsights.js';
 import recipesRoutes from './routes/recipes.js';
 import daySummaryRoutes from './routes/daySummary.js';
 import notificationsRoutes from './routes/notifications.js';
@@ -72,6 +73,7 @@ app.use(couponsRoutes);      // /coupons
 app.use(productsRoutes);     // /products, /stock/batches
 app.use(stockRoutes);        // /stock/requests, /stock/movements
 app.use(overviewRoutes);     // /admin/overview
+app.use(overviewInsightsRoutes); // /admin/overview/chart, /coupons, /top-customers
 app.use(recipesRoutes);      // /admin/recipes, /services/:id/recipe
 app.use(daySummaryRoutes);   // /staff/day-summary
 app.use(notificationsRoutes); // /notifications/me, /banners/me, /admin/notifications, /admin/banners

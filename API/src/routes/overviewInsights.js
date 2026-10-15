@@ -30,8 +30,8 @@ const round2 = (n) => Math.round(n * 100) / 100;
 const CHART_RANGES = ["1D", "1W", "1M", "3M", "1Y", "ALL"];
 
 // janela dos cards de cupom/clientes: { start (ou null = tudo), end = agora }
-const CARD_PERIODS = { "1W": 7, "1M": 30, "3M": 90, "1Y": 365, ALL: null };
-function periodStart(period, now) {
+export const CARD_PERIODS = { "1W": 7, "1M": 30, "3M": 90, "1Y": 365, ALL: null };
+export function periodStart(period, now) {
   const days = CARD_PERIODS[period];
   if (days === null) return null;
   return addDays(startOfClinicDay(now), -(days - 1)); // inclui hoje
@@ -115,13 +115,15 @@ function buildBuckets(range, now, firstDate) {
   return { granularity: "month", buckets };
 }
 
-function saleValue(appointment) {
+export function saleValue(appointment) {
   const price = appointment.service?.price ?? 0;
   const discount = (appointment.couponRedemptions ?? []).reduce((s, r) => s + (r.usedAt ? r.discountAmount ?? 0 : 0), 0);
   return Math.max(price - discount, 0);
 }
 
-router.get('/admin/overview/chart', ...stockAuth, requireMajorAdmin, async (req, res) => {
+// Exportado: a página de Receita (todos os cargos de staff) reaproveita o mesmo gráfico
+// em outra rota (revenue.js), sem abrir o resto do Overview para quem não é MajorAdmin.
+export async function chartHandler(req, res) {
   try {
     const range = String(req.query.range || "1M").toUpperCase();
     if (!CHART_RANGES.includes(range)) {
@@ -190,7 +192,9 @@ router.get('/admin/overview/chart', ...stockAuth, requireMajorAdmin, async (req,
     console.error(error);
     res.status(500).json({ error: "Erro ao montar o gráfico." });
   }
-});
+}
+
+router.get('/admin/overview/chart', ...stockAuth, requireMajorAdmin, chartHandler);
 
 //------------------------------------------------------------- CUPONS
 // Uso = resgate com `usedAt` preenchido (o cupom foi aplicado num agendamento).

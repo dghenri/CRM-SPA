@@ -65,7 +65,7 @@ function isWeekend(d) {
   return day === 0 || day === 6;
 }
 function weekendBgClass(d) {
-  return isWeekend(d) ? "bg-muted/5" : "";
+  return isWeekend(d) ? "bg-surface-secondary" : "bg-overlay dark:bg-background";
 }
 function formatClock(d, { withSeconds = false } = {}) {
   return d.toLocaleTimeString("pt-BR", {
@@ -411,7 +411,7 @@ export default function Agenda() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border bg-overlay text-foreground"> {/* div tamanho agenda */}
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-3xl border text-foreground"> {/* div tamanho agenda */}
       <Header
         title={headerTitle}
         view={view}
@@ -423,7 +423,7 @@ export default function Agenda() {
       />
 
       {loadError && (
-        <div className="px-4 py-2 text-sm font-medium text-red-600 bg-red-500/10 border-b border-red-500/20">
+        <div className="px-4 py-2 text-sm font-medium text-red-600 bg-success/10 border-b border-red-500/20">
           {loadError}
         </div>
       )}
@@ -961,7 +961,7 @@ function TimeGrid({ cursor, view, appointments, onCreate, onUpdate, onDelete, on
               return (
                 <div
                   key={dayIdx}
-                  className={"relative border-l border-border " + (dayIdx === todayIdx ? "" : weekendClass)}
+                  className={"relative border-l border-border " + (dayIdx === todayIdx ? "bg-overlay dark:bg-background" : weekendClass)}
                   style={{ height: TOTAL_SLOTS * SLOT_PX }}
                   onPointerDown={(e) => onColumnPointerDown(e, dayIdx)}
                   onPointerMove={onColumnPointerMove}
@@ -1083,10 +1083,10 @@ function NowLine({ days = [], todayIdx = -1, now = new Date() }) {
       </div>
 
       <div className="relative" style={{ gridColumn: `2 / -1` }}>
-        <div className="border-t-2 border-red-600/20" />
+        <div className="border-t-2 border-red-500/10" />
         {todayIdx >= 0 && (
           <div
-            className="absolute top-0 border-t-2 border-red-600"
+            className="absolute top-0 border-t-2 border-red-500"
             style={{ left: `${todayIdx * colWidthPct}%`, width: `${colWidthPct}%` }}
           />
         )}
@@ -1813,7 +1813,7 @@ function MonthView({ cursor, appointments, onSelectDay, onEditAppointment }) {
               key={i}
               className={
                 "flex flex-col gap-1 overflow-hidden border-b border-r border-border p-1.5 text-left transition hover:bg-focus/20 " +
-                (inMonth ? `bg-background ${weekendClass}` : "bg-muted/30 text-muted-foreground")
+                (inMonth ? `bg-background ${weekendClass}` : "bg-surface-tertiary text-muted-foreground")
               }
               onClick={() => onSelectDay(d)}
             >

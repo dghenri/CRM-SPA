@@ -351,22 +351,39 @@ function PhoneForm({ user, onSaved }) {
 }
 
 /* ------------------------------ nascimento ------------------------------- */
+const MIN_AGE = 13;
+
 function BirthdateForm({ user, onSaved }) {
   const initialIso = birthdateToIso(user.birthdate);
   const [value, setValue] = useState(() => (initialIso ? parseDate(initialIso) : null));
-  const { pending, error, run } = useAction();
+  const { pending, error, setError, run } = useAction();
 
-  const maxDate = useMemo(() => today(getLocalTimeZone()), []);
+  // Idade mínima: quem tem menos de MIN_AGE anos não pode informar a data (nem agendar sessões)
+  const maxDate = useMemo(() => today(getLocalTimeZone()).subtract({ years: MIN_AGE }), []);
   const minDate = useMemo(() => parseDate("1900-01-01"), []);
   const iso = value ? value.toString() : "";
+  const underage = !!value && value.compare(maxDate) > 0;
 
-  const submit = () => run(async () => onSaved(await api.put("/users/me", { birthdate: iso }), "Data de nascimento atualizada."));
+  const submit = () => {
+    if (underage) return setError(`É necessário ter pelo menos ${MIN_AGE} anos para informar a data de nascimento e agendar sessões.`);
+    run(async () => onSaved(await api.put("/users/me", { birthdate: iso }), "Data de nascimento atualizada."));
+  };
 
   return (
     <FormCard onSubmit={submit}>
       <ErrorAlert message={error} />
       <I18nProvider locale="pt-BR">
-        <DatePicker className="w-full" value={value} onChange={setValue} minValue={minDate} maxValue={maxDate}>
+        <DatePicker
+          className="w-full"
+          value={value}
+          onChange={(v) => {
+            setValue(v);
+            setError("");
+          }}
+          minValue={minDate}
+          maxValue={maxDate}
+          isInvalid={underage}
+        >
           <Label className="flex items-center">
             Data de nascimento
             {!user.birthdate && <PendingMark />}
@@ -379,7 +396,9 @@ function BirthdateForm({ user, onSaved }) {
               </DatePicker.Trigger>
             </DateField.Suffix>
           </DateField.Group>
-          <Description>Digite a data ou toque no calendário.</Description>
+          <Description>
+            {underage ? `É necessário ter pelo menos ${MIN_AGE} anos.` : "Digite a data ou toque no calendário."}
+          </Description>
           <DatePicker.Popover>
             <Calendar aria-label="Data de nascimento" 
               defaultFocusedValue={value ? undefined : parseDate("2000-01-01")}
@@ -404,7 +423,7 @@ function BirthdateForm({ user, onSaved }) {
           </DatePicker.Popover>
         </DatePicker>
       </I18nProvider>
-      <SaveButton pending={pending} disabled={!iso || iso === initialIso} />
+      <SaveButton pending={pending} disabled={!iso || iso === initialIso || underage} />
     </FormCard>
   );
 }

@@ -19,6 +19,29 @@ export function isValidCpf(cpf) {
   return true;
 }
 
+// Idade mínima para informar data de nascimento e agendar sessões.
+// (Mantenha igual ao MIN_AGE do Account.jsx no front.)
+export const MIN_AGE = 13;
+
+// Idade completa em anos na data de hoje. A data de nascimento é guardada à
+// meia-noite UTC, então comparamos ano/mês/dia em UTC (sem fuso local).
+export function calculateAge(birthdate, now = new Date()) {
+  const birth = new Date(birthdate);
+  if (Number.isNaN(birth.getTime())) return null;
+
+  let age = now.getUTCFullYear() - birth.getUTCFullYear();
+  const monthDiff = now.getUTCMonth() - birth.getUTCMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getUTCDate() < birth.getUTCDate())) age--;
+  return age;
+}
+
+export function isUnderMinAge(birthdate, minAge = MIN_AGE) {
+  const age = calculateAge(birthdate);
+  return age !== null && age < minAge;
+}
+
+export const MIN_AGE_MESSAGE = `É necessário ter pelo menos ${MIN_AGE} anos para informar a data de nascimento e agendar sessões.`;
+
 // Mensagem de erro padrão pra conflito de unicidade (e-mail ou CPF
 // duplicado), usada em qualquer rota que crie/edite um User.
 export function duplicateFieldMessage(error) {

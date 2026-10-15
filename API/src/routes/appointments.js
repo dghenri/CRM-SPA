@@ -4,6 +4,7 @@ import { broadcastAppointmentsChanged, broadcastStockChanged } from '../lib/real
 import { isPaymentMethod } from '../lib/payments.js';
 import { PROFILE_FIELD_LABELS, PROFILE_FIELD_SECTIONS, getMissingProfileFields } from '../lib/profile.js';
 import { toPublicUser } from '../lib/serializers.js';
+import { MIN_AGE, isUnderMinAge } from '../lib/validators.js';
 import { authenticateToken, requireStaff, requireUser } from '../middleware/auth.js';
 import { notifyAppointmentCreated, notifyAppointmentStatus } from '../services/notifications.js';
 import { revertAppointmentConsumption, syncAppointmentStock } from '../services/recipes.js';
@@ -104,6 +105,13 @@ router.post('/appointments', authenticateToken, async (req, res) => {
           code: "PROFILE_INCOMPLETE",
           missing,
           editSection: PROFILE_FIELD_SECTIONS[missing[0]],
+        });
+      }
+      // idade mínima para agendar (o perfil completo garante que há data de nascimento)
+      if (isUnderMinAge(me.birthdate)) {
+        return res.status(403).json({
+          error: `É necessário ter pelo menos ${MIN_AGE} anos para agendar sessões.`,
+          code: "UNDERAGE",
         });
       }
       data.customer = { connect: { id: req.user.id } };

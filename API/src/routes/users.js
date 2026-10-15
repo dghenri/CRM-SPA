@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { ACCESS_TOKEN_KEY } from '../lib/config.js';
 import { prisma } from '../lib/prisma.js';
 import { toPublicUser } from '../lib/serializers.js';
-import { duplicateFieldMessage, isValidCpf } from '../lib/validators.js';
+import { MIN_AGE_MESSAGE, duplicateFieldMessage, isUnderMinAge, isValidCpf } from '../lib/validators.js';
 import { authenticateToken, requireStaff, requireUser } from '../middleware/auth.js';
 import { grantWelcomeCoupon } from '../services/welcomeCoupon.js';
 
@@ -215,6 +215,9 @@ router.put('/users/me', authenticateToken, requireUser, async (req, res) => {
         if (Number.isNaN(parsedBirthdate.getTime()) || parsedBirthdate > new Date() || parsedBirthdate.getUTCFullYear() < 1900) {
           return res.status(400).json({ error: "Data de nascimento inválida." });
         }
+        if (isUnderMinAge(parsedBirthdate)) {
+          return res.status(400).json({ error: MIN_AGE_MESSAGE });
+        }
         data.birthdate = parsedBirthdate;
       }
     }
@@ -298,6 +301,9 @@ router.post('/users', authenticateToken, requireStaff, async (req, res) => {
       if (Number.isNaN(parsedBirthdate.getTime())) {
         return res.status(400).json({ error: "Data de nascimento inválida." });
       }
+      if (isUnderMinAge(parsedBirthdate)) {
+        return res.status(400).json({ error: MIN_AGE_MESSAGE });
+      }
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -343,6 +349,9 @@ router.put('/users/:id', authenticateToken, requireStaff, async (req, res) => {
       const parsedBirthdate = new Date(birthdate);
       if (Number.isNaN(parsedBirthdate.getTime())) {
         return res.status(400).json({ error: "Data de nascimento inválida." });
+      }
+      if (isUnderMinAge(parsedBirthdate)) {
+        return res.status(400).json({ error: MIN_AGE_MESSAGE });
       }
       data.birthdate = parsedBirthdate;
     }

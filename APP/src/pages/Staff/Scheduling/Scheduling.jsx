@@ -528,16 +528,26 @@ export function DayView({
   const effectiveDragEnabled = dragEnabled ?? userDragEnabled;
 
   // Modo standalone (sem receber `appointments` por prop): busca da API.
+  // Busca ao montar E recarrega sempre que algo mudar em qualquer lugar do app
+  // (evento disparado pelas ações locais e pelo aviso do WebSocket) - antes
+  // buscava só uma vez, então status/horários alterados fora do DayView
+  // (ex.: botões da Home, Agenda) nunca apareciam nele.
   useEffect(() => {
     if (isControlled) return;
     let cancelled = false;
-    fetchAppointments()
-      .then((data) => {
-        if (!cancelled) setLocalAppts(data.map(mapAppointmentFromApi));
-      })
-      .catch((err) => console.error("Falha ao carregar agendamentos:", err));
+    const load = () =>
+      fetchAppointments()
+        .then((data) => {
+          if (!cancelled) setLocalAppts(data.map(mapAppointmentFromApi));
+        })
+        .catch((err) => console.error("Falha ao carregar agendamentos:", err));
+    load();
+    window.addEventListener(APPOINTMENTS_CHANGED_EVENT, load);
+    const interval = setInterval(load, 90_000);
     return () => {
       cancelled = true;
+      window.removeEventListener(APPOINTMENTS_CHANGED_EVENT, load);
+      clearInterval(interval);
     };
   }, [isControlled]);
 
@@ -585,7 +595,60 @@ export function DayView({
     }
   };
 
-  const list = isControlled ? appointments : localAppts;
+  const baseList = isControlled ? appointments : localAppts;
+
+  // Status "otimista": a cor do card muda no mesmo instante da troca, mesmo
+  // quando a lista vem de fora (ex.: Home passando useAppointments()) e só
+  // seria atualizada depois que a API respondesse e a lista fosse recarregada.
+  const [statusOverrides, setStatusOverrides] = useState({});
+
+  // Quando a lista de verdade já reflete o novo status, descarta o override
+  useEffect(() => {
+    setStatusOverrides((prev) => {
+      const ids = Object.keys(prev);
+      if (ids.length === 0) return prev;
+      const next = { ...prev };
+      let changed = false;
+      for (const id of ids) {
+        const real = baseList.find((a) => a.id === id);
+        if (!real || real.status === prev[id]) {
+          delete next[id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [baseList]);
+
+  const list = useMemo(
+    () =>
+      Object.keys(statusOverrides).length === 0
+        ? baseList
+        : baseList.map((a) => (statusOverrides[a.id] ? { ...a, status: statusOverrides[a.id] } : a)),
+    [baseList, statusOverrides]
+  );
+
+  const handleStatusChange = async (id, status) => {
+    setStatusOverrides((prev) => ({ ...prev, [id]: status }));
+    // rede de segurança: se a atualização falhar (e o erro for engolido por
+    // quem tratou), o override não fica preso mostrando um status que não existe
+    const timer = setTimeout(() => {
+      setStatusOverrides((prev) => {
+        if (!(id in prev)) return prev;
+        const { [id]: _drop, ...rest } = prev;
+        return rest;
+      });
+    }, 8000);
+    try {
+      await (onStatusChange ?? localStatusChange)(id, status);
+    } catch {
+      clearTimeout(timer);
+      setStatusOverrides((prev) => {
+        const { [id]: _drop, ...rest } = prev;
+        return rest;
+      });
+    }
+  };
 
   return (
     <div className="h-full min-h-0 overflow-hidden rounded-2xl border border-border">
@@ -597,7 +660,7 @@ export function DayView({
         onUpdate={onUpdate ?? localUpdate}
         onDelete={onDelete ?? localDelete}
         onEdit={onEdit}
-        onStatusChange={onStatusChange ?? localStatusChange}
+        onStatusChange={handleStatusChange}
         dragEnabled={effectiveDragEnabled}
       />
     </div>

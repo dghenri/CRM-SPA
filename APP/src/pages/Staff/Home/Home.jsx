@@ -4,7 +4,8 @@ import { ChevronUp, ChevronDown, Eye, EyeOff, Play, UserX, CheckCheck, Undo2 } f
 import LiveClock from '../../../components/LiveClock';
 import api from "../../../api/api";
 import { useAuth } from "../../../context/AuthContext";
-import { DayView, formatClock, useAppointments, colorMap } from '../Scheduling/Scheduling';
+import { DayView, formatClock, useAppointments, notifyAppointmentsChanged } from '../Scheduling/Scheduling';
+import { colorForAppointment } from '../Scheduling/schedulingConstants';
 import SessionTable from "./SessionTable"
 
 /* --------------------------- date/session utils -------------------------- */
@@ -164,6 +165,7 @@ function CurrentSessionCard({ appointments, now, summary, hidden, onChanged }) {
         );
       }
       toast.success(okMessage);
+      notifyAppointmentsChanged(); // avisa agenda/DayView/tabela que o status mudou
       await onChanged();
     } catch (err) {
       toast.danger(err.message || "Não foi possível concluir a ação.");
@@ -197,7 +199,7 @@ function CurrentSessionCard({ appointments, now, summary, hidden, onChanged }) {
     );
   }
 
-  const c = isLate ? null : (colorMap[active.color] ?? colorMap.blue);
+  const c = isLate ? null : colorForAppointment(active); // cor vem do status
   const dotColor = isLate ? "var(--danger)" : c.color;
   const money = summary?.byAppointment?.[active.id];
   const totalMs = active.end - active.start;
@@ -526,7 +528,7 @@ const Home = () => {
 
       <div className="grid grid-cols-2 mt-4 gap-4">
         <div className='h-80 bg-background rounded-2xl'>
-          <DayView date={new Date()} />
+          <DayView date={new Date()} appointments={appointments} />
         </div>
 
         <div className="h-80 bg-background rounded-2xl p-1">

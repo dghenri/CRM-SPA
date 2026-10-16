@@ -142,10 +142,10 @@ const SessionHistory = ({ appointments = [] }) => {
                       <div className="flex flex-col gap-3">
                         <div className="flex flex-col gap-1 text-sm">
                           <span className="text-foreground">{formatDate(appt)}</span>
-                          {appt.professional?.name && (
+                          {(appt.professional?.name ?? appt.professionalName) && (
                             <span className="text-muted">
                               <span className="font-semibold text-foreground">Profissional: </span>
-                              {appt.professional.name}
+                              {appt.professional?.name ?? appt.professionalName}
                             </span>
                           )}
                           {appt.notes?.trim() && (

@@ -149,6 +149,14 @@ router.post('/appointments', authenticateToken, async (req, res) => {
         ? professionalId || service?.professionalId || null
         : actor.id;
 
+      // funcionária comum só agenda procedimentos vinculados a ela (o MajorAdmin agenda qualquer um)
+      if (!actor.isAdmin && service && service.professionalId !== actor.id) {
+        return res.status(403).json({
+          error: "Você só pode agendar procedimentos vinculados a você.",
+          code: "SERVICE_NOT_YOURS",
+        });
+      }
+
       // equipe: cliente é opcional (evento avulso na agenda)
       if (customerId) {
         // a regra de idade mínima do procedimento vale também quando a equipe agenda
@@ -218,6 +226,13 @@ router.put('/appointments/:id', authenticateToken, requireStaff, loadStaffActor,
       // idade mínima: só confere quando o procedimento ou o cliente MUDAM
       // (editar horário/notas de uma sessão já existente não é bloqueado)
       const newServiceId = serviceId !== undefined ? serviceId || null : before.serviceId;
+      // trocar o procedimento: funcionária comum só pode escolher um procedimento dela
+      if (!req.actor.isAdmin && newServiceId && newServiceId !== before.serviceId) {
+        const target = await tx.service.findUnique({ where: { id: newServiceId }, select: { professionalId: true } });
+        if (!target || target.professionalId !== req.actor.id) {
+          throw Object.assign(new Error("forbidden"), { forbidden: "Você só pode agendar procedimentos vinculados a você." });
+        }
+      }
       const newCustomerId = customerId !== undefined ? customerId || null : before.customerId;
       if (newServiceId !== before.serviceId || newCustomerId !== before.customerId) {
         const tooYoung = await checkServiceMinAge(tx, newServiceId, newCustomerId);
@@ -234,6 +249,7 @@ router.put('/appointments/:id', authenticateToken, requireStaff, loadStaffActor,
     res.status(200).json({ ...appointment, customer: toPublicUser(appointment.customer), stockWarnings: stock.warnings });
   } catch (error) {
     if (error instanceof StockError) return res.status(error.status).json({ error: error.message });
+    if (error.forbidden) return res.status(403).json({ error: error.forbidden, code: "SERVICE_NOT_YOURS" });
     if (error.minAgeViolation) return res.status(403).json(error.minAgeViolation);
     if (error.code === "P2025") {
       return res.status(404).json({ error: "Agendamento não encontrado." });

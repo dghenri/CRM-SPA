@@ -3,6 +3,7 @@ import { parseDate, parseTime, today, getLocalTimeZone } from "@internationalize
 import { colorMap, colorForAppointment, SLOT_MIN, SLOT_PX, fmtTime } from "./schedulingConstants";
 import AppointmentCard from "./AppointmentCard";
 import { useAuth } from "../../../context/AuthContext";
+import api from "../../../api/api";
 import {
   fetchSchedulingData,
   fetchAppointments,
@@ -13,7 +14,7 @@ import {
 } from "../../../api/scheduling";
 
 import {
-  Button, ButtonGroup, AlertDialog, Input, Label, Separator, Tabs,
+  Button, ButtonGroup, AlertDialog, Input, Label, Separator, Tabs, Select,
   Tooltip, CloseButton, Modal, DatePicker, DateField, Calendar, TimeField, toast, ComboBox, ListBox,
   
 } from "@heroui/react";
@@ -248,6 +249,30 @@ export default function Agenda() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [dragEnabled, setDragEnabled] = useState(false);
+  const [staff, setStaff] = useState([]);
+  const isAdmin = user?.role === "MajorAdmin";
+
+  // Procedimentos que a pessoa logada pode agendar: o MajorAdmin qualquer um;
+  // as demais só os vinculados a elas (a API também recusa os de outras profissionais).
+  const selectableServices = useMemo(
+    () => (isAdmin ? services : services.filter((s) => !!user?.id && (s.professionalId ?? s.professional?.id) === user.id)),
+    [services, isAdmin, user?.id]
+  );
+
+  // Lista de profissionais para o MajorAdmin atribuir o agendamento
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    api
+      .get("/staff")
+      .then((data) => {
+        if (!cancelled && Array.isArray(data)) setStaff(data);
+      })
+      .catch((err) => console.error("Falha ao carregar equipe:", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin]);
 
   // Sincroniza com a preferência salva assim que o usuário logado carrega
   useEffect(() => {
@@ -464,7 +489,9 @@ export default function Agenda() {
         <EditModal
           appointment={editing}
           clients={clients}
-          services={services}
+          services={selectableServices}
+          staff={staff}
+          isAdmin={isAdmin}
           onClose={() => setEditing(null)}
           onSave={(a) => {
             onUpdate(a);
@@ -481,7 +508,9 @@ export default function Agenda() {
         <CreateModal
           defaultDate={cursor}
           clients={clients}
-          services={services}
+          services={selectableServices}
+          staff={staff}
+          isAdmin={isAdmin}
           onClose={() => setCreating(false)}
           onSave={(a) => {
             onCreate(a);
@@ -1205,8 +1234,12 @@ function DragSelectPreview({ startSlot, endSlot, day }) {
 
 /* ----------------------------- Edit Modal ----------------------------- */
 
-function EditModal({ appointment, clients = [], services = [], onClose, onSave, onDelete }) {
-  const availableServices = useMemo(() => services.filter((s) => s.available), [services]);
+function EditModal({ appointment, clients = [], services = [], staff = [], isAdmin = false, onClose, onSave, onDelete }) {
+  // mantém o procedimento atual da sessão na lista mesmo que ele não seja (mais) selecionável
+  const availableServices = useMemo(
+    () => services.filter((s) => s.available || s.id === appointment.serviceId),
+    [services, appointment.serviceId]
+  );
   const servicesById = useMemo(() => Object.fromEntries(services.map((s) => [s.id, s])), [services]);
   const clientsById = useMemo(() => Object.fromEntries(clients.map((c) => [c.id, c])), [clients]);
 
@@ -1217,6 +1250,7 @@ function EditModal({ appointment, clients = [], services = [], onClose, onSave, 
   const [endT, setEndT] = useState(fmtTimeInput(appointment.end));
   const [serviceId, setServiceId] = useState(appointment.serviceId ?? null);
   const [clientId, setClientId] = useState(appointment.clientId ?? null);
+  const [professionalId, setProfessionalId] = useState(appointment.professionalId ?? null);
 
   // Ao selecionar um procedimento: preenche o título com o nome do procedimento e
   // pré-seleciona o horário de término somando a duração do procedimento ao
@@ -1226,6 +1260,7 @@ function EditModal({ appointment, clients = [], services = [], onClose, onSave, 
     setServiceId(key);
     const svc = key ? servicesById[key] : null;
     if (!svc) return;
+    if (isAdmin && svc.professionalId) setProfessionalId(svc.professionalId);
     setTitle(svc.title);
     const { time, dayOffset } = addMinutesToTimeString(startT, svc.duration);
     setEndT(time);
@@ -1248,6 +1283,7 @@ function EditModal({ appointment, clients = [], services = [], onClose, onSave, 
       serviceId: serviceId || null,
       clientId: clientId || null,
       clientName: clientId ? clientsById[clientId]?.name : undefined,
+      ...(isAdmin ? { professionalId } : {}),
     });
   };
 
@@ -1324,6 +1360,39 @@ function EditModal({ appointment, clients = [], services = [], onClose, onSave, 
                   </ComboBox.Popover>
                 </ComboBox>
               </div>
+
+              {isAdmin && (
+                <div className="grid grid-rows space-y-1.5 space-x-2">
+                  <Label className="text-muted">Profissional responsável</Label>
+                  <Select
+                    aria-label="Profissional responsável"
+                    placeholder="Selecione a profissional"
+                    className="w-full"
+                    selectedKey={professionalId}
+                    onSelectionChange={(key) => setProfessionalId(key ?? null)}
+                  >
+                    <Select.Trigger className="border border-border font-semibold">
+                      <Select.Value />
+                      <Select.Indicator />
+                    </Select.Trigger>
+                    <Select.Popover className="font-semibold">
+                      <ListBox>
+                        {staff
+                          .filter((m) => m.status !== "Inactive")
+                          .map((m) => (
+                            <ListBox.Item key={m.id} id={m.id} textValue={m.name}>
+                              {m.name}
+                              <ListBox.ItemIndicator />
+                            </ListBox.Item>
+                          ))}
+                      </ListBox>
+                    </Select.Popover>
+                  </Select>
+                  <p className="text-xs font-semibold text-muted">
+                    Ao escolher o procedimento, a profissional vinculada a ele é sugerida; você pode trocar.
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3 mb-2">
                 <div className="grid grid-rows space-y-1.5 space-x-2 items-center">
@@ -1500,7 +1569,7 @@ function EditModal({ appointment, clients = [], services = [], onClose, onSave, 
 
 /* ------------------------------ CreateModal ---------------------------- */
 
-function CreateModal({ defaultDate, clients = [], services = [], onClose, onSave }) {
+function CreateModal({ defaultDate, clients = [], services = [], staff = [], isAdmin = false, onClose, onSave }) {
   const availableServices = useMemo(() => services.filter((s) => s.available), [services]);
   const servicesById = useMemo(() => Object.fromEntries(services.map((s) => [s.id, s])), [services]);
   const clientsById = useMemo(() => Object.fromEntries(clients.map((c) => [c.id, c])), [clients]);
@@ -1517,6 +1586,7 @@ function CreateModal({ defaultDate, clients = [], services = [], onClose, onSave
   const [endT, setEndT] = useState(fmtTimeInput(initialEnd));
   const [serviceId, setServiceId] = useState(null);
   const [clientId, setClientId] = useState(null);
+  const [professionalId, setProfessionalId] = useState(null);
 
   // Ao selecionar um procedimento: preenche o título com o nome do procedimento e
   // pré-seleciona o horário de término somando a duração do procedimento ao
@@ -1526,6 +1596,7 @@ function CreateModal({ defaultDate, clients = [], services = [], onClose, onSave
     setServiceId(key);
     const svc = key ? servicesById[key] : null;
     if (!svc) return;
+    if (isAdmin && svc.professionalId) setProfessionalId(svc.professionalId);
     setTitle(svc.title);
     const { time, dayOffset } = addMinutesToTimeString(startT, svc.duration);
     setEndT(time);
@@ -1550,6 +1621,7 @@ function CreateModal({ defaultDate, clients = [], services = [], onClose, onSave
       serviceId: serviceId || null,
       clientId: clientId || null,
       clientName: clientId ? clientsById[clientId]?.name : undefined,
+      ...(isAdmin ? { professionalId } : {}),
     });
   };
 
@@ -1626,6 +1698,39 @@ function CreateModal({ defaultDate, clients = [], services = [], onClose, onSave
                   </ComboBox.Popover>
                 </ComboBox>
               </div>
+
+              {isAdmin && (
+                <div className="grid grid-rows space-y-1.5 space-x-2">
+                  <Label className="text-muted">Profissional responsável</Label>
+                  <Select
+                    aria-label="Profissional responsável"
+                    placeholder="Selecione a profissional"
+                    className="w-full"
+                    selectedKey={professionalId}
+                    onSelectionChange={(key) => setProfessionalId(key ?? null)}
+                  >
+                    <Select.Trigger className="border border-border font-semibold">
+                      <Select.Value />
+                      <Select.Indicator />
+                    </Select.Trigger>
+                    <Select.Popover className="font-semibold">
+                      <ListBox>
+                        {staff
+                          .filter((m) => m.status !== "Inactive")
+                          .map((m) => (
+                            <ListBox.Item key={m.id} id={m.id} textValue={m.name}>
+                              {m.name}
+                              <ListBox.ItemIndicator />
+                            </ListBox.Item>
+                          ))}
+                      </ListBox>
+                    </Select.Popover>
+                  </Select>
+                  <p className="text-xs font-semibold text-muted">
+                    Ao escolher o procedimento, a profissional vinculada a ele é sugerida; você pode trocar.
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3 mb-2">
                 <div className="grid grid-rows space-y-1.5 space-x-2 items-center">

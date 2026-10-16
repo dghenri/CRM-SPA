@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authenticateToken, requireStaff } from '../middleware/auth.js';
+import { loadStaffActor, scopeWhere } from '../lib/appointmentAccess.js';
 import { addDays, startOfClinicDay } from '../lib/clinicTime.js';
 import { isPaymentMethod } from '../lib/payments.js';
 import { CARD_PERIODS, chartHandler, periodStart, saleValue } from './overviewInsights.js';
@@ -10,6 +11,8 @@ const router = Router();
 //=============================================================== STAFF: RECEITA (FINANÇAS)
 //
 // Acesso: qualquer cargo de staff (MajorAdmin, Farmaceutica, Massoterapeuta).
+// Escopo: MajorAdmin vê a receita da clínica toda; as demais só a das sessões
+// em que são a profissional responsável (scopeWhere).
 //
 // Mesmas regras do Overview (overviewInsights.js):
 // - Receita REALIZADA = agendamentos "Completed".
@@ -76,9 +79,9 @@ function parsePeriod(req, res) {
   return period;
 }
 
-async function completedIn(start, end, select = SALE_SELECT) {
+async function completedIn(scope, start, end, select = SALE_SELECT) {
   return prisma.appointment.findMany({
-    where: { status: "Completed", date: dateRange(start, end) },
+    where: { ...scope, status: "Completed", date: dateRange(start, end) },
     select,
   });
 }
@@ -87,20 +90,21 @@ async function completedIn(start, end, select = SALE_SELECT) {
 router.get('/staff/revenue/chart', authenticateToken, requireStaff, chartHandler);
 
 //------------------------------------------------------------- RESUMO (cards)
-router.get('/staff/revenue/summary', authenticateToken, requireStaff, async (req, res) => {
+router.get('/staff/revenue/summary', authenticateToken, requireStaff, loadStaffActor, async (req, res) => {
   try {
     const period = parsePeriod(req, res);
     if (!period) return;
+    const scope = scopeWhere(req.actor);
 
     const now = new Date();
     const { start, end, prevStart } = resolveWindow(period, now);
 
     const [current, previous, upcoming] = await Promise.all([
-      completedIn(start, end),
-      prevStart ? completedIn(prevStart, start) : Promise.resolve(null),
+      completedIn(scope, start, end),
+      prevStart ? completedIn(scope, prevStart, start) : Promise.resolve(null),
       // previsto: ainda vai acontecer (agendado/confirmado, de hoje em diante)
       prisma.appointment.findMany({
-        where: { status: { in: ["Scheduled", "Confirmed"] }, date: { gte: startOfClinicDay(now) } },
+        where: { ...scope, status: { in: ["Scheduled", "Confirmed"] }, date: { gte: startOfClinicDay(now) } },
         select: SALE_SELECT,
       }),
     ]);
@@ -134,15 +138,16 @@ const METHOD_SORTS = {
   sessions: (a, b) => b.sessions - a.sessions || b.net - a.net,
 };
 
-router.get('/staff/revenue/payment-methods', authenticateToken, requireStaff, async (req, res) => {
+router.get('/staff/revenue/payment-methods', authenticateToken, requireStaff, loadStaffActor, async (req, res) => {
   try {
     const period = parsePeriod(req, res);
     if (!period) return;
+    const scope = scopeWhere(req.actor);
     const sort = String(req.query.sort || "amount");
     if (!(sort in METHOD_SORTS)) return res.status(400).json({ error: "Ordenação inválida." });
 
     const { start, end } = resolveWindow(period, new Date());
-    const appointments = await completedIn(start, end);
+    const appointments = await completedIn(scope, start, end);
 
     const byMethod = new Map();
     for (const a of appointments) {
@@ -187,17 +192,18 @@ const SERVICE_SORTS = {
   sessions: (a, b) => b.sessions - a.sessions || b.net - a.net,
 };
 
-router.get('/staff/revenue/services', authenticateToken, requireStaff, async (req, res) => {
+router.get('/staff/revenue/services', authenticateToken, requireStaff, loadStaffActor, async (req, res) => {
   try {
     const period = parsePeriod(req, res);
     if (!period) return;
+    const scope = scopeWhere(req.actor);
     const sort = String(req.query.sort || "revenue");
     if (!(sort in SERVICE_SORTS)) return res.status(400).json({ error: "Ordenação inválida." });
     // card da página = top 6 (padrão); o relatório em PDF pede todos (até 100)
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 6));
 
     const { start, end } = resolveWindow(period, new Date());
-    const appointments = await completedIn(start, end);
+    const appointments = await completedIn(scope, start, end);
 
     const byService = new Map();
     for (const a of appointments) {
@@ -238,10 +244,11 @@ router.get('/staff/revenue/services', authenticateToken, requireStaff, async (re
 
 //------------------------------------------------------------- TRANSAÇÕES (atendimentos concluídos)
 // Query: period, page (1...), limit (1-50, padrão 10), payment (Pix | CreditCard | DebitCard | Cash)
-router.get('/staff/revenue/transactions', authenticateToken, requireStaff, async (req, res) => {
+router.get('/staff/revenue/transactions', authenticateToken, requireStaff, loadStaffActor, async (req, res) => {
   try {
     const period = parsePeriod(req, res);
     if (!period) return;
+    const scope = scopeWhere(req.actor);
 
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 10));
@@ -251,6 +258,7 @@ router.get('/staff/revenue/transactions', authenticateToken, requireStaff, async
 
     const { start, end } = resolveWindow(period, new Date());
     const where = {
+      ...scope,
       status: "Completed",
       date: dateRange(start, end),
       ...(payment ? { paymentMethod: payment } : {}),

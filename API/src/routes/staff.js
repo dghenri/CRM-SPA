@@ -4,12 +4,13 @@ import bcrypt from "bcryptjs";
 import { ACCESS_TOKEN_KEY } from '../lib/config.js';
 import { prisma } from '../lib/prisma.js';
 import { DEFAULT_STAFF_SETTINGS, toPublicStaff } from '../lib/serializers.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, requireMajorAdmin, requireStaff, stockAuth } from '../middleware/auth.js';
 
 const router = Router();
 
-//------------------------------------------------------------- POST ROUTE (CREATE STAFF)
-router.post('/staff', async (req, res) => {
+//------------------------------------------------------------- POST ROUTE (CREATE STAFF - só MajorAdmin)
+// Antes essa rota não exigia login: qualquer um criava uma conta de equipe (inclusive MajorAdmin).
+router.post('/staff', ...stockAuth, requireMajorAdmin, async (req, res) => {
   try {
     const hashedPassword = await bcrypt.hash(req.body.password, 10);
 
@@ -53,6 +54,11 @@ router.post('/auth/staff/login', async (req, res) => {
       return res.status(403).json({ error: "Email ou senha inválidos." });
     }
 
+    // conta inativada não entra mais
+    if (staff.status === "Inactive") {
+      return res.status(403).json({ error: "Conta inativa." });
+    }
+
     const token = jwt.sign(
       { id: staff.id, email: staff.email, type: "staff" },
       ACCESS_TOKEN_KEY,
@@ -67,7 +73,7 @@ router.post('/auth/staff/login', async (req, res) => {
 });
 
 //------------------------------------------------------------- GET ROUTE (STAFF LOGADO)
-router.get('/auth/staff/me', authenticateToken, async (req, res) => {
+router.get('/auth/staff/me', authenticateToken, requireStaff, async (req, res) => {
   try {
     const staff = await prisma.staff.findUnique({ where: { id: req.user.id } });
 
@@ -82,8 +88,8 @@ router.get('/auth/staff/me', authenticateToken, async (req, res) => {
   }
 });
 
-//------------------------------------------------------------- GET ROUTE (protected)
-router.get('/staff', authenticateToken, async (req, res) => {
+//------------------------------------------------------------- GET ROUTE (só equipe - clientes não listam a equipe)
+router.get('/staff', authenticateToken, requireStaff, async (req, res) => {
   try {
     const hasFilters = req.query && Object.keys(req.query).length > 0;
 
@@ -91,8 +97,7 @@ router.get('/staff', authenticateToken, async (req, res) => {
       ? await prisma.staff.findMany({
           where: {
             name: req.query.name,
-            email: req.query.email,
-            age: req.query.age ? Number(req.query.age) : undefined
+            email: req.query.email
           }
         })
       : await prisma.staff.findMany();
@@ -105,7 +110,7 @@ router.get('/staff', authenticateToken, async (req, res) => {
 })
 
 //------------------------------------------------------------- PUT ROUTE (protected)
-router.put('/staff/:id', authenticateToken, async (req, res) => {
+router.put('/staff/:id', authenticateToken, requireStaff, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -211,7 +216,7 @@ async function canManageAvailability(req) {
   return requester.role === "MajorAdmin" || requester.id === req.params.id;
 }
 
-router.get('/staff/:id/availability', authenticateToken, async (req, res) => {
+router.get('/staff/:id/availability', authenticateToken, requireStaff, async (req, res) => {
   try {
     if (!(await canManageAvailability(req))) {
       return res.status(403).json({ error: "Sem permissão para ver esta disponibilidade." });
@@ -225,7 +230,7 @@ router.get('/staff/:id/availability', authenticateToken, async (req, res) => {
 });
 
 // substitui a agenda inteira pelo que veio no body
-router.put('/staff/:id/availability', authenticateToken, async (req, res) => {
+router.put('/staff/:id/availability', authenticateToken, requireStaff, async (req, res) => {
   try {
     if (!(await canManageAvailability(req))) {
       return res.status(403).json({ error: "Sem permissão para editar esta disponibilidade." });
@@ -260,8 +265,9 @@ router.put('/staff/:id/availability', authenticateToken, async (req, res) => {
   }
 });
 
-//------------------------------------------------------------- DELETE ROUTE (protected)
-router.delete('/staff/:id', authenticateToken, async (req, res) => {
+//------------------------------------------------------------- DELETE ROUTE (só MajorAdmin)
+// Antes qualquer token válido (até de cliente) apagava qualquer funcionária.
+router.delete('/staff/:id', ...stockAuth, requireMajorAdmin, async (req, res) => {
   try {
     await prisma.staff.delete({
       where: {

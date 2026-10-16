@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { fetchServices, createService, updateService, deleteService } from "../../../api/services";
 import api from "../../../api/api";
+import { useAuth } from "../../../context/AuthContext";
 
 import {
   Card, Chip, Button, Modal, TextField, Label, Input, TextArea,
@@ -158,7 +159,7 @@ function RecipeEditor({ rows, setRows, products, status }) {
   );
 }
 
-function ServiceFormModal({ isOpen, onOpenChange, initial, staff, products, onSave }) {
+function ServiceFormModal({ isOpen, onOpenChange, initial, staff, products, onSave, canChoosePro = false }) {
   const EMPTY_SERVICE_FORM = {
     title: "",
     description: "",
@@ -255,7 +256,9 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, products, onSa
         form.image.trim() ||
         `https://picsum.photos/seed/${encodeURIComponent(form.title)}/600/450`,
       available: form.available,
-      professionalId: form.professionalId || null,
+      // só o MajorAdmin define o profissional: para os demais o campo nem é enviado
+      // (a API também precisa recusar - o front sozinho não é barreira de segurança)
+      ...(canChoosePro ? { professionalId: form.professionalId || null } : {}),
     }, recipeItems);
     close();
   };
@@ -334,10 +337,16 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, products, onSa
 
                   <div className="mb-4">
                     <Label className="mb-1 block">Profissional responsável (opcional)</Label>
+                    {!canChoosePro && (
+                      <p className="mb-1 text-xs font-semibold text-muted">
+                        Somente o MajorAdmin pode escolher ou alterar o profissional responsável.
+                      </p>
+                    )}
                     <Select
                       aria-label="Profissional responsável"
                       placeholder="Selecione um profissional"
                       className="w-full"
+                      isDisabled={!canChoosePro}
                       selectedKey={form.professionalId || null}
                       onSelectionChange={(key) => setForm({ ...form, professionalId: key ?? "" })}
                     >
@@ -397,7 +406,7 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, products, onSa
   );
 }
 
-function ServiceCard({ service, recipe, onEdit, onDelete, onToggle }) {
+function ServiceCard({ service, recipe, onEdit, onDelete, onToggle, canEdit = false, canDelete = false }) {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedService, setSelectedService] = useState(null);
 
@@ -482,6 +491,7 @@ function ServiceCard({ service, recipe, onEdit, onDelete, onToggle }) {
                   ? "bg-success/10 text-success hover:bg-success/20"
                   : "bg-default-100 text-default-500"
               }`}
+              isDisabled={!canEdit}
               onPress={() => onToggle(service.id)}
             >
               {service.available ? <Check size={14} /> : <EyeOff size={14} />}
@@ -493,6 +503,7 @@ function ServiceCard({ service, recipe, onEdit, onDelete, onToggle }) {
               variant="tertiary"
               className="rounded-full"
               aria-label="Editar"
+              isDisabled={!canEdit}
               onPress={() => onEdit(service)}
             >
               <Pencil size={16} />
@@ -503,6 +514,7 @@ function ServiceCard({ service, recipe, onEdit, onDelete, onToggle }) {
               variant="danger"
               className="rounded-full"
               aria-label="Excluir"
+              isDisabled={!canDelete}
               onPress={() => handleDelet(service)}
             >
               <Trash2 size={16} />
@@ -552,6 +564,10 @@ function ServiceCard({ service, recipe, onEdit, onDelete, onToggle }) {
 
 
 export default function AdminServicesPage() {
+  const { user } = useAuth();
+  const isMajorAdmin = user?.role === "MajorAdmin";
+  // MajorAdmin edita tudo; as demais só os procedimentos em que são a profissional responsável
+  const canEditService = (s) => isMajorAdmin || (!!user?.id && (s.professionalId ?? s.professional?.id) === user.id);
   const [services, setServices] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -713,6 +729,8 @@ export default function AdminServicesPage() {
             onEdit={openEdit}
             onDelete={handleDelete}
             onToggle={handleToggle}
+            canEdit={canEditService(service)}
+            canDelete={isMajorAdmin}
           />
         ))}
 
@@ -724,6 +742,7 @@ export default function AdminServicesPage() {
         onOpenChange={setIsOpen}
         initial={editingService}
         staff={staff}
+        canChoosePro={isMajorAdmin}
         products={products}
         onSave={handleSave}
       />

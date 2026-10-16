@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireMajorAdmin, stockAuth } from '../middleware/auth.js';
+import { getStaffActor, scopeWhere } from '../lib/appointmentAccess.js';
 import {
   MONTH_LABELS,
   WEEKDAY_LABELS,
@@ -130,13 +131,19 @@ export async function chartHandler(req, res) {
       return res.status(400).json({ error: `Período inválido. Use: ${CHART_RANGES.join(", ")}.` });
     }
 
+    // escopo por profissional: MajorAdmin vê a clínica toda; as demais só o que é delas
+    // (este handler também serve a página de Receita, aberta a todos os cargos)
+    const actor = await getStaffActor(req.user.id);
+    if (!actor) return res.status(403).json({ error: "Acesso negado." });
+    const scope = scopeWhere(actor);
+
     const now = new Date();
 
     // ALL começa no primeiro atendimento concluído
     let firstDate = null;
     if (range === "ALL") {
       const first = await prisma.appointment.findMany({
-        where: { status: "Completed" },
+        where: { ...scope, status: "Completed" },
         orderBy: { date: "asc" },
         take: 1,
         select: { date: true },
@@ -149,7 +156,7 @@ export async function chartHandler(req, res) {
     const rangeEnd = buckets[buckets.length - 1].end;
 
     const appointments = await prisma.appointment.findMany({
-      where: { status: "Completed", date: { gte: rangeStart, lt: rangeEnd } },
+      where: { ...scope, status: "Completed", date: { gte: rangeStart, lt: rangeEnd } },
       select: {
         date: true,
         service: { select: { price: true } },

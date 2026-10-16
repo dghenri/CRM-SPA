@@ -9,10 +9,16 @@ import { authenticateToken, requireStaff, requireUser } from '../middleware/auth
 import { notifyAppointmentCreated, notifyAppointmentStatus } from '../services/notifications.js';
 import { revertAppointmentConsumption, syncAppointmentStock } from '../services/recipes.js';
 import { StockError } from '../services/stock.js';
+import { getStaffActor, loadStaffActor, scopeWhere, canManage, notFoundError } from '../lib/appointmentAccess.js';
 
 const router = Router();
 
 //=============================================================== AGENDAMENTOS (APPOINTMENTS)
+//
+// ISOLAMENTO POR PROFISSIONAL (ver lib/appointmentAccess.js):
+// - MajorAdmin: vê e gerencia todos os agendamentos.
+// - Funcionária comum: só vê/edita/apaga/adia/inicia os agendamentos em que
+//   `professionalId` é o id dela. Acesso indevido responde 404.
 
 // Código de 6 letras mostrado ao cliente (diferente do `id`, que é o
 // ObjectId interno do Mongo). Tenta criar o agendamento algumas vezes,
@@ -49,9 +55,12 @@ async function createAppointmentWithUniqueCode(data, preferredCode, options, att
 }
 
 //------------------------------------------------------------- POST ROUTE (cria um agendamento)
-// - Cliente logado: só pode criar agendamento pra si mesmo, vinculado a um serviço.
+// - Cliente logado: só pode criar agendamento pra si mesmo, vinculado a um serviço
+//   (o profissional é sempre o responsável cadastrado no serviço).
 // - Equipe logada: pode criar pra qualquer cliente (ou sem cliente/serviço vinculado -
 //   ex: evento avulso na agenda), com título e cor personalizados.
+//   Funcionária comum só cria na PRÓPRIA agenda (o professionalId do body é ignorado);
+//   só o MajorAdmin escolhe o profissional.
 router.post('/appointments', authenticateToken, async (req, res) => {
   try {
     const { title, date, endDate, color, notes, serviceId, customerId, professionalId, code, paymentMethod } = req.body;
@@ -87,15 +96,20 @@ router.post('/appointments', authenticateToken, async (req, res) => {
 
     if (serviceId) data.service = { connect: { id: serviceId } };
 
-    // se não veio um profissional explícito, herda o responsável cadastrado
-    // no próprio serviço (ex: Botox -> Dra. Fulana já vinculada por padrão)
-    const resolvedProfessionalId = professionalId || service?.professionalId || null;
-    if (resolvedProfessionalId) data.professional = { connect: { id: resolvedProfessionalId } };
+    // profissional responsável. Cliente: sempre o do serviço (nunca confia no body).
+    // Equipe: MajorAdmin escolhe (ou herda do serviço); funcionária comum = ela mesma.
+    let resolvedProfessionalId = null;
 
     if (req.user.type === "user") {
       if (!serviceId || !service.available) {
         return res.status(400).json({ error: "Selecione um serviço disponível." });
       }
+      // sem profissional responsável a sessão nasceria "órfã" (só o MajorAdmin a veria)
+      if (!service.professionalId) {
+        return res.status(400).json({ error: "Este procedimento ainda não tem profissional responsável." });
+      }
+      resolvedProfessionalId = service.professionalId;
+
       // cliente só agenda com o perfil completo (telefone e data de nascimento)
       const me = await prisma.user.findUnique({ where: { id: req.user.id } });
       const missing = getMissingProfileFields(me);
@@ -116,9 +130,18 @@ router.post('/appointments', authenticateToken, async (req, res) => {
       }
       data.customer = { connect: { id: req.user.id } };
     } else {
+      const actor = await getStaffActor(req.user.id);
+      if (!actor) return res.status(403).json({ error: "Acesso negado." });
+
+      resolvedProfessionalId = actor.isAdmin
+        ? professionalId || service?.professionalId || null
+        : actor.id;
+
       // equipe: cliente é opcional (evento avulso na agenda)
       if (customerId) data.customer = { connect: { id: customerId } };
     }
+
+    if (resolvedProfessionalId) data.professional = { connect: { id: resolvedProfessionalId } };
 
     const appointment = await createAppointmentWithUniqueCode(data, code, {
       include: { service: true, customer: true, professional: { select: { id: true, name: true } } },
@@ -137,7 +160,9 @@ const APPOINTMENT_STATUSES = ["Scheduled", "Confirmed", "Completed", "Cancelled"
 const APPOINTMENT_INCLUDE = { service: true, customer: true, professional: { select: { id: true, name: true } } };
 
 //------------------------------------------------------------- PUT ROUTE (equipe edita um agendamento completo)
-router.put('/appointments/:id', authenticateToken, requireStaff, async (req, res) => {
+// Só o profissional responsável (ou o MajorAdmin) edita/adia. Só o MajorAdmin
+// pode trocar o profissional (senão uma funcionária "passaria" a sessão pra outra).
+router.put('/appointments/:id', authenticateToken, requireStaff, loadStaffActor, async (req, res) => {
   try {
     const { title, date, endDate, color, notes, status, serviceId, customerId, professionalId, paymentMethod } = req.body;
 
@@ -165,17 +190,14 @@ router.put('/appointments/:id', authenticateToken, requireStaff, async (req, res
     if (customerId !== undefined) {
       data.customer = customerId ? { connect: { id: customerId } } : { disconnect: true };
     }
-    if (professionalId !== undefined) {
+    // troca de profissional: só MajorAdmin (pra funcionária comum o campo é ignorado)
+    if (professionalId !== undefined && req.actor.isAdmin) {
       data.professional = professionalId ? { connect: { id: professionalId } } : { disconnect: true };
     }
 
     const { appointment, stock, previousStatus } = await prisma.$transaction(async (tx) => {
       const before = await tx.appointment.findUnique({ where: { id: req.params.id } });
-      if (!before) {
-        const notFound = new Error("Agendamento não encontrado.");
-        notFound.code = "P2025";
-        throw notFound;
-      }
+      if (!before || !canManage(req.actor, before)) throw notFoundError();
       const appointment = await tx.appointment.update({ where: { id: req.params.id }, data, include: APPOINTMENT_INCLUDE });
       const stock = await syncAppointmentStock(tx, { before, after: appointment, staffId: req.user.id });
       return { appointment, stock, previousStatus: before.status };
@@ -211,13 +233,15 @@ router.get('/appointments/me', authenticateToken, requireUser, async (req, res) 
   }
 });
 
-//------------------------------------------------------------- GET ROUTE (equipe lista todos os agendamentos, com filtros opcionais)
-router.get('/appointments', authenticateToken, requireStaff, async (req, res) => {
+//------------------------------------------------------------- GET ROUTE (equipe lista os agendamentos da própria agenda, com filtros opcionais)
+// MajorAdmin recebe todos; funcionária comum só os dela.
+router.get('/appointments', authenticateToken, requireStaff, loadStaffActor, async (req, res) => {
   try {
     const { status, customerId, serviceId } = req.query;
 
     const appointments = await prisma.appointment.findMany({
       where: {
+        ...scopeWhere(req.actor),
         status: status || undefined,
         customerId: customerId || undefined,
         serviceId: serviceId || undefined,
@@ -278,7 +302,7 @@ router.get('/appointments/availability', authenticateToken, async (req, res) => 
 });
 
 //------------------------------------------------------------- PATCH ROUTE (equipe atualiza só o status de um agendamento)
-router.patch('/appointments/:id/status', authenticateToken, requireStaff, async (req, res) => {
+router.patch('/appointments/:id/status', authenticateToken, requireStaff, loadStaffActor, async (req, res) => {
   try {
     const { status } = req.body;
     if (!APPOINTMENT_STATUSES.includes(status)) {
@@ -287,11 +311,7 @@ router.patch('/appointments/:id/status', authenticateToken, requireStaff, async 
 
     const { appointment, stock, previousStatus } = await prisma.$transaction(async (tx) => {
       const before = await tx.appointment.findUnique({ where: { id: req.params.id } });
-      if (!before) {
-        const notFound = new Error("Agendamento não encontrado.");
-        notFound.code = "P2025";
-        throw notFound;
-      }
+      if (!before || !canManage(req.actor, before)) throw notFoundError();
       const appointment = await tx.appointment.update({ where: { id: req.params.id }, data: { status }, include: APPOINTMENT_INCLUDE });
       const stock = await syncAppointmentStock(tx, { before, after: appointment, staffId: req.user.id });
       return { appointment, stock, previousStatus: before.status };
@@ -311,7 +331,7 @@ router.patch('/appointments/:id/status', authenticateToken, requireStaff, async 
   }
 });
 
-//------------------------------------------------------------- DELETE ROUTE (cancelar agendamento - dono ou equipe)
+//------------------------------------------------------------- DELETE ROUTE (cancelar agendamento - dono ou equipe responsável)
 router.delete('/appointments/:id', authenticateToken, async (req, res) => {
   try {
     const appointment = await prisma.appointment.findUnique({ where: { id: req.params.id } });
@@ -324,6 +344,15 @@ router.delete('/appointments/:id', authenticateToken, async (req, res) => {
 
     if (!isOwner && !isStaff) {
       return res.status(403).json({ error: "Você não pode cancelar este agendamento." });
+    }
+
+    // equipe: só o profissional responsável (ou o MajorAdmin) pode apagar
+    if (isStaff) {
+      const actor = await getStaffActor(req.user.id);
+      if (!actor) return res.status(403).json({ error: "Acesso negado." });
+      if (!canManage(actor, appointment)) {
+        return res.status(404).json({ error: "Agendamento não encontrado." });
+      }
     }
 
     // atendimento concluído já consumiu insumos: só a equipe pode removê-lo (o estorno é registrado em nome dela)
@@ -361,19 +390,19 @@ router.delete('/appointments/:id', authenticateToken, async (req, res) => {
 //=============================================================== INICIAR ATENDIMENTO (HOME DO STAFF)
 //
 // Regras:
-// - Só o clique do profissional inicia o atendimento: `startedAt` = agora.
-//   Nada começa sozinho pelo relógio.
+// - Só o clique do profissional responsável (ou do MajorAdmin) inicia o
+//   atendimento: `startedAt` = agora. Nada começa sozinho pelo relógio.
 // - Só dá para iniciar (ou desfazer o início) enquanto o status é Scheduled ou
 //   Confirmed. Iniciar um "Agendado" também o marca como "Confirmed" (o cliente
 //   está ali). Finalizar/Não compareceu continuam pelo PUT/PATCH de status.
 // - Iniciar duas vezes não muda a hora do primeiro início.
 // - Body { started: false } desfaz o início (volta a "atrasada" se o horário passou).
-router.post('/appointments/:id/start', authenticateToken, requireStaff, async (req, res) => {
+router.post('/appointments/:id/start', authenticateToken, requireStaff, loadStaffActor, async (req, res) => {
   try {
     const started = req.body?.started !== false;
 
     const current = await prisma.appointment.findUnique({ where: { id: req.params.id } });
-    if (!current) {
+    if (!current || !canManage(req.actor, current)) {
       return res.status(404).json({ error: "Agendamento não encontrado." });
     }
     if (current.status !== "Scheduled" && current.status !== "Confirmed") {

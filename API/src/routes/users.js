@@ -5,7 +5,8 @@ import { ACCESS_TOKEN_KEY } from '../lib/config.js';
 import { prisma } from '../lib/prisma.js';
 import { toPublicUser } from '../lib/serializers.js';
 import { MIN_AGE_MESSAGE, duplicateFieldMessage, isUnderMinAge, isValidCpf } from '../lib/validators.js';
-import { authenticateToken, requireStaff, requireUser } from '../middleware/auth.js';
+import { authenticateToken, requireMajorAdmin, requireStaff, requireUser, stockAuth } from '../middleware/auth.js';
+import { loadStaffActor, scopeWhere } from '../lib/appointmentAccess.js';
 import { grantWelcomeCoupon } from '../services/welcomeCoupon.js';
 
 const router = Router();
@@ -263,11 +264,12 @@ router.get('/users', authenticateToken, requireStaff, async (req, res) => {
 });
 
 //------------------------------------------------------------- GET ROUTE (equipe busca um cliente específico)
-router.get('/users/:id', authenticateToken, requireStaff, async (req, res) => {
+router.get('/users/:id', authenticateToken, requireStaff, loadStaffActor, async (req, res) => {
   try {
     const customer = await prisma.user.findUnique({
       where: { id: req.params.id },
-      include: { favoriteServices: true, exclusiveCoupons: true, appointments: true },
+      // agendamentos do cliente: MajorAdmin vê todos; as demais só os que são delas
+      include: { favoriteServices: true, exclusiveCoupons: true, appointments: { where: scopeWhere(req.actor) } },
     });
 
     if (!customer) {
@@ -330,8 +332,9 @@ router.post('/users', authenticateToken, requireStaff, async (req, res) => {
   }
 });
 
-//------------------------------------------------------------- PUT ROUTE (equipe edita um cliente específico)
-router.put('/users/:id', authenticateToken, requireStaff, async (req, res) => {
+//------------------------------------------------------------- PUT ROUTE (MajorAdmin edita um cliente específico)
+// Só o MajorAdmin edita clientes (stockAuth carrega o cargo do banco, não do token).
+router.put('/users/:id', ...stockAuth, requireMajorAdmin, async (req, res) => {
   try {
     const { name, email, password, gender, phone, birthdate, cpf } = req.body;
 
@@ -380,8 +383,9 @@ router.put('/users/:id', authenticateToken, requireStaff, async (req, res) => {
   }
 });
 
-//------------------------------------------------------------- DELETE ROUTE (equipe remove um cliente específico)
-router.delete('/users/:id', authenticateToken, requireStaff, async (req, res) => {
+//------------------------------------------------------------- DELETE ROUTE (MajorAdmin remove um cliente específico)
+// Só o MajorAdmin exclui clientes (a exclusão também afeta o histórico das demais profissionais).
+router.delete('/users/:id', ...stockAuth, requireMajorAdmin, async (req, res) => {
   try {
     await prisma.user.delete({
       where: { id: req.params.id }, // ObjectId do Mongo é string, não Number

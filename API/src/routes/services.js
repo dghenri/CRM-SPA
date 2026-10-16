@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, requireMajorAdmin, requireStaff, stockAuth } from '../middleware/auth.js';
+import { loadStaffActor } from '../lib/appointmentAccess.js';
 
 const router = Router();
 
@@ -19,8 +20,10 @@ router.get('/services', async (req, res) => {
   }
 });
 
-//------------------------------------------------------------- POST ROUTE (services - protegido)
-router.post('/services', authenticateToken, async (req, res) => {
+//------------------------------------------------------------- POST ROUTE (services - só equipe)
+// MajorAdmin escolhe o profissional responsável; para as demais o responsável
+// é sempre a própria criadora (o professionalId do body é ignorado).
+router.post('/services', authenticateToken, requireStaff, loadStaffActor, async (req, res) => {
   try {
     const { title, description, duration, price, image, available, professionalId } = req.body;
 
@@ -38,7 +41,7 @@ router.post('/services', authenticateToken, async (req, res) => {
           image?.trim() ||
           `https://picsum.photos/seed/${encodeURIComponent(title)}/600/450`,
         available: available ?? true,
-        professionalId: professionalId || null,
+        professionalId: req.actor.isAdmin ? professionalId || null : req.actor.id,
       },
       include: { professional: { select: { id: true, name: true } } },
     });
@@ -50,11 +53,21 @@ router.post('/services', authenticateToken, async (req, res) => {
   }
 });
 
-//------------------------------------------------------------- PATCH ROUTE (services - protegido; edição e toggle de "available")
-router.patch('/services/:id', authenticateToken, async (req, res) => {
+//------------------------------------------------------------- PATCH ROUTE (services - só equipe; edição e toggle de "available")
+// MajorAdmin edita qualquer procedimento e é o único que troca o profissional responsável.
+// As demais só editam os procedimentos em que são a profissional responsável.
+router.patch('/services/:id', authenticateToken, requireStaff, loadStaffActor, async (req, res) => {
   try {
     const { id } = req.params;
     const { title, description, duration, price, image, available, professionalId } = req.body;
+
+    const existing = await prisma.service.findUnique({ where: { id }, select: { professionalId: true } });
+    if (!existing) {
+      return res.status(404).json({ error: "Serviço não encontrado." });
+    }
+    if (!req.actor.isAdmin && existing.professionalId !== req.actor.id) {
+      return res.status(403).json({ error: "Você só pode editar os seus procedimentos." });
+    }
 
     const data = {};
     if (title !== undefined) data.title = title.trim();
@@ -63,7 +76,7 @@ router.patch('/services/:id', authenticateToken, async (req, res) => {
     if (price !== undefined) data.price = Number(price);
     if (image !== undefined) data.image = image.trim();
     if (available !== undefined) data.available = available;
-    if (professionalId !== undefined) data.professionalId = professionalId || null;
+    if (professionalId !== undefined && req.actor.isAdmin) data.professionalId = professionalId || null;
 
     const service = await prisma.service.update({
       where: { id }, // ObjectId do Mongo é string, não Number
@@ -81,8 +94,9 @@ router.patch('/services/:id', authenticateToken, async (req, res) => {
   }
 });
 
-//------------------------------------------------------------- DELETE ROUTE (services - protegido)
-router.delete('/services/:id', authenticateToken, async (req, res) => {
+//------------------------------------------------------------- DELETE ROUTE (services - só MajorAdmin)
+// Excluir apaga a receita de insumos e desvincula as sessões antigas do serviço.
+router.delete('/services/:id', ...stockAuth, requireMajorAdmin, async (req, res) => {
   try {
     // a receita (RecipeItem) depende do serviço: sai junto com ele
     await prisma.$transaction(async (tx) => {

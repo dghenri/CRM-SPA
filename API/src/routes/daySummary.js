@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authenticateToken, requireStaff } from '../middleware/auth.js';
+import { loadStaffActor, scopeWhere } from '../lib/appointmentAccess.js';
 
 const router = Router();
 
@@ -18,6 +19,8 @@ const router = Router();
 //   Atendimento ainda não concluído mostra o custo PREVISTO pela receita
 //   (suppliesEstimated: true); concluído mostra o consumo real.
 
+// Escopo por profissional: MajorAdmin vê o dia da clínica inteira; as demais
+// funcionárias só veem as sessões em que são a profissional responsável.
 const DAY_TZ_OFFSET_H = -3;
 const DAY_MS = 24 * 3600 * 1000;
 const dayRound2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -31,11 +34,11 @@ function clinicDayStart(date) {
   return new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate(), -DAY_TZ_OFFSET_H));
 }
 
-async function daySnapshot(dayStart, { withEstimates = false } = {}) {
+async function daySnapshot(dayStart, scope, { withEstimates = false } = {}) {
   const dayEnd = new Date(dayStart.getTime() + DAY_MS);
 
   const appointments = await prisma.appointment.findMany({
-    where: { date: { gte: dayStart, lt: dayEnd } },
+    where: { ...scope, date: { gte: dayStart, lt: dayEnd } },
     include: {
       service: { select: { id: true, price: true } },
       couponRedemptions: { select: { usedAt: true, discountAmount: true } },
@@ -120,11 +123,12 @@ async function daySnapshot(dayStart, { withEstimates = false } = {}) {
   return { sessions: active.length, completedCount: completed.length, revenue, supplies, net: dayRound2(revenue - supplies), costComplete, byAppointment };
 }
 
-router.get('/staff/day-summary', authenticateToken, requireStaff, async (req, res) => {
+router.get('/staff/day-summary', authenticateToken, requireStaff, loadStaffActor, async (req, res) => {
   try {
     const today = clinicDayStart(new Date());
     const lastWeek = new Date(today.getTime() - 7 * DAY_MS);
-    const [cur, prev] = await Promise.all([daySnapshot(today, { withEstimates: true }), daySnapshot(lastWeek)]);
+    const scope = scopeWhere(req.actor);
+    const [cur, prev] = await Promise.all([daySnapshot(today, scope, { withEstimates: true }), daySnapshot(lastWeek, scope)]);
 
     const metric = (key) => ({ value: cur[key], compare: prev[key], change: dayChange(cur[key], prev[key]) });
     res.json({

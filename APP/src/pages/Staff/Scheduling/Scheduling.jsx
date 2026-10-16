@@ -157,7 +157,8 @@ function mapAppointmentFromApi(a) {
     clientPhone: a.customer?.phone,
     clientPhoto: a.customer?.photo ?? a.customer?.avatar ?? null,
     professionalId: a.professionalId ?? a.professional?.id ?? null,
-    professionalName: a.professional?.name,
+    // professionalName = nome guardado quando a profissional foi excluída (sessões antigas)
+    professionalName: a.professional?.name ?? a.professionalName ?? null,
   };
 }
 // Converte o formato interno para o payload esperado por

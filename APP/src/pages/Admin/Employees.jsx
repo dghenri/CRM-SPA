@@ -44,6 +44,7 @@ import {
   UserCheck,
   UserX,
   UserMinus,
+  ArrowRightLeft,
 
 } from "lucide-react";
 
@@ -66,6 +67,11 @@ export default function Collaborators() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  // modal "transferir antes de excluir" (funcionária com sessões futuras / procedimentos)
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
+  const [isTransferring, setIsTransferring] = useState(false);
+  const [transferTo, setTransferTo] = useState(null);
+  const [workload, setWorkload] = useState({ futureAppointments: 0, services: 0 });
   const [selectedUser, setSelectedUser] = useState(null);
   const [users, setUsers] = useState([]);
   const [selected, setSelected] = useState(new Set(["news", "travel"]));
@@ -85,15 +91,28 @@ export default function Collaborators() {
     }
   }
 
-  /* DEL users */
-  async function delUsers(id) {
+  /* DEL users - com transferTo, as sessões futuras e os procedimentos passam pra essa funcionária */
+  async function delUsers(id, transferToId) {
     try {
-      await api.delete(`/staff/${id}`);
+      const query = transferToId ? `?transferTo=${encodeURIComponent(transferToId)}` : "";
+      await api.delete(`/staff/${id}${query}`);
+      toast.success(transferToId ? "Sessões transferidas e funcionária removida." : "Funcionária removida.");
+      return true;
     } catch (error) {
       console.error(error);
+      toast.danger(error.message || "Não foi possível excluir a funcionária.");
+      return false;
+    } finally {
+      getUsers();
     }
+  }
 
-    getUsers()
+  async function handleTransferAndDelete() {
+    if (!selectedUser?.id || !transferTo) return;
+    setIsTransferring(true);
+    const ok = await delUsers(selectedUser.id, transferTo);
+    setIsTransferring(false);
+    if (ok) setIsTransferOpen(false);
   }
 
   useEffect(() => {
@@ -284,11 +303,27 @@ export default function Collaborators() {
     }
   };
 
-  /* Delete employee dialog */
-  const handleDelet = (user) => {
+  /* Delete employee dialog: se ela ainda tem sessões futuras/procedimentos, abre o modal de transferência */
+  const handleDelet = async (user) => {
     setSelectedUser(user);
+    setTransferTo(null);
+    try {
+      const load = await api.get(`/staff/${user.id}/workload`);
+      if (load.futureAppointments > 0 || load.services > 0) {
+        setWorkload(load);
+        setIsTransferOpen(true);
+        return;
+      }
+    } catch (error) {
+      console.error(error);
+      toast.danger(error.message || "Não foi possível verificar as sessões da funcionária.");
+      return;
+    }
     setIsDeleteOpen(true);
   };
+
+  // quem pode receber: outras funcionárias ativas
+  const transferReceivers = users.filter((u) => u.id !== selectedUser?.id && u.status === "Active");
 
   return (
     <>
@@ -884,6 +919,91 @@ export default function Collaborators() {
           </AlertDialog.Container>
         </AlertDialog.Backdrop>
       </AlertDialog>
+
+      {/* Transfer & delete modal */}
+      <Modal isOpen={isTransferOpen} onOpenChange={setIsTransferOpen}>
+        <Modal.Backdrop variant={"opaque"}>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-130 border-6">
+
+              {/* HEADER */}
+              <Modal.Header className="flex-row items-center mb-4">
+                <Modal.Icon className="size-15 bg-default text-foreground">
+                  <ArrowRightLeft className="size-8" />
+                </Modal.Icon>
+                <div>
+                  <Modal.Heading className="text-lg">Transferir antes de excluir</Modal.Heading>
+                  <span className="text-xs font-semibold text-muted">{selectedUser?.name}</span>
+                </div>
+              </Modal.Header>
+              <Separator className="mb-4" />
+
+              {/* BODY */}
+              <Modal.Body className="flex flex-col gap-4 p-4">
+                <p className="text-sm leading-5 font-semibold text-muted">
+                  {selectedUser?.name} ainda tem{" "}
+                  <span className="text-foreground">
+                    {workload.futureAppointments} sessão(ões) futura(s)
+                  </span>{" "}
+                  e{" "}
+                  <span className="text-foreground">{workload.services} procedimento(s)</span>.
+                  Escolha quem vai recebê-los. As sessões já realizadas continuam com o nome dela no histórico.
+                </p>
+
+                <Select
+                  selectedKey={transferTo}
+                  onSelectionChange={(key) => setTransferTo(key)}
+                  placeholder="Selecione a funcionária"
+                  isDisabled={transferReceivers.length === 0}
+                >
+                  <Label className="text-muted">Transferir para</Label>
+                  <Select.Trigger className="font-semibold border-2 border-border">
+                    <Select.Value />
+                    <Select.Indicator />
+                  </Select.Trigger>
+                  <Select.Popover className="p-1">
+                    <ListBox>
+                      {transferReceivers.map((r) => (
+                        <ListBox.Item key={r.id} id={r.id} textValue={r.name}>
+                          {r.name}
+                          <span className="ml-2 text-xs font-semibold text-muted">{formatLabel(r.role)}</span>
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      ))}
+                    </ListBox>
+                  </Select.Popover>
+                </Select>
+
+                {transferReceivers.length === 0 && (
+                  <p className="text-xs font-semibold text-danger">
+                    Não há outra funcionária ativa para receber. Ative ou cadastre uma antes de excluir.
+                  </p>
+                )}
+              </Modal.Body>
+
+              {/* FOOTER */}
+              <Modal.Footer>
+                <Button
+                  variant="tertiary"
+                  onPress={() => setIsTransferOpen(false)}
+                  className="p-6"
+                >
+                  Cancel
+                </Button>
+
+                <Button
+                  variant="danger"
+                  onPress={handleTransferAndDelete}
+                  isDisabled={!transferTo || isTransferring}
+                  className="p-6"
+                >
+                  {isTransferring ? <Spinner color="current" className="size-5" /> : "Transferir e excluir"}
+                </Button>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
     </>
   );
 }

@@ -248,7 +248,11 @@ model Appointment {
   // profissional responsável pela sessão - opcional pra não quebrar
   // agendamentos avulsos sem ninguém definido ainda
   professionalId String? @db.ObjectId
-  professional   Staff?  @relation(fields: [professionalId], references: [id])
+  professional   Staff?  @relation(fields: [professionalId], references: [id], onDelete: SetNull)
+
+  // nome da profissional guardado quando a conta dela é excluída (fica no histórico das sessões
+  // passadas, já que professionalId vira nulo). Enquanto ela existir, o nome vem de `professional`.
+  professionalName String?
 
   couponRedemptions CouponRedemption[]
 

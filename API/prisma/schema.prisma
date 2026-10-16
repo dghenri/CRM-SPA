@@ -269,6 +269,9 @@ model Service {
   image       String
   available   Boolean  @default(true)
   category    String? // usado pelo escopo "Category" dos cupons (Coupon.scope = Category)
+  // idade mínima (anos) do cliente para agendar este procedimento; null = sem restrição.
+  // Opcional de propósito: procedimentos já cadastrados no Mongo não têm o campo.
+  minAge      Int?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

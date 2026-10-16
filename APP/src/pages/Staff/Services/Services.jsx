@@ -10,7 +10,7 @@ import {
 } from "@heroui/react";
 
 import { 
-  Clock, Tag, Pencil, Trash2, Plus, EyeOff, Check, CloudAlert, IdCardLanyard, Package
+  Clock, Tag, Pencil, Trash2, Plus, EyeOff, Check, CloudAlert, IdCardLanyard, Package, ShieldAlert
 } from "lucide-react";
 
 function formatPrice(value) {
@@ -167,6 +167,7 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, products, onSa
     price: "",
     image: "",
     available: true,
+    minAge: "",
     professionalId: "",
   };
   const [form, setForm] = useState(EMPTY_SERVICE_FORM);
@@ -215,6 +216,7 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, products, onSa
               price: String(initial.price),
               image: initial.image,
               available: initial.available,
+              minAge: initial.minAge != null ? String(initial.minAge) : "",
               professionalId: initial.professionalId ?? initial.professional?.id ?? "",
             }
           : EMPTY_SERVICE_FORM
@@ -226,6 +228,11 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, products, onSa
   const handleSubmit = (close) => {
     if (!form.title.trim() || !form.description.trim() || !form.duration || !form.price) {
       setError("Preencha todos os campos obrigatórios.");
+      return;
+    }
+    const minAgeNum = form.minAge === "" ? null : Number(form.minAge);
+    if (minAgeNum !== null && (!Number.isInteger(minAgeNum) || minAgeNum < 0 || minAgeNum > 120)) {
+      setError("A idade mínima deve ser um número inteiro entre 0 e 120.");
       return;
     }
     // receita: valida e só envia se foi carregada e mudou (null = não mexe)
@@ -256,6 +263,7 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, products, onSa
         form.image.trim() ||
         `https://picsum.photos/seed/${encodeURIComponent(form.title)}/600/450`,
       available: form.available,
+      minAge: minAgeNum, // null/0 = sem restrição (a API também valida)
       // só o MajorAdmin define o profissional: para os demais o campo nem é enviado
       // (a API também precisa recusar - o front sozinho não é barreira de segurança)
       ...(canChoosePro ? { professionalId: form.professionalId || null } : {}),
@@ -266,7 +274,7 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, products, onSa
   return (
     <Modal>
       <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
-        <Modal.Container placement="center" size="lg" scroll="inside">
+        <Modal.Container placement="center" size="cover" scroll="inside" className="px-100">
           <Modal.Dialog>
             {({ close }) => (
               <>
@@ -325,6 +333,25 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, products, onSa
                         className="border border-border font-medium" />
                     </TextField>
                   </div>
+
+                  <TextField
+                    className="mb-4"
+                    value={form.minAge}
+                    onChange={(v) => setForm({ ...form, minAge: v })}
+                  >
+                    <Label>Idade mínima (anos) (opcional)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="120"
+                      step="1"
+                      placeholder="Sem restrição"
+                      className="border border-border font-medium"
+                    />
+                    <p className="mt-1 text-xs font-semibold text-muted">
+                      Clientes mais novos não conseguem agendar este procedimento. Deixe vazio para liberar para todos.
+                    </p>
+                  </TextField>
 
                   <TextField
                     value={form.image}
@@ -456,7 +483,7 @@ function ServiceCard({ service, recipe, onEdit, onDelete, onToggle, canEdit = fa
             )}
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <p size="sm" variant="soft" color="success" className="text-sm font-semibold">
               {formatPrice(service.price)}
             </p>
@@ -464,6 +491,12 @@ function ServiceCard({ service, recipe, onEdit, onDelete, onToggle, canEdit = fa
               <Clock size={13} />
               {service.duration} min
             </Chip>
+            {service.minAge ? (
+              <Chip size="sm" variant="soft" color="warning" title={`Só para clientes com ${service.minAge} anos ou mais`}>
+                <ShieldAlert size={13} />
+                {service.minAge}+ anos
+              </Chip>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -711,7 +744,7 @@ export default function AdminServicesPage() {
           <p className="text-sm text-muted font-semibold">Carregando...</p>
         </div>
       ) : (
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <button
           onClick={openNew}
           className="flex min-h-70 flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-default-200 text-default-500 transition hover:border-primary hover:text-primary"

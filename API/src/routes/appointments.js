@@ -10,6 +10,7 @@ import { notifyAppointmentCreated, notifyAppointmentStatus } from '../services/n
 import { revertAppointmentConsumption, syncAppointmentStock } from '../services/recipes.js';
 import { StockError } from '../services/stock.js';
 import { getStaffActor, loadStaffActor, scopeWhere, canManage, notFoundError } from '../lib/appointmentAccess.js';
+import { ageFromBirthdate, checkServiceMinAge } from '../lib/serviceAge.js';
 
 const router = Router();
 
@@ -128,6 +129,17 @@ router.post('/appointments', authenticateToken, async (req, res) => {
           code: "UNDERAGE",
         });
       }
+      // idade mínima específica do procedimento (definida pela clínica)
+      if (service.minAge) {
+        const age = ageFromBirthdate(me.birthdate);
+        if (age === null || age < service.minAge) {
+          return res.status(403).json({
+            error: `Este procedimento é permitido a partir de ${service.minAge} anos.`,
+            code: "SERVICE_MIN_AGE",
+            minAge: service.minAge,
+          });
+        }
+      }
       data.customer = { connect: { id: req.user.id } };
     } else {
       const actor = await getStaffActor(req.user.id);
@@ -138,7 +150,12 @@ router.post('/appointments', authenticateToken, async (req, res) => {
         : actor.id;
 
       // equipe: cliente é opcional (evento avulso na agenda)
-      if (customerId) data.customer = { connect: { id: customerId } };
+      if (customerId) {
+        // a regra de idade mínima do procedimento vale também quando a equipe agenda
+        const tooYoung = await checkServiceMinAge(prisma, serviceId, customerId);
+        if (tooYoung) return res.status(403).json(tooYoung);
+        data.customer = { connect: { id: customerId } };
+      }
     }
 
     if (resolvedProfessionalId) data.professional = { connect: { id: resolvedProfessionalId } };
@@ -198,6 +215,14 @@ router.put('/appointments/:id', authenticateToken, requireStaff, loadStaffActor,
     const { appointment, stock, previousStatus } = await prisma.$transaction(async (tx) => {
       const before = await tx.appointment.findUnique({ where: { id: req.params.id } });
       if (!before || !canManage(req.actor, before)) throw notFoundError();
+      // idade mínima: só confere quando o procedimento ou o cliente MUDAM
+      // (editar horário/notas de uma sessão já existente não é bloqueado)
+      const newServiceId = serviceId !== undefined ? serviceId || null : before.serviceId;
+      const newCustomerId = customerId !== undefined ? customerId || null : before.customerId;
+      if (newServiceId !== before.serviceId || newCustomerId !== before.customerId) {
+        const tooYoung = await checkServiceMinAge(tx, newServiceId, newCustomerId);
+        if (tooYoung) throw Object.assign(new Error(tooYoung.error), { minAgeViolation: tooYoung });
+      }
       const appointment = await tx.appointment.update({ where: { id: req.params.id }, data, include: APPOINTMENT_INCLUDE });
       const stock = await syncAppointmentStock(tx, { before, after: appointment, staffId: req.user.id });
       return { appointment, stock, previousStatus: before.status };
@@ -209,6 +234,7 @@ router.put('/appointments/:id', authenticateToken, requireStaff, loadStaffActor,
     res.status(200).json({ ...appointment, customer: toPublicUser(appointment.customer), stockWarnings: stock.warnings });
   } catch (error) {
     if (error instanceof StockError) return res.status(error.status).json({ error: error.message });
+    if (error.minAgeViolation) return res.status(403).json(error.minAgeViolation);
     if (error.code === "P2025") {
       return res.status(404).json({ error: "Agendamento não encontrado." });
     }

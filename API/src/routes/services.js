@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authenticateToken, requireMajorAdmin, requireStaff, stockAuth } from '../middleware/auth.js';
 import { loadStaffActor } from '../lib/appointmentAccess.js';
+import { parseMinAge } from '../lib/serviceAge.js';
 
 const router = Router();
 
@@ -31,6 +32,9 @@ router.post('/services', authenticateToken, requireStaff, loadStaffActor, async 
       return res.status(400).json({ error: "Preencha todos os campos obrigatórios." });
     }
 
+    const minAge = parseMinAge(req.body.minAge);
+    if (minAge.error) return res.status(400).json({ error: minAge.error });
+
     const service = await prisma.service.create({
       data: {
         title: title.trim(),
@@ -41,6 +45,7 @@ router.post('/services', authenticateToken, requireStaff, loadStaffActor, async 
           image?.trim() ||
           `https://picsum.photos/seed/${encodeURIComponent(title)}/600/450`,
         available: available ?? true,
+        minAge: minAge.skip ? null : minAge.value,
         professionalId: req.actor.isAdmin ? professionalId || null : req.actor.id,
       },
       include: { professional: { select: { id: true, name: true } } },
@@ -69,7 +74,11 @@ router.patch('/services/:id', authenticateToken, requireStaff, loadStaffActor, a
       return res.status(403).json({ error: "Você só pode editar os seus procedimentos." });
     }
 
+    const minAge = parseMinAge(req.body.minAge);
+    if (minAge.error) return res.status(400).json({ error: minAge.error });
+
     const data = {};
+    if (!minAge.skip) data.minAge = minAge.value;
     if (title !== undefined) data.title = title.trim();
     if (description !== undefined) data.description = description.trim();
     if (duration !== undefined) data.duration = Number(duration);

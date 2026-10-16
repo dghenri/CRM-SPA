@@ -732,7 +732,24 @@ export default function AdminServicesPage() {
   };
 
   return (
-    <section className="w-full p-2">
+    <section className="flex flex-col gap-6 p-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Procedimentos</h1>
+          <p className="text-sm text-muted font-semibold">
+            Crie e edite os procedimento disponiveis para os clientes
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          className="flex items-center justify-center gap-2 rounded-3xl border-2 border-dashed"
+          onPress={openNew} 
+        >
+          <Plus />
+          Adicionar procedimento
+        </Button>
+      </div>
+
       {loadError && (
         <p className="flex mb-4 text-sm text-danger font-semibold gap-2">
           {console.log(loadError)} <CloudAlert /> Verifique se o backend está rodando.
@@ -745,15 +762,6 @@ export default function AdminServicesPage() {
         </div>
       ) : (
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        <button
-          onClick={openNew}
-          className="flex min-h-70 flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-default-200 text-default-500 transition hover:border-primary hover:text-primary"
-        >
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-default-100">
-            <Plus size={22} />
-          </div>
-          <span className="text-sm font-semibold">Adicionar serviço</span>
-        </button>
         {services.map((service) => (
           <ServiceCard
             key={service.id}

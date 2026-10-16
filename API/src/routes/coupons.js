@@ -5,6 +5,8 @@ import { authenticateToken, requireStaff, requireUser } from '../middleware/auth
 
 const router = Router();
 
+const isObjectId = (id) => /^[a-f\d]{24}$/i.test(String(id));
+
 //=============================================================== CUPONS (COUPONS)
 
 // Calcula o status "visual" do cupom (usado pelas abas do painel: Todos,
@@ -55,7 +57,8 @@ function computeCouponDiscount(coupon, purchaseAmount) {
     ? (amount * coupon.discountValue) / 100
     : coupon.discountValue;
   if (coupon.maxDiscount) discountAmount = Math.min(discountAmount, coupon.maxDiscount);
-  return discountAmount;
+  // o desconto nunca passa do valor da compra
+  return Math.max(0, Math.min(discountAmount, amount));
 }
 
 //------------------------------------------------------------- POST ROUTE (equipe cria um cupom)
@@ -336,7 +339,13 @@ router.post('/coupons/redeem', authenticateToken, requireUser, async (req, res) 
 //------------------------------------------------------------- POST ROUTE (pré-valida um cupom já resgatado contra o serviço escolhido no bookingflow, sem consumir)
 router.post('/coupons/validate', authenticateToken, requireUser, async (req, res) => {
   try {
-    const { code, serviceId, purchaseAmount } = req.body;
+    const { code, serviceId } = req.body;
+
+    // o valor da compra é SEMPRE o preço real do serviço no banco - o que o front
+    // enviar como `purchaseAmount` é ignorado (a API aceita qualquer requisição forjada)
+    const service = isObjectId(serviceId) ? await prisma.service.findUnique({ where: { id: String(serviceId) } }) : null;
+    if (!service) return res.status(400).json({ error: "Selecione um procedimento válido." });
+    const purchaseAmount = service.price;
 
     const coupon = await prisma.coupon.findUnique({ where: { code: code?.trim().toUpperCase() } });
     if (!coupon || (coupon.userId && coupon.userId !== req.user.id)) {
@@ -383,7 +392,26 @@ router.post('/coupons/validate', authenticateToken, requireUser, async (req, res
 //------------------------------------------------------------- POST ROUTE (aplica de fato um cupom já resgatado a um agendamento - só aqui conta como usado)
 router.post('/coupons/apply', authenticateToken, requireUser, async (req, res) => {
   try {
-    const { redemptionId, serviceId, purchaseAmount, appointmentId } = req.body;
+    const { redemptionId, appointmentId } = req.body;
+
+    if (!isObjectId(redemptionId) || !isObjectId(appointmentId)) {
+      return res.status(400).json({ error: "Informe o cupom resgatado e o agendamento." });
+    }
+
+    // o serviço e o valor da compra vêm do AGENDAMENTO (que precisa ser do próprio cliente),
+    // nunca do que o front enviar - assim ninguém infla o valor nem usa o cupom em sessão alheia
+    const appointment = await prisma.appointment.findUnique({ where: { id: appointmentId }, include: { service: true } });
+    if (!appointment || appointment.customerId !== req.user.id || !appointment.service) {
+      return res.status(404).json({ error: "Agendamento não encontrado." });
+    }
+    const serviceId = appointment.serviceId;
+    const purchaseAmount = appointment.service.price;
+
+    // um cupom por agendamento
+    const alreadyApplied = await prisma.couponRedemption.findMany({ where: { appointmentId } });
+    if (alreadyApplied.some((r) => r.usedAt)) {
+      return res.status(400).json({ error: "Este agendamento já tem um cupom aplicado." });
+    }
 
     const redemption = await prisma.couponRedemption.findUnique({
       where: { id: redemptionId },

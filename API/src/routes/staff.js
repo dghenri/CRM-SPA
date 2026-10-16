@@ -5,6 +5,7 @@ import { ACCESS_TOKEN_KEY } from '../lib/config.js';
 import { prisma } from '../lib/prisma.js';
 import { DEFAULT_STAFF_SETTINGS, toPublicStaff } from '../lib/serializers.js';
 import { authenticateToken, requireMajorAdmin, requireStaff, stockAuth } from '../middleware/auth.js';
+import { broadcastAppointmentsChanged } from '../lib/realtime.js';
 
 const router = Router();
 
@@ -89,8 +90,11 @@ router.get('/auth/staff/me', authenticateToken, requireStaff, async (req, res) =
 });
 
 //------------------------------------------------------------- GET ROUTE (só equipe - clientes não listam a equipe)
-router.get('/staff', authenticateToken, requireStaff, async (req, res) => {
+// MajorAdmin recebe o cadastro completo (email, telefone, nascimento...). As demais só
+// recebem id, nome, cargo e status - o suficiente pro seletor de profissional.
+router.get('/staff', ...stockAuth, async (req, res) => {
   try {
+    const isAdmin = req.staff.role === "MajorAdmin";
     const hasFilters = req.query && Object.keys(req.query).length > 0;
 
     const staff = hasFilters
@@ -102,7 +106,11 @@ router.get('/staff', authenticateToken, requireStaff, async (req, res) => {
         })
       : await prisma.staff.findMany();
 
-    res.status(200).json(staff.map(toPublicStaff))
+    res.status(200).json(
+      isAdmin
+        ? staff.map(toPublicStaff)
+        : staff.map(({ id, name, role, status }) => ({ id, name, role, status }))
+    )
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Error fetching staff." });
@@ -265,21 +273,106 @@ router.put('/staff/:id/availability', authenticateToken, requireStaff, async (re
   }
 });
 
+//------------------------------------------------------------- WORKLOAD (o que ainda está vinculado a uma funcionária)
+// Sessões futuras (Agendada/Confirmada) e procedimentos em que ela é a responsável.
+const pendingWhere = (staffId) => ({
+  professionalId: staffId,
+  status: { in: ["Scheduled", "Confirmed"] },
+  endDate: { gte: new Date() },
+});
+
+async function getStaffWorkload(staffId) {
+  const [futureAppointments, services] = await Promise.all([
+    prisma.appointment.count({ where: pendingWhere(staffId) }),
+    prisma.service.count({ where: { professionalId: staffId } }),
+  ]);
+  return { futureAppointments, services };
+}
+
+// A tela de equipe consulta isto ANTES de excluir: se houver trabalho vinculado,
+// abre o modal pra escolher quem vai receber.
+router.get('/staff/:id/workload', ...stockAuth, requireMajorAdmin, async (req, res) => {
+  try {
+    const target = await prisma.staff.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!target) return res.status(404).json({ error: "Funcionária não encontrada." });
+    res.json(await getStaffWorkload(target.id));
+  } catch (error) {
+    if (error.code === "P2023") return res.status(404).json({ error: "Funcionária não encontrada." });
+    console.error(error);
+    res.status(500).json({ error: "Erro ao verificar as sessões da funcionária." });
+  }
+});
+
 //------------------------------------------------------------- DELETE ROUTE (só MajorAdmin)
 // Antes qualquer token válido (até de cliente) apagava qualquer funcionária.
+//
+// Excluir uma funcionária que ainda tem trabalho vinculado deixaria sessões e procedimentos
+// sem profissional (e eles sumiriam das agendas). Por isso:
+// - sem sessões futuras nem procedimentos: exclui normalmente;
+// - com algum deles: responde 409 e só exclui se vier ?transferTo=<id de outra funcionária
+//   ativa> (escolhida pelo MajorAdmin no modal). Aí as sessões futuras e os procedimentos
+//   passam pra ela e a exclusão segue, tudo na mesma transação.
+// - o histórico passado (sessões já realizadas/canceladas) fica com o NOME da ex-funcionária
+//   guardado em Appointment.professionalName, já que professionalId vira nulo.
 router.delete('/staff/:id', ...stockAuth, requireMajorAdmin, async (req, res) => {
   try {
-    await prisma.staff.delete({
-      where: {
-        id: req.params.id // ObjectId do Mongo é string, não Number
-      },
-    })
+    const { id } = req.params;
+    const transferTo = req.query.transferTo ? String(req.query.transferTo) : null;
 
-    res.status(200).json({
-      message: "User delete successfully." })
+    if (id === req.staff.id) {
+      return res.status(400).json({ error: "Você não pode excluir a própria conta." });
+    }
+
+    const target = await prisma.staff.findUnique({ where: { id }, select: { id: true, name: true } });
+    if (!target) {
+      return res.status(404).json({ error: "Funcionária não encontrada." });
+    }
+
+    const { futureAppointments, services } = await getStaffWorkload(id);
+    const hasWork = futureAppointments > 0 || services > 0;
+
+    if (hasWork) {
+      if (!transferTo) {
+        return res.status(409).json({
+          error: `${target.name} ainda tem ${futureAppointments} sessão(ões) futura(s) e ${services} procedimento(s). Transfira para outra profissional antes de excluir.`,
+          code: "STAFF_HAS_WORK",
+          futureAppointments,
+          services,
+        });
+      }
+      if (transferTo === id) {
+        return res.status(400).json({ error: "Escolha outra profissional para receber a transferência." });
+      }
+      const receiver = await prisma.staff.findUnique({ where: { id: transferTo }, select: { id: true, status: true } });
+      if (!receiver || receiver.status !== "Active") {
+        return res.status(400).json({ error: "A profissional escolhida não existe ou não está ativa." });
+      }
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (hasWork) {
+        await tx.appointment.updateMany({ where: pendingWhere(id), data: { professionalId: transferTo } });
+        await tx.service.updateMany({ where: { professionalId: id }, data: { professionalId: transferTo } });
+      }
+      // o que sobrar com o id dela é histórico: guarda o nome antes do vínculo se perder
+      await tx.appointment.updateMany({ where: { professionalId: id }, data: { professionalName: target.name } });
+      await tx.staff.delete({ where: { id } }); // ObjectId do Mongo é string, não Number
+    });
+
+    broadcastAppointmentsChanged();
+    res.status(200).json({ message: "Funcionária removida com sucesso." });
   } catch (error) {
+    if (error.code === "P2025" || error.code === "P2023") {
+      return res.status(404).json({ error: "Funcionária não encontrada." });
+    }
+    // P2003/P2014: ainda há registros presos a ela (ex: histórico de estoque) - o certo é inativar a conta
+    if (error.code === "P2003" || error.code === "P2014") {
+      return res.status(409).json({
+        error: "Esta funcionária tem histórico (ex: movimentações de estoque) e não pode ser excluída. Inative a conta em vez de excluir.",
+      });
+    }
     console.error(error);
-    res.status(500).json({ message: "Error deleting user." });
+    res.status(500).json({ error: "Erro ao remover funcionária." });
   }
 });
 

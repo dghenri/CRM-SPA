@@ -57,7 +57,7 @@ export default function Landing() {
           <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden bg-default">
             <img
               className="h-full w-full object-cover object-[center_30%]"
-              src="/background-photo-7301798.avif"
+              src="/Wallpapers/background-photo-14868360.avif"
               alt="Background"
             />
             {/* Escurece a imagem de leve para o texto ter contraste */}

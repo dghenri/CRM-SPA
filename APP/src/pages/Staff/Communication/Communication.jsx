@@ -26,7 +26,7 @@ import {
   toast,
 } from "@heroui/react";
 import { parseDate } from "@internationalized/date";
-import { Inbox, Megaphone, Pencil, Plus, Send, Trash2 } from "lucide-react";
+import { Inbox, Pencil, Plus, Send, Trash2 } from "lucide-react";
 import api from "../../../api/api";
 import {
   createBanner,
@@ -757,10 +757,9 @@ export default function CommunicationPage() {
   return (
     <div className="flex flex-col gap-6 p-6">
       <div className="flex items-center gap-3">
-        <Megaphone className="text-muted" />
         <div>
-          <h1 className="text-2xl font-semibold">Comunicação</h1>
-          <p className="text-sm text-muted">Notificações no sino e banners do carrossel da Home dos clientes.</p>
+          <h1 className="text-2xl font-bold">Comunicação</h1>
+          <p className="text-sm text-muted font-semibold">Notificações no sino e banners do carrossel da Home dos clientes.</p>
         </div>
       </div>
 

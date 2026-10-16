@@ -143,7 +143,7 @@ export default function Coupons() {
 
       <div className="w-full h-10 bg-surface-tertiary rounded-full">
         <Tabs className="w-full" defaultSelectedKey="actives">
-          <Tabs.ListContainer className='flex items-center justify-start px-80'>
+          <Tabs.ListContainer className='flex items-center justify-start'>
             <Tabs.List aria-label="Options">
               <Tabs.Tab id="all">
                 Todos
@@ -203,14 +203,14 @@ function CouponList({ coupons, isLoading, onCreate, onEdit, onToggleArchive, onD
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid md:grid-cols-1 lg:grid-cols-2 gap-3">
       {coupons.map((coupon) => (
         <div
           key={coupon.id}
           className="relative flex items-stretch justify-between gap-4 overflow-visible rounded-xl border border-default bg-overlay"
         >
           <div className="flex min-w-0 flex-1 items-stretch gap-8">
-            <div className="flex shrink-0 items-center py-4 pl-8">
+            <div className="flex shrink-0 items-center py-2 pl-8">
               <div className={`flex size-12 items-center justify-center rounded-lg ${coupon.discountType === 'Percentage' ? "bg-accent-soft text-accent" : "bg-danger-soft text-danger"}`}>
                 {coupon.discountType === 'Percentage' ? <BadgePercent className="size-7" /> : <BadgeDollarSign className="size-7" />}
                 
@@ -224,7 +224,7 @@ function CouponList({ coupons, isLoading, onCreate, onEdit, onToggleArchive, onD
               <span className="absolute bottom-0 left-1/2 size-6 -translate-x-1/2 translate-y-1/2 rounded-full bg-surface border-t" />
             </div>
 
-            <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-4">
+            <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-2">
               <div className="flex items-center gap-2">
                 <span className="font-bold">{coupon.code}</span>
                 <Chip size="sm" variant="soft" color={STATUS_COLOR[coupon.status] ?? 'default'}>

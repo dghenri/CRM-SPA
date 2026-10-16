@@ -742,7 +742,7 @@ export default function AdminServicesPage() {
         </div>
         <Button
           variant="outline"
-          className="flex items-center justify-center gap-2 rounded-3xl border-2 border-dashed"
+          className="flex items-center justify-center gap-2 rounded-lg"
           onPress={openNew} 
         >
           <Plus />

@@ -653,7 +653,6 @@ function ExportModal({ isOpen, defaultPeriod, onClose }) {
       >
         <Modal.Container size="md">
           <Modal.Dialog>
-            <Modal.CloseTrigger />
             <Modal.Header>
               <Modal.Heading>Exportar relatório em PDF</Modal.Heading>
             </Modal.Header>
@@ -747,7 +746,7 @@ export default function Revenue() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <Button size="sm" variant="tertiary" className="rounded-full" onPress={() => setExportOpen(true)}>
+          <Button size="sm" variant="tertiary" className="rounded-lg" onPress={() => setExportOpen(true)}>
             <FileDown size={16} aria-hidden="true" />
             Exportar PDF
           </Button>

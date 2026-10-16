@@ -91,10 +91,11 @@ export default function Navbar() {
       <div className="flex h-20 items-center justify-between px-6 sm:px-10">
         {/* Logo */}
         <Link to="/" onClick={handleLogoClick} className="flex items-center gap-3">
-          <img className="size-20" src="/LotusIcon.svg" alt="Logo" />
-          <span className="font-bold text-blue-50 md:hidden lg:block lg:text-2xl">
+          <img className="hidden size-15 md:block " src="/RIVIERA BRAND/Horizontal/RivieraIcon.svg" alt="icon" />
+          <img className="size-40 md:size-50" src="/RIVIERA BRAND/Horizontal/RivieraName.svg" alt="Logo" />
+          {/* <span className="font-bold text-blue-50 md:hidden lg:block lg:text-2xl">
             Viva Bem SPA
-          </span>
+          </span> */}
         </Link>
 
         {/* Navegação com scroll spy */}

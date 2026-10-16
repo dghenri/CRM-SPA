@@ -15,6 +15,7 @@ import {
 import api from "../api/api";
 import { fetchMyFavorites, addFavorite, removeFavorite } from "../api/favorites";
 import MobileNav from "./MobileNav";
+import { ageFromBirthdate, minAgeBlockMessage } from "../utils/age";
 
 function formatPrice(value) {
   return value.toLocaleString("pt-BR", {
@@ -31,6 +32,23 @@ export default function ServiceDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [favorited, setFavorited] = useState(false);
+  const [customerAge, setCustomerAge] = useState(null);
+
+  // idade do cliente: bloqueia cedo os procedimentos com idade mínima
+  // (a API também recusa o agendamento - isto só poupa o cliente de descobrir no fim)
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get("/users/me")
+      .then((me) => {
+        if (!cancelled) setCustomerAge(ageFromBirthdate(me?.birthdate));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const minAgeMessage = minAgeBlockMessage(service, customerAge);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +99,7 @@ export default function ServiceDetailPage() {
   }, [id]);
 
   const handleBook = () => {
+    if (minAgeMessage) return;
     navigate("/user/scheduling/new", { state: { serviceId: service.id } });
   };
 
@@ -178,7 +197,19 @@ export default function ServiceDetailPage() {
                 <span className="flex items-center font-bold text-lg gap-2">
                   {formatPrice(service.price)}
                 </span>
+                {service.minAge ? (
+                  <Chip variant="soft" color="warning" className="font-semibold">
+                    A partir de {service.minAge} anos
+                  </Chip>
+                ) : null}
               </div>
+
+              {minAgeMessage && (
+                <div className="mt-4 flex items-center gap-2 rounded-2xl bg-danger/10 p-3 text-danger">
+                  <OctagonAlert size={16} className="shrink-0" />
+                  <p className="text-sm font-semibold">{minAgeMessage}</p>
+                </div>
+              )}
 
               <div className="mt-6">
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-default-500">
@@ -201,7 +232,7 @@ export default function ServiceDetailPage() {
         >
           <Button
             variant="primary"
-            isDisabled={!service.available}
+            isDisabled={!service.available || !!minAgeMessage}
             className="w-full bg- h-15 justify-center rounded-full font-semibold text-lg"
             onPress={handleBook}
           >

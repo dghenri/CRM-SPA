@@ -157,7 +157,7 @@ export default function SchedulingNewPage() {
         {flow.step === 1 ? (
           <Button
             variant="primary"
-            isDisabled={!flow.selectedService}
+            isDisabled={!flow.selectedService || !!flow.selectedServiceBlockedMessage}
             className="h-15 w-full justify-center rounded-full text-lg font-semibold"
             onPress={handleContinue}
           >

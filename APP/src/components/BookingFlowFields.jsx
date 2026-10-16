@@ -61,6 +61,7 @@ export function BookingStepOne({ flow }) {
     servicesError,
     selectedServiceId,
     selectedService,
+    selectedServiceBlockedMessage,
     handleSelectService,
   } = flow;
 
@@ -77,6 +78,13 @@ export function BookingStepOne({ flow }) {
         <div className="flex items-center gap-2 text-danger">
           <OctagonAlert size={16} />
           <p className="text-sm font-medium">{servicesError}</p>
+        </div>
+      )}
+
+      {selectedServiceBlockedMessage && (
+        <div className="flex items-center gap-2 rounded-2xl bg-danger/10 p-3 text-danger">
+          <OctagonAlert size={16} className="shrink-0" />
+          <p className="text-sm font-semibold">{selectedServiceBlockedMessage}</p>
         </div>
       )}
 
@@ -105,6 +113,11 @@ export function BookingStepOne({ flow }) {
                   <Clock size={12} />
                   {selectedService.duration} min
                 </Chip>
+                {selectedService.minAge ? (
+                  <Chip size="sm" variant="soft" color="warning" className="font-semibold">
+                    {selectedService.minAge}+ anos
+                  </Chip>
+                ) : null}
               </div>
             </div>
           </div>

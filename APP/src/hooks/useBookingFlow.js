@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CalendarDateTime, getLocalTimeZone, today } from "@internationalized/date";
 import api from "../api/api";
 import { fetchBusyWindows, createAppointment } from "../api/appointments";
+import { ageFromBirthdate, minAgeBlockMessage } from "../utils/age";
 
 // ---- Config do horário de funcionamento (ajuste conforme o negócio) ----
 const BUSINESS_START_MINUTES = 8 * 60; // 08:00
@@ -104,6 +105,25 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
 
   const minDate = today(getLocalTimeZone());
 
+  // idade do cliente logado, para avisar cedo sobre procedimentos com idade mínima
+  // (a API também recusa com 403 - isto só evita o cliente descobrir no final)
+  const [customerBirthdate, setCustomerBirthdate] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get("/users/me")
+      .then((me) => {
+        if (!cancelled) setCustomerBirthdate(me?.birthdate ?? null);
+      })
+      .catch(() => {
+        /* sem idade conhecida: não bloqueia aqui, a API valida na confirmação */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const customerAge = useMemo(() => ageFromBirthdate(customerBirthdate), [customerBirthdate]);
+
   // carrega os procedimentos disponíveis pro dropdown
   useEffect(() => {
     let cancelled = false;
@@ -138,6 +158,10 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
     () => services.find((s) => String(s.id) === String(selectedServiceId)) ?? null,
     [services, selectedServiceId]
   );
+
+  // idade mínima do procedimento escolhido (null = liberado)
+  const selectedServiceBlockedMessage = minAgeBlockMessage(selectedService, customerAge);
+  const isServiceAllowed = (service) => !minAgeBlockMessage(service, customerAge);
 
   // recarrega os horários ocupados sempre que o serviço ou a data mudam
   useEffect(() => {
@@ -232,6 +256,9 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
     if (!selectedService) {
       return { ok: false, message: "Selecione o procedimento." };
     }
+    if (selectedServiceBlockedMessage) {
+      return { ok: false, message: selectedServiceBlockedMessage };
+    }
     setStep(2);
     return { ok: true };
   }
@@ -267,6 +294,7 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
   function getStepBlocker(target) {
     if (confirmedAppointment) return "O agendamento já foi confirmado.";
     if (target >= 2 && !selectedService) return "Selecione o procedimento.";
+    if (target >= 2 && selectedServiceBlockedMessage) return selectedServiceBlockedMessage;
     if (target >= 3 && (!selectedDate || !selectedSlot)) return "Selecione a data e o horário.";
     if (target >= 4 && !paymentMethod) return "Escolha a forma de pagamento.";
     return null;
@@ -370,6 +398,9 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
     servicesError,
     selectedServiceId,
     selectedService,
+    selectedServiceBlockedMessage,
+    isServiceAllowed,
+    customerAge,
     handleSelectService,
     step,
     selectedDate,

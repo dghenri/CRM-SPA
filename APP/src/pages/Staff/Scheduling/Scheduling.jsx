@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { parseDate, parseTime, today, getLocalTimeZone } from "@internationalized/date";
-import { COLORS, colorMap, hexById, idByHex, SLOT_MIN, SLOT_PX, fmtTime } from "./schedulingConstants";
+import { colorMap, colorForAppointment, SLOT_MIN, SLOT_PX, fmtTime } from "./schedulingConstants";
 import AppointmentCard from "./AppointmentCard";
 import { useAuth } from "../../../context/AuthContext";
 import {
@@ -13,13 +13,13 @@ import {
 } from "../../../api/scheduling";
 
 import {
-  Button, ButtonGroup, AlertDialog, Input, Label, Separator, ColorSwatchPicker, parseColor, Tabs,
+  Button, ButtonGroup, AlertDialog, Input, Label, Separator, Tabs,
   Tooltip, CloseButton, Modal, DatePicker, DateField, Calendar, TimeField, toast, ComboBox, ListBox,
   
 } from "@heroui/react";
 
 import {
-  ChevronLeft, ChevronRight, Trash2, Pencil, Palette, Clock, Plus,
+  ChevronLeft, ChevronRight, Trash2, Pencil, Clock, Plus,
 
 } from "lucide-react";
 
@@ -168,7 +168,7 @@ function toAppointmentPayload(a) {
     title: a.title,
     date: a.start.toISOString(),
     endDate: a.end.toISOString(),
-    color: a.color,
+    color: a.color || "blue", // campo legado: a cor exibida vem do status
     notes: a.notes ?? "",
     serviceId: a.serviceId || null,
     customerId: a.clientId || null,
@@ -183,7 +183,7 @@ function MovePreview({ move, appointment }) {
   const height =
    ((end-start)/60000 / SLOT_MIN) * SLOT_PX;
 
-  const c = colorMap[appointment.color] ?? colorMap.blue;
+  const c = colorForAppointment(appointment);
 
   return (
     <div className={`absolute inset-x-1 rounded-md border-2 pointer-events-none ${c.border}`}
@@ -820,6 +820,7 @@ function TimeGrid({ cursor, view, appointments, onCreate, onUpdate, onDelete, on
       start: addMinutes(day, start * SLOT_MIN),
       end: addMinutes(day, end * SLOT_MIN),
       color: "blue",
+      status: "Scheduled",
     };
     setSelect(null);
     // espera o registro ser criado no banco antes de abrir a edição, pra
@@ -1038,7 +1039,6 @@ function TimeGrid({ cursor, view, appointments, onCreate, onUpdate, onDelete, on
                         dragEnabled={dragEnabled}
                         onEdit={() => onEdit(a)}
                         onDelete={() => onDelete(a.id)} /* Abrir AlertDialog */
-                        onChangeColor={(c) => onUpdate({ ...a, color: c })}
                         onStatusChange={onStatusChange}
                         onSaveNotes={(id, notes) => onUpdate({ ...a, notes })}
                         onDuplicate={() => {
@@ -1152,7 +1152,6 @@ function EditModal({ appointment, clients = [], services = [], onClose, onSave, 
   const [endDate, setEndDate] = useState(fmtDateInput(appointment.end));
   const [startT, setStartT] = useState(fmtTimeInput(appointment.start));
   const [endT, setEndT] = useState(fmtTimeInput(appointment.end));
-  const [color, setColor] = useState(appointment.color);
   const [serviceId, setServiceId] = useState(appointment.serviceId ?? null);
   const [clientId, setClientId] = useState(appointment.clientId ?? null);
 
@@ -1183,7 +1182,6 @@ function EditModal({ appointment, clients = [], services = [], onClose, onSave, 
       title: title.trim() || "Sem título",
       start,
       end,
-      color,
       serviceId: serviceId || null,
       clientId: clientId || null,
       clientName: clientId ? clientsById[clientId]?.name : undefined,
@@ -1420,28 +1418,6 @@ function EditModal({ appointment, clients = [], services = [], onClose, onSave, 
                 </div>
               </div>
 
-              <div>
-                <Label aria-label="Select color" className="mb-2 flex items-center text-muted gap-1">
-                  <Palette size={15} /> Cor
-                </Label>
-                <ColorSwatchPicker
-                  aria-label="Select color"
-                  className="gap-2 justify-start"
-                  value={parseColor(hexById[color] ?? COLORS[0].color)}
-                  onChange={(c) => {
-                    const hex = c.toString("hex").toLowerCase();
-                    const id = idByHex[hex] ?? color;
-                    setColor(id);
-                  }}
-                >
-                  {COLORS.map((c) => (
-                    <ColorSwatchPicker.Item key={c.id} color={c.color} textValue={c.label}>
-                      <ColorSwatchPicker.Swatch />
-                      <ColorSwatchPicker.Indicator />
-                    </ColorSwatchPicker.Item>
-                  ))}
-                </ColorSwatchPicker>
-              </div>
             </div>
           </AlertDialog.Body>
           <AlertDialog.Footer className="flex justify-between! sm:justify-between!">
@@ -1476,7 +1452,6 @@ function CreateModal({ defaultDate, clients = [], services = [], onClose, onSave
   const [endDate, setEndDate] = useState(fmtDateInput(initialEnd));
   const [startT, setStartT] = useState(fmtTimeInput(initialStart));
   const [endT, setEndT] = useState(fmtTimeInput(initialEnd));
-  const [color, setColor] = useState(COLORS[0].id);
   const [serviceId, setServiceId] = useState(null);
   const [clientId, setClientId] = useState(null);
 
@@ -1507,7 +1482,8 @@ function CreateModal({ defaultDate, clients = [], services = [], onClose, onSave
       title: title.trim() || "Sem título",
       start,
       end,
-      color,
+      color: "blue",
+      status: "Scheduled",
       serviceId: serviceId || null,
       clientId: clientId || null,
       clientName: clientId ? clientsById[clientId]?.name : undefined,
@@ -1744,28 +1720,6 @@ function CreateModal({ defaultDate, clients = [], services = [], onClose, onSave
                 </div>
               </div>
 
-              <div>
-                <Label aria-label="Select color" className="mb-2 flex items-center text-muted">
-                  <Palette className="size-5 mr-1" /> Color
-                </Label>
-                <ColorSwatchPicker
-                  aria-label="Select color"
-                  className="gap-2 justify-start"
-                  value={parseColor(hexById[color] ?? COLORS[0].color)}
-                  onChange={(c) => {
-                    const hex = c.toString("hex").toLowerCase();
-                    const id = idByHex[hex] ?? color;
-                    setColor(id);
-                  }}
-                >
-                  {COLORS.map((c) => (
-                    <ColorSwatchPicker.Item key={c.id} color={c.color} textValue={c.label}>
-                      <ColorSwatchPicker.Swatch />
-                      <ColorSwatchPicker.Indicator />
-                    </ColorSwatchPicker.Item>
-                  ))}
-                </ColorSwatchPicker>
-              </div>
             </div>
           </AlertDialog.Body>
           <AlertDialog.Footer>
@@ -1830,7 +1784,7 @@ function MonthView({ cursor, appointments, onSelectDay, onEditAppointment }) {
               </div>
               <div className="flex flex-col gap-0.5 overflow-hidden">
                 {dayAppts.slice(0, visibleCount).map((a) => {
-                  const c = colorMap[a.color] ?? colorMap.blue;
+                  const c = colorForAppointment(a);
                   const isContinuation = !sameDay(a.start, d);
                   return (
                     <button

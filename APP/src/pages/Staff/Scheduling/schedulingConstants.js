@@ -54,6 +54,28 @@ export const colorMap = Object.fromEntries(COLORS.map((c) => [c.id, c]));
 export const hexById = Object.fromEntries(COLORS.map((c) => [c.id, c.color]));
 export const idByHex = Object.fromEntries(COLORS.map((c) => [c.color.toLowerCase(), c.id]));
 
+// Cor do card por STATUS (a cor deixa de ser escolhida na mão):
+// Aguardando = azul, Confirmado = verde, Finalizado = cinza,
+// Cancelado = vermelho, Não compareceu = amarelo.
+// As classes ficam escritas por extenso para o Tailwind enxergá-las.
+export const STATUS_COLORS = {
+  Scheduled: colorMap.blue,
+  Confirmed: colorMap.emerald,
+  Completed: colorMap.slate,
+  Cancelled: {
+    id: "red",
+    color: "#EF4444",
+    bg: "bg-red-500/25",
+    border: "border-red-500",
+    soft: "bg-red-500/15 text-red-700 border-red-500/30",
+  },
+  NoShow: colorMap.amber,
+};
+
+// Cor a usar para um agendamento (status desconhecido cai no azul)
+export const colorForAppointment = (appointment) =>
+  STATUS_COLORS[appointment?.status] ?? STATUS_COLORS.Scheduled;
+
 export const SLOT_MIN = 5;
 export const SLOT_PX = 5;
 

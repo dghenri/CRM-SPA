@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { Label, ColorSwatchPicker, parseColor, Dropdown, Separator } from "@heroui/react";
-import { Clock, Palette, Pencil, Copy, Trash2 } from "lucide-react";
-import { SLOT_MIN, SLOT_PX, colorMap, COLORS, hexById, idByHex, fmtTime } from "./schedulingConstants";
+import { Dropdown, Separator } from "@heroui/react";
+import { Clock, Pencil, Copy, Trash2 } from "lucide-react";
+import { SLOT_MIN, SLOT_PX, colorForAppointment, fmtTime } from "./schedulingConstants";
 import AppointmentPopover from "./AppointmentPopover";
 
 export default function AppointmentCard({
@@ -14,7 +14,6 @@ export default function AppointmentCard({
   onPointerDown,
   onEdit,
   onDelete,
-  onChangeColor,
   onDuplicate,
   onStatusChange,
   onSaveNotes,
@@ -28,7 +27,7 @@ export default function AppointmentCard({
   const durMin = Math.max(SLOT_MIN, (displayEnd.getTime() - displayStart.getTime()) / 60_000);
   const top = (minutesFromStart / SLOT_MIN) * SLOT_PX;
   const height = (durMin / SLOT_MIN) * SLOT_PX;
-  const c = colorMap[appointment.color] ?? colorMap.blue;
+  const c = colorForAppointment(appointment); // cor vem do status
 
   const style = overlay
     ? {
@@ -99,8 +98,6 @@ export default function AppointmentCard({
           onEdit={onEdit}
           onDelete={onDelete}
           onDuplicate={onDuplicate}
-          onChangeColor={onChangeColor}
-          currentColor={appointment.color}
         />
       )}
     </>
@@ -111,7 +108,7 @@ export default function AppointmentCard({
 // Só é usado pelo AppointmentCard (clique direito num agendamento), por
 // isso mora aqui em vez de num arquivo próprio.
 
-function ContextMenu({ x, y, onClose, onEdit, onDelete, onDuplicate, onChangeColor, currentColor }) {
+function ContextMenu({ x, y, onClose, onEdit, onDelete, onDuplicate }) {
   const ref = useRef(null);
   useEffect(() => {
     const handler = (e) => {
@@ -145,36 +142,11 @@ function ContextMenu({ x, y, onClose, onEdit, onDelete, onDuplicate, onChangeCol
       className="fixed z-9999 w-58 overflow-hidden rounded-2xl border bg-overlay shadow-xl p-2"
       style={{ left, top }}
     >
-      <div className="grid grid-row-2 items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground">
-        <Label className="flex items-center"><Palette className="size-5 mr-1"/>Cor</Label>
-        
-          <ColorSwatchPicker
-            aria-label="Select color"
-            className="gap-0 justify-center"
-            value={parseColor(hexById[currentColor] ?? COLORS[0].color)}
-            onChange={(color) => {
-              const hex = color.toString("hex").toLowerCase();
-              const id = idByHex[hex] ?? currentColor;
-              setTimeout(() => {
-                onChangeColor?.(id);
-                onClose?.();
-              }, 0);
-            }}
-          >
-            {COLORS.map((c) => (
-              <ColorSwatchPicker.Item key={c.id} color={c.color} textValue={c.label}>
-                <ColorSwatchPicker.Swatch />
-                <ColorSwatchPicker.Indicator />
-              </ColorSwatchPicker.Item>
-            ))}
-          </ColorSwatchPicker>
-      </div>
-
       <Dropdown.Menu aria-label="Menu">
         
         <Dropdown.Item
           variant="ghost"
-          className="flex w-full gap-2 rounded-xl px-2 py-1.5 text-sm font-semibold mt-2"
+          className="flex w-full gap-2 rounded-xl px-2 py-1.5 text-sm font-semibold"
           onClick={handleEdit}
         >
           <Pencil className="size-4" /> Editar

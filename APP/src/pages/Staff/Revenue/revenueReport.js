@@ -27,6 +27,7 @@ const BAD = [185, 28, 28];
 
 const MAX_TRANSACTIONS = 500; // 10 páginas de 50: mantém o PDF leve mesmo em "Tudo"
 const TX_PAGE_SIZE = 50;
+const CHART_H = 66; // altura do gráfico (inclui o espaço dos valores acima das barras)
 
 /* ------------------------------ formatação ------------------------------- */
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -160,15 +161,34 @@ function niceScale(max) {
   return { top: lead * exp, intervals: lead === 2 ? 4 : 5 };
 }
 
-// gráfico de barras da receita líquida, desenhado com formas do próprio PDF
-function drawBarChart(doc, series, { x, y, w, h }) {
-  const axisW = 17;
-  const labelH = 6;
-  const plotX = x + axisW;
-  const plotW = w - axisW;
-  const plotTop = y + 2;
-  const plotBottom = y + h - labelH;
-  const plotH = plotBottom - plotTop;
+// medidas do gráfico (em mm)
+const CHART_AXIS_W = 17; // coluna dos valores do eixo Y
+const CHART_X_LABELS_H = 6; // faixa dos rótulos do eixo X
+const VALUE_FONT = 6.5; // tamanho do valor escrito acima de cada barra
+
+// Define como escrever o valor exato acima de cada barra: na horizontal quando
+// cabe na largura da barra; girado (de baixo pra cima) quando as barras são
+// estreitas (ex: 30 dias). Também reserva a folga acima do gráfico para o texto
+// da barra mais alta não sair da área.
+function chartLayout(doc, series, w) {
+  const slot = (w - CHART_AXIS_W) / Math.max(series.length, 1);
+  const labels = series.filter((s) => s.revenue > 0).map((s) => clean(brl.format(s.revenue)));
+  doc.setFont("helvetica", "normal").setFontSize(VALUE_FONT);
+  const maxLabelW = Math.max(0, ...labels.map((l) => doc.getTextWidth(l)));
+  const rotated = maxLabelW + 1 > slot;
+  const topSpace = labels.length === 0 ? 2 : rotated ? maxLabelW + 3 : 5;
+  return { rotated, topSpace };
+}
+
+// gráfico de barras da receita líquida, desenhado com formas do próprio PDF.
+// `h` é a altura total (CHART_H): o que sobra depois da folga dos valores (em cima)
+// e dos rótulos do eixo X (embaixo) é a área das barras.
+function drawBarChart(doc, series, { x, y, w, h }, layout) {
+  const plotX = x + CHART_AXIS_W;
+  const plotW = w - CHART_AXIS_W;
+  const plotTop = y + layout.topSpace;
+  const plotH = h - layout.topSpace - CHART_X_LABELS_H;
+  const plotBottom = plotTop + plotH;
 
   const values = series.map((s) => s.revenue);
   const { top: max, intervals } = niceScale(Math.max(0, ...values));
@@ -196,20 +216,30 @@ function drawBarChart(doc, series, { x, y, w, h }) {
   const n = series.length;
   const slot = plotW / n;
   const barW = Math.min(slot * 0.62, 12);
-  const labelStep = Math.max(1, Math.ceil(n / 12)); // poucos rótulos, ancorados na última barra
+  const labelStep = Math.max(1, Math.ceil(n / 12)); // poucos rótulos no eixo X, ancorados na última barra
+  const halfCap = (VALUE_FONT * 0.3528 * 0.72) / 2; // centraliza o texto girado na barra
 
   series.forEach((s, i) => {
     const bh = (s.revenue / max) * plotH;
-    const bx = plotX + i * slot + (slot - barW) / 2;
+    const cx = plotX + i * slot + slot / 2;
+    const bx = cx - barW / 2;
+
     if (bh > 0) {
       const isLast = i === n - 1;
       doc.setFillColor(...(isLast ? ACCENT : [153, 196, 245]));
       if (bh < 1.5) doc.rect(bx, plotBottom - bh, barW, bh, "F");
       else doc.roundedRect(bx, plotBottom - bh, barW, bh, 0.6, 0.6, "F");
+
+      // valor exato acima da barra (barras sem receita ficam sem texto)
+      const label = clean(brl.format(s.revenue));
+      doc.setFont("helvetica", "normal").setFontSize(VALUE_FONT).setTextColor(...INK);
+      if (layout.rotated) doc.text(label, cx + halfCap, plotBottom - bh - 1.2, { angle: 90 });
+      else doc.text(label, cx, plotBottom - bh - 1.2, { align: "center" });
     }
+
     if ((n - 1 - i) % labelStep === 0) {
-      doc.setFontSize(7).setTextColor(...MUTED);
-      doc.text(clean(s.label), plotX + i * slot + slot / 2, plotBottom + 4, { align: "center" });
+      doc.setFont("helvetica", "normal").setFontSize(7).setTextColor(...MUTED);
+      doc.text(clean(s.label), cx, plotBottom + 4, { align: "center" });
     }
   });
 }
@@ -287,12 +317,12 @@ function buildPdf({ period, periods, methodLabel, data }) {
   /* ---- gráfico ---- */
   const series = data.chart.series;
   y = sectionTitle(doc, y, "Desempenho no período", `Receita líquida por ${GRANULARITY[data.chart.granularity] ?? "período"}`);
-  if (y + 62 > PAGE_H - 18) {
+  if (y + CHART_H + 8 > PAGE_H - 18) {
     doc.addPage();
     y = sectionTitle(doc, 20, "Desempenho no período", `Receita líquida por ${GRANULARITY[data.chart.granularity] ?? "período"}`);
   }
-  drawBarChart(doc, series, { x: M, y, w: CONTENT_W, h: 54 });
-  y += 54 + 10;
+  drawBarChart(doc, series, { x: M, y, w: CONTENT_W, h: CHART_H }, chartLayout(doc, series, CONTENT_W));
+  y += CHART_H + 10;
 
   /* ---- formas de pagamento ---- */
   const methods = data.methods.items;

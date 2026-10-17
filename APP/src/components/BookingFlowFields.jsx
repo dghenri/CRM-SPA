@@ -178,12 +178,12 @@ export function BookingStepTwo({ flow }) {
           <Calendar.Header className="mb-6 flex items-center justify-between">
             <Calendar.NavButton
               slot="previous"
-              className="flex size-12 items-center justify-center rounded-full text-black bg-default"
+              className="flex size-12 items-center justify-center rounded-full text-default-foreground bg-default"
             />
             <Calendar.Heading className="flex-1 text-center text-xl font-bold capitalize" />
             <Calendar.NavButton
               slot="next"
-              className="flex size-12 items-center justify-center rounded-full text-black bg-default"
+              className="flex size-12 items-center justify-center rounded-full text-default-foreground bg-default"
             />
           </Calendar.Header>
           <Calendar.Grid className="w-full border-spacing-1">
@@ -199,11 +199,10 @@ export function BookingStepTwo({ flow }) {
                 <Calendar.Cell
                   date={date}
                   className="size-12 rounded-full text-base font-semibold
-                    data-[selected]:bg-accent data-[selected]:text-white
-                    data-[today]:ring-2 data-[today]:ring-accent
-                    data-[outside-month]:text-muted
-                    data-[disabled]:text-default-300
-                    data-[hovered]:bg-default"
+                    data-selected:bg-accent data-selected:text-white
+                    data-today:ring-2 data-today:ring-accent
+                    data-outside-month:text-muted
+                    data-hovered:bg-default"
                 />
               )}
             </Calendar.GridBody>

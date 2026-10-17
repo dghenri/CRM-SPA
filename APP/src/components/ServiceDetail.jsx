@@ -3,14 +3,11 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Button, Chip, Spinner, toast, Separator, } from "@heroui/react";
 import {
   Heart,
-  Share2,
+  UserRound,
   Clock,
-  Tag,
-  ShieldCheck,
   EyeOff,
   CalendarCheck2,
   OctagonAlert,
-  Banknote,
   Hand,
 } from "lucide-react";
 import api from "../api/api";
@@ -144,7 +141,7 @@ export default function ServiceDetailPage() {
 
       {/* pb-24 dá espaço pro conteúdo não ficar escondido atrás da barra
           fixa de agendamento (mesma lógica do pb-20 do Menu no layout) */}
-      <main className="flex-1 overflow-y-auto pt-14 pb-24">
+      <main className="flex-1 overflow-y-auto pt-14 pb-50">
         {isLoading ? (
           <div className="flex items-center justify-center gap-2 py-16">
             <Spinner color="current" />
@@ -175,7 +172,7 @@ export default function ServiceDetailPage() {
             </div>
 
             <div className="px-5 pt-5">
-              <h2 className="font-serif text-2xl font-bold text-foreground">{service.title}</h2>
+              <h2 className="font-serif text-xl font-bold text-foreground">{service.title}</h2>
               <span className="flex items-center h-5 mt-2 gap-2">
                 <p className="text-sm text-muted font-medium">Procedimento estético</p>
                 <Separator orientation="vertical" />
@@ -190,7 +187,11 @@ export default function ServiceDetailPage() {
                   </Chip>
                 ) : null}
               </span>
-              
+                
+              <div className="flex items-center gap-1 mt-2">
+                <UserRound size={16} />
+                <span className="font-medium">{service.professional.name}</span>
+              </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <span className="flex items-center font-bold text-lg gap-2">
@@ -206,10 +207,10 @@ export default function ServiceDetailPage() {
               )}
 
               <div className="mt-6">
-                <h3 className="text-sm font-semibold uppercase tracking-wide text-default-500">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">
                   Descrição
                 </h3>
-                <p className="mt-2 text-base l leading-6 text-foreground/90">
+                <p className="mt-2 text-base leading-6">
                   {service.description}
                 </p>
               </div>

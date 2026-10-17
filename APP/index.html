@@ -1,7 +1,34 @@
 <!doctype html>
-<html lang="pt-BR" translate="no" class="light" data-theme="light">
+<html lang="pt-BR" translate="no">
   <head>
     <meta charset="UTF-8" />
+    <!-- Aplica o tema salvo ANTES da primeira pintura (sem piscar claro->escuro).
+         O useTheme do HeroUI guarda a escolha em localStorage ("heroui-theme"), mas só
+         aplica no <html> enquanto um componente que usa o hook está na tela (o
+         ThemeSwitcher, no Perfil). Sem isto, nas demais telas o tema salvo se perdia. -->
+    <script>
+      (function () {
+        try {
+          var root = document.documentElement;
+          var media = window.matchMedia("(prefers-color-scheme: dark)");
+          var stored = function () {
+            try { return localStorage.getItem("heroui-theme") || "system"; } catch (e) { return "system"; }
+          };
+          var apply = function () {
+            var theme = stored();
+            var resolved = theme === "system" ? (media.matches ? "dark" : "light") : theme;
+            root.classList.remove("light", "dark");
+            root.classList.add(resolved);
+            root.setAttribute("data-theme", resolved);
+          };
+          apply();
+          // no modo "Sistema", acompanha a troca de tema do aparelho mesmo fora do Perfil
+          media.addEventListener("change", function () {
+            if (stored() === "system") apply();
+          });
+        } catch (e) {}
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/LotusIcon.svg" />
     <link rel="apple-touch-icon" href="/LotusIcon.svg" sizes="180x180" />   
     <link rel="preconnect" href="https://fonts.googleapis.com">

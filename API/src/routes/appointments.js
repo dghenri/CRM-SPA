@@ -11,6 +11,7 @@ import { revertAppointmentConsumption, syncAppointmentStock } from '../services/
 import { StockError } from '../services/stock.js';
 import { getStaffActor, loadStaffActor, scopeWhere, canManage, notFoundError } from '../lib/appointmentAccess.js';
 import { ageFromBirthdate, checkServiceMinAge } from '../lib/serviceAge.js';
+import { fitsSchedule, getBookingSchedule } from '../lib/staffSchedule.js';
 
 const router = Router();
 
@@ -62,6 +63,49 @@ async function createAppointmentWithUniqueCode(data, preferredCode, options, att
 //   ex: evento avulso na agenda), com título e cor personalizados.
 //   Funcionária comum só cria na PRÓPRIA agenda (o professionalId do body é ignorado);
 //   só o MajorAdmin escolhe o profissional.
+// O cliente só marca horário que a profissional atende e que está livre na agenda DELA.
+// (O front já mostra só esses horários; aqui é a barreira de verdade.) A equipe pode
+// agendar fora do expediente / sobrepor de propósito, então não passa por aqui.
+async function validateCustomerSlot(service, start, end) {
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+    return { status: 400, body: { error: "Data ou horário inválidos." } };
+  }
+  if (start <= new Date()) {
+    return { status: 400, body: { error: "Esse horário já passou. Escolha outro.", code: "SLOT_IN_PAST" } };
+  }
+  if (end.getTime() - start.getTime() !== service.duration * 60_000) {
+    return { status: 400, body: { error: "A duração não confere com a do procedimento." } };
+  }
+
+  const schedule = await getBookingSchedule(service.professionalId);
+  if (!schedule.available) {
+    return {
+      status: 409,
+      body: {
+        error: `${schedule.professionalName ?? "A profissional"} não está atendendo no momento.`,
+        code: "PROFESSIONAL_UNAVAILABLE",
+      },
+    };
+  }
+  if (!fitsSchedule(schedule.intervals, start, end)) {
+    return { status: 400, body: { error: "Esse horário está fora do expediente da profissional.", code: "OUTSIDE_WORKING_HOURS" } };
+  }
+
+  const clash = await prisma.appointment.findFirst({
+    where: {
+      professionalId: service.professionalId,
+      status: { not: "Cancelled" },
+      date: { lt: end },
+      endDate: { gt: start },
+    },
+    select: { id: true },
+  });
+  if (clash) {
+    return { status: 409, body: { error: "Esse horário acabou de ser reservado. Escolha outro.", code: "SLOT_TAKEN" } };
+  }
+  return null;
+}
+
 router.post('/appointments', authenticateToken, async (req, res) => {
   try {
     const { title, date, endDate, color, notes, serviceId, customerId, professionalId, code, paymentMethod } = req.body;
@@ -140,6 +184,9 @@ router.post('/appointments', authenticateToken, async (req, res) => {
           });
         }
       }
+      // horário: dentro do expediente da profissional e sem choque com outra sessão dela
+      const bad = await validateCustomerSlot(service, data.date, data.endDate);
+      if (bad) return res.status(bad.status).json(bad.body);
       data.customer = { connect: { id: req.user.id } };
     } else {
       const actor = await getStaffActor(req.user.id);
@@ -325,9 +372,14 @@ router.get('/appointments/availability', authenticateToken, async (req, res) => 
     // qualquer status diferente de "Cancelled" ocupa o horário - um
     // agendamento recém-criado nasce como "Scheduled" (não "Confirmed"),
     // e ainda assim precisa bloquear o slot pra outros clientes
+    // Ocupado = agenda da PROFISSIONAL do procedimento (outro procedimento dela também
+    // ocupa o horário). Sem profissional definida, cai no comportamento antigo (por serviço).
+    const service = await prisma.service.findUnique({ where: { id: serviceId }, select: { professionalId: true } });
+    const scope = service?.professionalId ? { professionalId: service.professionalId } : { serviceId };
+
     const busyAppointments = await prisma.appointment.findMany({
       where: {
-        serviceId,
+        ...scope,
         status: { not: "Cancelled" },
         // overlap: começa antes do fim da janela E termina depois do início dela
         date: { lt: rangeEnd },

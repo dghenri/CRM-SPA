@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { authenticateToken, requireMajorAdmin, requireStaff, stockAuth } from '../middleware/auth.js';
 import { loadStaffActor } from '../lib/appointmentAccess.js';
 import { parseMinAge } from '../lib/serviceAge.js';
+import { CLINIC_TIMEZONE, getBookingSchedule } from '../lib/staffSchedule.js';
 
 const router = Router();
 
@@ -18,6 +19,25 @@ router.get('/services', async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Erro ao buscar serviços." });
+  }
+});
+
+//------------------------------------------------------------- GET ROUTE (expediente da profissional do procedimento - usado no agendamento)
+// Devolve os dias/horários em que a profissional responsável atende (o front monta os
+// horários sugeridos a partir disso). Só horários - nada pessoal da profissional.
+router.get('/services/:id/schedule', authenticateToken, async (req, res) => {
+  try {
+    const service = await prisma.service.findUnique({
+      where: { id: req.params.id },
+      select: { professionalId: true },
+    });
+    if (!service) return res.status(404).json({ error: "Serviço não encontrado." });
+
+    res.status(200).json({ ...(await getBookingSchedule(service.professionalId)), timezone: CLINIC_TIMEZONE });
+  } catch (error) {
+    if (error.code === "P2023") return res.status(404).json({ error: "Serviço não encontrado." }); // id inválido
+    console.error(error);
+    res.status(500).json({ error: "Erro ao buscar o expediente." });
   }
 });
 

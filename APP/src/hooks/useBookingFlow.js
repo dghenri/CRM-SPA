@@ -4,10 +4,14 @@ import api from "../api/api";
 import { fetchBusyWindows, createAppointment } from "../api/appointments";
 import { ageFromBirthdate, minAgeBlockMessage } from "../utils/age";
 
-// ---- Config do horário de funcionamento (ajuste conforme o negócio) ----
-const BUSINESS_START_MINUTES = 8 * 60; // 08:00
-const BUSINESS_END_MINUTES = 19 * 60; // 19:00
+// Os horários sugeridos vêm do expediente da PROFISSIONAL do procedimento
+// (GET /services/:id/schedule, cadastrado na aba Disponibilidade do perfil dela).
 const SLOT_STEP_MINUTES = 30;
+
+const timeToMinutes = (hhmm) => {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+};
 
 function minutesToLabel(minutes) {
   const h = String(Math.floor(minutes / 60)).padStart(2, "0");
@@ -40,14 +44,25 @@ function dateAtMinutes(calendarDate, minutesFromMidnight) {
   return dt.toDate(getLocalTimeZone());
 }
 
-function buildTimeSlots({ calendarDate, duration, busyWindows, now }) {
+function buildTimeSlots({ calendarDate, duration, intervals, busyWindows, now }) {
   const slots = [];
+  const seen = new Set();
+  const weekday = calendarDate.toDate(getLocalTimeZone()).getDay(); // 0 = domingo
 
-  for (
-    let startMinutes = BUSINESS_START_MINUTES;
-    startMinutes + duration <= BUSINESS_END_MINUTES;
-    startMinutes += SLOT_STEP_MINUTES
-  ) {
+  // cada intervalo do dia (ex.: manhã e tarde) gera horários de 30 em 30 min a partir
+  // do início dele; a sessão precisa terminar até o fim do intervalo
+  const todays = intervals
+    .filter((i) => i.weekday === weekday)
+    .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  for (const interval of todays) {
+    const from = timeToMinutes(interval.startTime);
+    const to = timeToMinutes(interval.endTime);
+
+    for (let startMinutes = from; startMinutes + duration <= to; startMinutes += SLOT_STEP_MINUTES) {
+      if (seen.has(startMinutes)) continue;
+      seen.add(startMinutes);
+
     const start = dateAtMinutes(calendarDate, startMinutes);
     const end = new Date(start.getTime() + duration * 60 * 1000);
     const isPast = start <= now;
@@ -64,9 +79,10 @@ function buildTimeSlots({ calendarDate, duration, busyWindows, now }) {
       label: minutesToLabel(startMinutes),
       isAvailable: !isPast && !hasConflict,
     });
+    }
   }
 
-  return slots;
+  return slots.sort((a, b) => a.start - b.start);
 }
 
 /**
@@ -84,6 +100,11 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
   const [step, setStep] = useState(1);
   const [selectedDate, setSelectedDate] = useState(null); // CalendarDate
   const [selectedSlot, setSelectedSlot] = useState(null); // { start, end, label }
+
+  // expediente da profissional do procedimento escolhido (null = ainda carregando)
+  const [schedule, setSchedule] = useState(null);
+  const [isLoadingSchedule, setIsLoadingSchedule] = useState(false);
+  const [scheduleError, setScheduleError] = useState("");
 
   const [busyWindows, setBusyWindows] = useState([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
@@ -159,8 +180,54 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
     [services, selectedServiceId]
   );
 
+  // expediente da profissional: recarrega quando o procedimento muda
+  const selectedServiceKey = selectedService?.id ?? null;
+  useEffect(() => {
+    setSchedule(null);
+    setScheduleError("");
+    if (!selectedServiceKey) return;
+
+    let cancelled = false;
+    setIsLoadingSchedule(true);
+    api
+      .get(`/services/${selectedServiceKey}/schedule`)
+      .then((data) => {
+        if (!cancelled) setSchedule(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setScheduleError(err.message || "Não foi possível carregar os horários da profissional.");
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingSchedule(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedServiceKey]);
+
+  const professionalName = schedule?.professionalName ?? selectedService?.professional?.name ?? null;
+
+  // profissional de férias/afastada ou procedimento sem profissional: não dá para agendar
+  const professionalBlockedMessage = !schedule
+    ? null
+    : schedule.reason === "NoProfessional"
+    ? "Este procedimento ainda não tem profissional responsável."
+    : !schedule.available
+    ? `${professionalName ?? "A profissional"} não está atendendo no momento.`
+    : null;
+
+  // dias em que ela não atende ficam bloqueados no calendário
+  const isDateUnavailable = (date) => {
+    if (!schedule) return false;
+    if (!schedule.available) return true;
+    const weekday = date.toDate(getLocalTimeZone()).getDay();
+    return !schedule.intervals.some((i) => i.weekday === weekday);
+  };
+
   // idade mínima do procedimento escolhido (null = liberado)
-  const selectedServiceBlockedMessage = minAgeBlockMessage(selectedService, customerAge);
+  const selectedServiceBlockedMessage =
+    minAgeBlockMessage(selectedService, customerAge) ?? professionalBlockedMessage;
   const isServiceAllowed = (service) => !minAgeBlockMessage(service, customerAge);
 
   // recarrega os horários ocupados sempre que o serviço ou a data mudam
@@ -195,14 +262,15 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
   }, [selectedDate, selectedService]);
 
   const timeSlots = useMemo(() => {
-    if (!selectedDate || !selectedService) return [];
+    if (!selectedDate || !selectedService || !schedule?.available) return [];
     return buildTimeSlots({
       calendarDate: selectedDate,
       duration: selectedService.duration,
+      intervals: schedule.intervals,
       busyWindows,
       now: new Date(),
     });
-  }, [selectedDate, selectedService, busyWindows]);
+  }, [selectedDate, selectedService, schedule, busyWindows]);
 
   const formattedDate = selectedDate
     ? new Intl.DateTimeFormat("pt-BR", {
@@ -408,8 +476,10 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
     selectedSlot,
     setSelectedSlot,
     timeSlots,
-    isLoadingSlots,
-    slotsError,
+    isLoadingSlots: isLoadingSlots || isLoadingSchedule,
+    slotsError: slotsError || scheduleError,
+    professionalName,
+    isDateUnavailable,
     minDate,
     formattedDate,
     isSubmitting,

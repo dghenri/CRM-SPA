@@ -160,18 +160,14 @@ export default function Profile() {
   return (
     <div className="flex min-h-screen w-full flex-col p-2">
       <Tabs className="flex w-full flex-1 flex-col" variant="secondary">
-        <Tabs.ListContainer className="sticky top-0 z-20 bg-overlay -mx-2">
-          <Tabs.List aria-label="Perfil" className="">
+        <Tabs.ListContainer className="sticky top-0 z-20 bg-overlay -mx-2 -mt-2">
+          <Tabs.List aria-label="Perfil">
             <Tabs.Tab id="profile">
               Meu perfil
               <Tabs.Indicator />
             </Tabs.Tab>
             <Tabs.Tab id="availability">
               Disponibilidade
-              <Tabs.Indicator />
-            </Tabs.Tab>
-            <Tabs.Tab id="preferences">
-              Preferências
               <Tabs.Indicator />
             </Tabs.Tab>
             <Tabs.Tab id="progress">
@@ -349,11 +345,6 @@ export default function Profile() {
         {/* ---------- Aba: Desenvolvimento ---------- */}
         <Tabs.Panel className="pt-4 px-4" id="progress">
           <h1>Desenvolvimento do funcionário</h1>
-        </Tabs.Panel>
-
-        {/* ---------- Aba: Preferencias ---------- */}
-        <Tabs.Panel className="pt-4 px-4" id="preferences">
-          <h1>Preferências</h1>
         </Tabs.Panel>
       </Tabs>
     </div>

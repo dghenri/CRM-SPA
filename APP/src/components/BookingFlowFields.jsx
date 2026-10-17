@@ -1,5 +1,5 @@
-import { Button, Calendar, Chip, Label, Radio, RadioGroup, Spinner, Separator } from "@heroui/react";
-import { Clock, Banknote, OctagonAlert, Ban, KeyRound, Hash, Ticket, X } from "lucide-react";
+import { Button, Calendar, Chip, I18nProvider, Label, Radio, RadioGroup, Spinner, Separator } from "@heroui/react";
+import { Clock, OctagonAlert, Ban, Ticket, X } from "lucide-react";
 import ServiceSelectField from "./ServiceSelectField";
 import { PAYMENT_METHODS, getPaymentMethod } from "./paymentMethods";
 
@@ -63,6 +63,7 @@ export function BookingStepOne({ flow }) {
     selectedService,
     selectedServiceBlockedMessage,
     handleSelectService,
+    isServiceAllowed,
   } = flow;
 
   return (
@@ -72,6 +73,7 @@ export function BookingStepOne({ flow }) {
         isLoading={isLoadingServices}
         value={selectedServiceId}
         onChange={handleSelectService}
+        isServiceAllowed={isServiceAllowed}
       />
 
       {servicesError && (
@@ -102,20 +104,15 @@ export function BookingStepOne({ flow }) {
               </h3>
               <div className="mt-1 flex items-center gap-2">
                 <span className="flex items-center text-sm font-semibold gap-1">
-                  <Banknote size={13} className="text-success-hover" />
                   {formatPrice(selectedService.price)}
                 </span>
-                {/* <Chip size="sm" variant="soft" color="success" className="font-semibold">
-                  <Banknote size={12} />
-                  {formatPrice(selectedService.price)}
-                </Chip> */}
                 <Chip size="sm" variant="soft" color="accent" className="font-semibold">
                   <Clock size={12} />
                   {selectedService.duration} min
                 </Chip>
                 {selectedService.minAge ? (
                   <Chip size="sm" variant="soft" color="warning" className="font-semibold">
-                    {selectedService.minAge}+ anos
+                    +{selectedService.minAge} anos
                   </Chip>
                 ) : null}
               </div>
@@ -140,6 +137,8 @@ export function BookingStepTwo({ flow }) {
     slotsError,
     minDate,
     formattedDate,
+    professionalName,
+    isDateUnavailable,
   } = flow;
 
   if (!selectedService) return null;
@@ -156,6 +155,9 @@ export function BookingStepTwo({ flow }) {
           <h3 className="truncate font-serif text-sm font-bold text-foreground">
             {selectedService.title}
           </h3>
+          {professionalName && (
+            <p className="truncate text-xs font-semibold text-muted">com {professionalName}</p>
+          )}
         </div>
         <Chip size="sm" variant="soft" color="accent" className="font-semibold">
           <Clock size={12} />
@@ -168,9 +170,13 @@ export function BookingStepTwo({ flow }) {
       </h3>
 
       <div className="mt-3 flex justify-center">
+        {/* pt-BR: meses e dias em português, semana começando no domingo */}
+        <I18nProvider locale="pt-BR">
         <Calendar
           aria-label="Escolha a data do agendamento"
           minValue={minDate}
+          weekdayStyle="short"
+          isDateUnavailable={isDateUnavailable}
           value={selectedDate}
           onChange={setSelectedDate}
           className="w-full max-w-sm"
@@ -189,7 +195,7 @@ export function BookingStepTwo({ flow }) {
           <Calendar.Grid className="w-full border-spacing-1">
             <Calendar.GridHeader>
               {(day) => (
-                <Calendar.HeaderCell className="pb-2 text-sm font-semibold text-muted">
+                <Calendar.HeaderCell className="pb-2 text-sm font-semibold capitalize text-muted">
                   {day}
                 </Calendar.HeaderCell>
               )}
@@ -198,16 +204,18 @@ export function BookingStepTwo({ flow }) {
               {(date) => (
                 <Calendar.Cell
                   date={date}
-                  className="size-12 rounded-full text-base font-semibold
+                  className="size-12 rounded-full text-base font-semibold ml-2
                     data-selected:bg-accent data-selected:text-white
                     data-today:ring-2 data-today:ring-accent
                     data-outside-month:text-muted
+                    data-unavailable:text-default-300 data-unavailable:line-through
                     data-hovered:bg-default"
                 />
               )}
             </Calendar.GridBody>
           </Calendar.Grid>
         </Calendar>
+        </I18nProvider>
       </div>
 
       {selectedDate && (

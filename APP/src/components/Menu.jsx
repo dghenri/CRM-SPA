@@ -48,6 +48,8 @@ const navItems = [
     key: 'perfil',
     label: 'Perfil',
     path: '/user/profile',
+    // outras rotas que também pertencem ao Perfil (telas de edição da conta)
+    extraPaths: ['/user/account'],
     isProfile: true,
   },
 ];
@@ -180,14 +182,23 @@ const Menu = ({ client }) => {
   const navigate = useNavigate();
 
 
-  const isActive = (path) => location.pathname === path;
+  // Ativo na própria rota e em todas as rotas filhas (ex.: /user/scheduling/new
+  // continua marcando "Agendamentos"). O início (/user) é a raiz de todas as
+  // outras rotas, então ele só marca quando a rota é exatamente ela.
+  const HOME_PATH = '/user';
+  const currentPath = location.pathname.replace(/\/+$/, '') || '/';
+  const matches = (path) =>
+    path === HOME_PATH
+      ? currentPath === path
+      : currentPath === path || currentPath.startsWith(`${path}/`);
+  const isActive = (path, extraPaths = []) => matches(path) || extraPaths.some(matches);
 
   return (
     <nav
       className="fixed inset-x-0 bottom-0 z-50 border-t border-border/50 bg-overlay pb-[env(safe-area-inset-bottom)]">
       <ul className="flex items-center justify-around px-2 py-2">
-        {navItems.map(({ key, label, glyph, path, isProfile }) => {
-          const active = isActive(path);
+        {navItems.map(({ key, label, glyph, path, extraPaths, isProfile }) => {
+          const active = isActive(path, extraPaths);
 
           return (
             <li key={key}>

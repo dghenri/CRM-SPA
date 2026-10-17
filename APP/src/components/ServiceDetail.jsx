@@ -11,6 +11,7 @@ import {
   CalendarCheck2,
   OctagonAlert,
   Banknote,
+  Hand,
 } from "lucide-react";
 import api from "../api/api";
 import { fetchMyFavorites, addFavorite, removeFavorite } from "../api/favorites";
@@ -182,14 +183,12 @@ export default function ServiceDetailPage() {
                   <Clock size={13} />
                   {service.duration} min
                 </Chip>
-                <Chip
-                  variant="soft"
-                  color={service.available ? "success" : "danger"}
-                  className="font-semibold"
-                >
-                  {service.available ? <ShieldCheck size={13} /> : <EyeOff size={13} />}
-                  {service.available ? "Disponível" : "Indisponível"}
-                </Chip>
+                {service.minAge ? (
+                  <Chip variant="soft" color="warning" className="font-semibold">
+                    <Hand size={13} />
+                    +{service.minAge} anos
+                  </Chip>
+                ) : null}
               </span>
               
 
@@ -197,11 +196,6 @@ export default function ServiceDetailPage() {
                 <span className="flex items-center font-bold text-lg gap-2">
                   {formatPrice(service.price)}
                 </span>
-                {service.minAge ? (
-                  <Chip variant="soft" color="warning" className="font-semibold">
-                    A partir de {service.minAge} anos
-                  </Chip>
-                ) : null}
               </div>
 
               {minAgeMessage && (

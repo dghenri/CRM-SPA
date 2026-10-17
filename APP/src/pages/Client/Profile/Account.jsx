@@ -41,6 +41,8 @@ import {
   Plus,
   Trash2,
   UserRound,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------------
@@ -68,28 +70,32 @@ const removeAvatar = () => api.delete("/users/me/avatar");
 const AVATAR_SIZE = 512;
 const AVATAR_MAX_BYTES = 1_500_000; // o servidor aceita até 2 MB
 
-// Recorta a foto no centro (quadrado), reduz para 512x512 e devolve um Blob JPEG
-async function fileToAvatarBlob(file) {
+// Lê o arquivo escolhido e devolve a imagem decodificada (para o cliente recortar)
+async function fileToBitmap(file) {
   if (!file.type.startsWith("image/")) throw new Error("Escolha um arquivo de imagem.");
   if (file.size > 15 * 1024 * 1024) throw new Error("A imagem é muito grande (máximo 15 MB).");
-
-  let bitmap;
   try {
     // "from-image" respeita a rotação gravada pela câmera do celular
-    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    return await createImageBitmap(file, { imageOrientation: "from-image" });
   } catch {
     throw new Error("Não foi possível ler essa imagem. Tente outra (JPG ou PNG).");
   }
+}
 
-  const side = Math.min(bitmap.width, bitmap.height);
+// Gera o JPEG 512x512 a partir do recorte escolhido.
+// crop = { x, y, size }: quadrado em pixels da imagem ORIGINAL.
+async function bitmapToAvatarBlob(bitmap, crop) {
+  const size = Math.max(1, Math.min(crop.size, bitmap.width, bitmap.height));
+  const x = Math.min(Math.max(0, crop.x), bitmap.width - size);
+  const y = Math.min(Math.max(0, crop.y), bitmap.height - size);
+
   const canvas = document.createElement("canvas");
   canvas.width = AVATAR_SIZE;
   canvas.height = AVATAR_SIZE;
   const ctx = canvas.getContext("2d");
   ctx.fillStyle = "#ffffff"; // PNG com transparência vira fundo branco no JPEG
   ctx.fillRect(0, 0, AVATAR_SIZE, AVATAR_SIZE);
-  ctx.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, AVATAR_SIZE, AVATAR_SIZE);
-  bitmap.close?.();
+  ctx.drawImage(bitmap, x, y, size, size, 0, 0, AVATAR_SIZE, AVATAR_SIZE);
 
   for (const quality of [0.85, 0.7, 0.55]) {
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
@@ -551,13 +557,137 @@ function NotificationsForm({ user, onSaved }) {
   );
 }
 
+/* ------------------------------ foto: recorte ---------------------------- */
+const CROP_ZOOM_MAX = 4;
+
+// Área de recorte quadrada: arraste a foto para posicionar e use o zoom para
+// ajustar o tamanho. A moldura circular mostra como ela aparece no perfil.
+function AvatarCropper({ bitmap, onCancel, onApply }) {
+  const [view] = useState(() => Math.max(200, Math.min(288, window.innerWidth - 96))); // lado da área, em px
+  const baseScale = view / Math.min(bitmap.width, bitmap.height); // zoom 1 = a foto cobre a área
+  const [zoom, setZoom] = useState(1);
+  const scale = baseScale * zoom;
+  const [offset, setOffset] = useState(() => ({
+    x: (view - bitmap.width * baseScale) / 2,
+    y: (view - bitmap.height * baseScale) / 2,
+  }));
+  const [busy, setBusy] = useState(false);
+  const canvasRef = useRef(null);
+  const drag = useRef(null);
+
+  // mantém a foto sempre cobrindo toda a área (sem "buracos" nas bordas)
+  const clamp = (x, y, s) => ({
+    x: Math.min(0, Math.max(view - bitmap.width * s, x)),
+    y: Math.min(0, Math.max(view - bitmap.height * s, y)),
+  });
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = view * dpr;
+    canvas.height = view * dpr;
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, view, view);
+    ctx.drawImage(bitmap, offset.x, offset.y, bitmap.width * scale, bitmap.height * scale);
+  }, [bitmap, offset, scale, view]);
+
+  // dá zoom mantendo o centro da área no mesmo ponto da foto
+  const changeZoom = (next) => {
+    const z = Math.min(CROP_ZOOM_MAX, Math.max(1, next));
+    const s2 = baseScale * z;
+    const cx = (view / 2 - offset.x) / scale;
+    const cy = (view / 2 - offset.y) / scale;
+    setOffset(clamp(view / 2 - cx * s2, view / 2 - cy * s2, s2));
+    setZoom(z);
+  };
+
+  const onPointerDown = (e) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drag.current = { px: e.clientX, py: e.clientY, ox: offset.x, oy: offset.y };
+  };
+  const onPointerMove = (e) => {
+    const d = drag.current;
+    if (!d) return;
+    setOffset(clamp(d.ox + e.clientX - d.px, d.oy + e.clientY - d.py, scale));
+  };
+  const endDrag = () => {
+    drag.current = null;
+  };
+
+  const apply = async () => {
+    setBusy(true);
+    try {
+      await onApply({ x: -offset.x / scale, y: -offset.y / scale, size: view / scale });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="grid w-full justify-items-center gap-4">
+      <div className="relative touch-none cursor-grab overflow-hidden rounded-2xl active:cursor-grabbing" style={{ width: view, height: view }}>
+        <canvas
+          ref={canvasRef}
+          style={{ width: view, height: view }}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          aria-label="Arraste para posicionar a foto"
+        />
+        {/* moldura circular: escurece o que fica fora do que aparecerá no perfil */}
+        <div className="pointer-events-none absolute inset-0 rounded-full shadow-[0_0_0_9999px_rgba(0,0,0,0.55)] ring-2 ring-white/80" />
+      </div>
+
+      <div className="flex w-full max-w-xs items-center gap-3">
+        <ZoomOut size={18} className="shrink-0 text-muted" />
+        <input
+          type="range"
+          min={1}
+          max={CROP_ZOOM_MAX}
+          step={0.01}
+          value={zoom}
+          onChange={(e) => changeZoom(Number(e.target.value))}
+          aria-label="Zoom"
+          className="w-full accent-accent"
+        />
+        <ZoomIn size={18} className="shrink-0 text-muted" />
+      </div>
+
+      <p className="text-center text-sm text-muted">Arraste a foto para posicionar e use o zoom para ajustar o tamanho.</p>
+
+      <div className="flex w-full justify-between gap-2">
+        <Button variant="tertiary" isDisabled={busy} onPress={onCancel} className="flex-1">
+          Cancelar
+        </Button>
+        <Button isPending={busy} onPress={apply} className="flex-1">
+          Aplicar recorte
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------ foto ------------------------------------- */
 function PhotoForm({ user, onSaved }) {
   const inputRef = useRef(null);
   const [picked, setPicked] = useState(null); // { blob, url } da foto escolhida, ainda não enviada
   const preview = picked?.url ?? null;
   const [reading, setReading] = useState(false);
+  const [cropping, setCropping] = useState(null); // imagem escolhida, aguardando o recorte
+  const croppingRef = useRef(null);
   const { pending, error, setError, run } = useAction();
+
+  const closeCrop = () => {
+    croppingRef.current?.close?.();
+    croppingRef.current = null;
+    setCropping(null);
+  };
+  // ao sair da tela, libera a imagem decodificada
+  useEffect(() => () => croppingRef.current?.close?.(), []);
 
   // libera a memória do preview anterior (troca de foto ou saída da tela)
   useEffect(() => () => picked && URL.revokeObjectURL(picked.url), [picked]);
@@ -569,12 +699,26 @@ function PhotoForm({ user, onSaved }) {
     setReading(true);
     setError("");
     try {
-      const blob = await fileToAvatarBlob(file);
-      setPicked({ blob, url: URL.createObjectURL(blob) });
+      const bitmap = await fileToBitmap(file);
+      croppingRef.current?.close?.();
+      croppingRef.current = bitmap;
+      setCropping(bitmap); // abre a tela de recorte
     } catch (err) {
       setError(err.message);
     } finally {
       setReading(false);
+    }
+  };
+
+  // "Aplicar recorte": gera o JPEG 512x512 e mostra o resultado para conferir antes de salvar
+  const applyCrop = async (crop) => {
+    try {
+      const blob = await bitmapToAvatarBlob(cropping, crop);
+      setPicked({ blob, url: URL.createObjectURL(blob) });
+      setError("");
+      closeCrop();
+    } catch (err) {
+      setError(err.message);
     }
   };
 
@@ -594,6 +738,17 @@ function PhotoForm({ user, onSaved }) {
 
   const shown = preview ?? assetUrl(user.avatarUrl);
 
+  if (cropping) {
+    return (
+      <div className="grid justify-items-center gap-4 rounded-2xl bg-overlay p-4">
+        <div className="w-full">
+          <ErrorAlert message={error} />
+        </div>
+        <AvatarCropper bitmap={cropping} onCancel={closeCrop} onApply={applyCrop} />
+      </div>
+    );
+  }
+
   return (
     <div className="grid justify-items-center gap-4 rounded-2xl bg-overlay p-4">
       <div className="w-full">
@@ -604,7 +759,7 @@ function PhotoForm({ user, onSaved }) {
         <Avatar.Fallback>{getInitials(user.name)}</Avatar.Fallback>
       </Avatar>
       <p className="text-center text-sm text-muted">
-        {preview ? "Confira como ficou e toque em Salvar foto." : "A foto é recortada no centro, em formato quadrado."}
+        {preview ? "Confira como ficou e toque em Salvar foto." : "Ao escolher uma foto, você poderá recortar e ajustar o tamanho antes de salvar."}
       </p>
 
       <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={pickFile} aria-label="Escolher foto" />

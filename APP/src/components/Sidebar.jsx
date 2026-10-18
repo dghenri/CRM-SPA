@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { useLocation, NavLink, Link, Navigate, useNavigate } from "react-router-dom";
 import ThemeSwitcher from "../components/ThemeSwitcher"
 import { useAuth } from "../context/AuthContext";
+import { assetUrl } from "../api/api";
 
 import {
   Avatar,
@@ -85,6 +86,18 @@ function getStatusColor(status) {
   return USER_STATUS_COLOR[status] ?? "default";
 }
 
+// Estado aberto/fechado da sidebar guardado no navegador (sobrevive ao F5)
+const SIDEBAR_STORAGE_KEY = "viva-bem-spa:sidebar-open";
+
+function readSidebarOpen() {
+  try {
+    const saved = localStorage.getItem(SIDEBAR_STORAGE_KEY);
+    return saved === null ? null : saved === "true";
+  } catch {
+    return null; // localStorage bloqueado: segue com o padrão
+  }
+}
+
 export default function Sidebar ({
   open,
   setOpen,
@@ -107,6 +120,28 @@ export default function Sidebar ({
       setExpanded(false);
     }
   }, [open]);
+
+  // Restaura o estado salvo antes da primeira pintura (evita "piscar" aberta e fechar)
+  const persistReady = useRef(false);
+  useLayoutEffect(() => {
+    const saved = readSidebarOpen();
+    if (saved !== null) setOpen(saved);
+  }, [setOpen]);
+
+  // Salva a cada mudança (a primeira execução é a montagem: não sobrescreve o valor salvo)
+  useEffect(() => {
+    if (!persistReady.current) {
+      persistReady.current = true;
+      return;
+    }
+    try {
+      localStorage.setItem(SIDEBAR_STORAGE_KEY, String(open));
+    } catch {
+      /* sem localStorage: só não lembra na próxima visita */
+    }
+  }, [open]);
+
+  const avatarSrc = assetUrl(user?.avatarUrl);
 
   const handleMenuAction = (key) => {
     if (key === "staff") {
@@ -337,7 +372,7 @@ export default function Sidebar ({
                 <Avatar size="sm">
                   <Avatar.Image
                     alt={user?.name || "User"}
-                    src="https://heroui-assets.nyc3.cdn.digitaloceanspaces.com/avatars/orange.jpg"
+                    src={avatarSrc}
                   />
                   <Avatar.Fallback delayMs={600}>{getInitials(user?.name)}</Avatar.Fallback>
                 </Avatar>
@@ -359,7 +394,7 @@ export default function Sidebar ({
                 <Avatar size="sm">
                   <Avatar.Image
                     alt={user?.name || "Usuário"}
-                    src="https://heroui-assets.nyc3.cdn.digitaloceanspaces.com/avatars/orange.jpg"
+                    src={avatarSrc}
                   />
                   <Avatar.Fallback delayMs={600}>{getInitials(user?.name)}</Avatar.Fallback>
                 </Avatar>

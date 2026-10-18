@@ -66,6 +66,9 @@ model Staff {
   birthdate DateTime
   status    StaffStatus  @default(Active)
 
+  // caminho da foto de perfil (ex: /uploads/avatars/staff-<id>-<ts>.jpg); null = sem foto
+  avatarUrl String?
+
   // preferências pessoais da funcionária (ex: { dragAppointments: false,
   // theme: "system" }) - campo único e genérico pra não precisar de uma
   // migration de schema toda vez que surgir uma configuração nova.

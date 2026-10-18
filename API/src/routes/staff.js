@@ -1,4 +1,7 @@
 import { Router } from 'express';
+import multer from 'multer';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { ACCESS_TOKEN_KEY } from '../lib/config.js';
@@ -8,6 +11,72 @@ import { authenticateToken, requireMajorAdmin, requireStaff, stockAuth } from '.
 import { broadcastAppointmentsChanged } from '../lib/realtime.js';
 
 const router = Router();
+
+//------------------------------------------------------------- FOTO DE PERFIL (funcionária edita a própria)
+// O front recorta a foto e manda um JPEG (multipart, campo "file"). Gravamos em
+// <UPLOAD_DIR>/avatars e guardamos só o caminho público (/uploads/avatars/...).
+// Pressupõe que /uploads já é servido como estático (o mesmo das fotos dos clientes).
+const UPLOAD_ROOT = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads');
+const AVATAR_DIR = path.join(UPLOAD_ROOT, 'avatars');
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+const avatarUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: AVATAR_MAX_BYTES } });
+
+const isJpeg = (buf) => buf?.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+
+// apaga o arquivo antigo (só os que esta rota criou: prefixo "staff-")
+async function removeAvatarFile(avatarUrl) {
+  if (!avatarUrl) return;
+  const name = path.basename(String(avatarUrl));
+  if (!name.startsWith('staff-')) return;
+  await fs.unlink(path.join(AVATAR_DIR, name)).catch(() => {});
+}
+
+router.put('/staff/me/avatar', authenticateToken, requireStaff, (req, res) => {
+  avatarUpload.single('file')(req, res, async (uploadError) => {
+    try {
+      if (uploadError) {
+        const tooBig = uploadError.code === 'LIMIT_FILE_SIZE';
+        return res.status(tooBig ? 413 : 400).json({ error: tooBig ? 'A foto passa de 2 MB.' : 'Não foi possível ler a foto enviada.' });
+      }
+      if (!req.file || !isJpeg(req.file.buffer)) {
+        return res.status(400).json({ error: 'Envie a foto em JPEG.' });
+      }
+
+      const me = await prisma.staff.findUnique({ where: { id: req.user.id } });
+      if (!me) return res.status(401).json({ error: 'Sessão expirada.' });
+
+      await fs.mkdir(AVATAR_DIR, { recursive: true });
+      const fileName = `staff-${me.id}-${Date.now()}.jpg`;
+      await fs.writeFile(path.join(AVATAR_DIR, fileName), req.file.buffer);
+
+      const updated = await prisma.staff.update({
+        where: { id: me.id },
+        data: { avatarUrl: `/uploads/avatars/${fileName}` },
+      });
+      await removeAvatarFile(me.avatarUrl);
+
+      res.status(200).json(toPublicStaff(updated));
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Erro ao salvar a foto.' });
+    }
+  });
+});
+
+router.delete('/staff/me/avatar', authenticateToken, requireStaff, async (req, res) => {
+  try {
+    const me = await prisma.staff.findUnique({ where: { id: req.user.id } });
+    if (!me) return res.status(401).json({ error: 'Sessão expirada.' });
+
+    const updated = await prisma.staff.update({ where: { id: me.id }, data: { avatarUrl: null } });
+    await removeAvatarFile(me.avatarUrl);
+
+    res.status(200).json(toPublicStaff(updated));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao remover a foto.' });
+  }
+});
 
 //------------------------------------------------------------- POST ROUTE (CREATE STAFF - só MajorAdmin)
 // Antes essa rota não exigia login: qualquer um criava uma conta de equipe (inclusive MajorAdmin).

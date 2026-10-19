@@ -69,6 +69,9 @@ model Staff {
   // caminho da foto de perfil (ex: /uploads/avatars/staff-<id>-<ts>.jpg); null = sem foto
   avatarUrl String?
 
+  // sessões (JWT) emitidas antes deste instante deixam de valer: usado por "sair de outros dispositivos"
+  sessionsValidFrom DateTime?
+
   // preferências pessoais da funcionária (ex: { dragAppointments: false,
   // theme: "system" }) - campo único e genérico pra não precisar de uma
   // migration de schema toda vez que surgir uma configuração nova.
@@ -145,6 +148,9 @@ model User {
   dismissedAlertKeys String[]
 
   addresses Address[]
+
+  // sessões (JWT) emitidas antes deste instante deixam de valer: usado por "sair de outros dispositivos"
+  sessionsValidFrom DateTime?
 }
 
 // Endereços do cliente (vários por cliente, um deles é o principal)
@@ -512,4 +518,18 @@ model Banner {
   createdByName String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+// Pedidos de recuperação de senha (cliente = "user", colaborador = "staff").
+// Guarda só o HASH do token enviado por e-mail; o link vale por tempo limitado e é de uso único.
+model PasswordReset {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  tokenHash   String    @unique
+  accountType String // "user" | "staff"
+  accountId   String    @db.ObjectId
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([accountType, accountId])
 }

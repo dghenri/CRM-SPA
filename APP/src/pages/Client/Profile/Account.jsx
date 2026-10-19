@@ -14,6 +14,7 @@ import {
   Badge,
   Button,
   Calendar,
+  Checkbox,
   Chip,
   DateField,
   DatePicker,
@@ -442,6 +443,9 @@ function PasswordForm({ onDone }) {
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
   const [show, setShow] = useState(false);
+  // desconectar os outros navegadores/aparelhos junto com a troca (marcado por padrão)
+  const [logoutOthers, setLogoutOthers] = useState(true);
+  const { user, login } = useAuth();
   const { pending, error, setError, run } = useAction();
 
   const submit = () => {
@@ -451,7 +455,19 @@ function PasswordForm({ onDone }) {
 
     run(async () => {
       await api.patch("/users/me/password", { currentPassword: current, newPassword: next });
-      onDone("Senha alterada com sucesso.");
+
+      let message = "Senha alterada com sucesso.";
+      if (logoutOthers) {
+        try {
+          // invalida as outras sessões e devolve um token novo só para este aparelho
+          const { token } = await api.post("/auth/sessions/revoke-others");
+          login(token, user);
+          message = "Senha alterada. Os outros dispositivos foram desconectados.";
+        } catch {
+          message = "Senha alterada, mas não foi possível desconectar os outros dispositivos.";
+        }
+      }
+      onDone(message);
     });
   };
 
@@ -477,6 +493,14 @@ function PasswordForm({ onDone }) {
           Mostrar senhas
         </Switch.Content>
       </Switch>
+      <Checkbox isSelected={logoutOthers} onChange={setLogoutOthers}>
+        <Checkbox.Content className="text-muted">
+          <Checkbox.Control className="size-5 bg-surface-secondary border">
+            <Checkbox.Indicator />
+          </Checkbox.Control>
+          Sair de outros dispositivos
+        </Checkbox.Content>
+      </Checkbox>
       <SaveButton pending={pending} disabled={!current || !next || !confirm}>
         Alterar senha
       </SaveButton>

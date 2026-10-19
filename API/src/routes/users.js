@@ -8,6 +8,7 @@ import { MIN_AGE_MESSAGE, duplicateFieldMessage, isUnderMinAge, isValidCpf } fro
 import { authenticateToken, requireMajorAdmin, requireStaff, requireUser, stockAuth } from '../middleware/auth.js';
 import { loadStaffActor, scopeWhere } from '../lib/appointmentAccess.js';
 import { grantWelcomeCoupon } from '../services/welcomeCoupon.js';
+import { validatePassword } from '../lib/passwordPolicy.js';
 
 const router = Router();
 
@@ -28,6 +29,12 @@ router.post('/auth/user/register', async (req, res) => {
 
     if (!isValidCpf(cpfDigits)) {
       return res.status(400).json({ error: "CPF inválido." });
+    }
+
+    // senha forte (mesma regra do checklist do cadastro no front)
+    const passwordProblems = validatePassword(password, { name, email });
+    if (passwordProblems.length) {
+      return res.status(400).json({ error: passwordProblems[0], problems: passwordProblems });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -308,6 +315,11 @@ router.post('/users', authenticateToken, requireStaff, async (req, res) => {
       }
     }
 
+    const passwordProblems = validatePassword(password, { name, email });
+    if (passwordProblems.length) {
+      return res.status(400).json({ error: passwordProblems[0], problems: passwordProblems });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const customer = await prisma.user.create({
@@ -362,6 +374,11 @@ router.put('/users/:id', ...stockAuth, requireMajorAdmin, async (req, res) => {
     // só troca a senha se o admin realmente digitou uma nova; campo
     // vazio = mantém a senha atual
     if (password) {
+      const target = await prisma.user.findUnique({ where: { id: req.params.id }, select: { name: true, email: true } });
+      const passwordProblems = validatePassword(password, { name: name ?? target?.name, email: email ?? target?.email });
+      if (passwordProblems.length) {
+        return res.status(400).json({ error: passwordProblems[0], problems: passwordProblems });
+      }
       data.password = await bcrypt.hash(password, 10);
     }
 

@@ -8,6 +8,7 @@ import AvatarUploader from "../../../components/AvatarUploader";
 import {
   Button,
   Calendar,
+  Checkbox,
   Label,
   InputGroup,
   Separator,
@@ -59,7 +60,7 @@ function formatLabel(text) {
 }
 
 export default function Profile() {
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, login } = useAuth();
   const [isVisible, setIsVisible] = useState(false);
   const [isSavingInfo, setIsSavingInfo] = useState(false);
   const [isSavingSecurity, setIsSavingSecurity] = useState(false);
@@ -68,6 +69,8 @@ export default function Profile() {
   // evita editar sem querer um dado sensível só de passar o olho na tela
   const [isEditingEmail, setIsEditingEmail] = useState(false);
   const [isEditingPassword, setIsEditingPassword] = useState(false);
+  // ao trocar a senha, desconecta os outros navegadores/aparelhos (marcado por padrão)
+  const [logoutOthers, setLogoutOthers] = useState(true);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -121,6 +124,7 @@ export default function Profile() {
     // o api.js já devolve o corpo da resposta (o staff atualizado)
     const updated = await api.put(`/staff/${user.id}`, payload);
     updateUser(updated);
+    return updated;
   };
 
   const handleSaveInfo = async () => {
@@ -164,11 +168,25 @@ export default function Profile() {
 
     setIsSavingSecurity(true);
     try {
-      await updateStaff(payload);
+      const updated = await updateStaff(payload);
+      const changedPassword = !!payload.password;
       setFormData((prev) => ({ ...prev, password: "" }));
       setIsEditingEmail(false);
       setIsEditingPassword(false);
-      toast.success("Segurança atualizada com sucesso!");
+
+      if (changedPassword && logoutOthers) {
+        try {
+          // invalida as outras sessões e devolve um token novo só para este navegador
+          const { token } = await api.post("/auth/sessions/revoke-others");
+          login(token, updated);
+          toast.success("Segurança atualizada!", { description: "Os outros dispositivos foram desconectados." });
+        } catch (revokeError) {
+          console.error(revokeError);
+          toast.warning("Senha alterada, mas não foi possível desconectar os outros dispositivos.");
+        }
+      } else {
+        toast.success("Segurança atualizada com sucesso!");
+      }
     } catch (error) {
       console.error(error);
       // o back-end manda mensagens úteis aqui (ex: email já em uso)
@@ -227,20 +245,28 @@ export default function Profile() {
 
             {/* ---------- Aba: Informações ---------- */}
             <Tabs.Panel className="flex-1 px-4" id="personal-info">
-              <h2 className="text-lg font-bold">Informações Pessoais</h2>
-              <Separator className="mt-4 mb-6" />
-              
-              <div className="flex items-center gap-4 mb-8">
+              <div className="flex items-center gap-4 mb-18">
                 <AvatarUploader
                   name={user.name}
                   avatarUrl={user.avatarUrl}
                   onSave={handleSaveAvatar}
                   onRemove={handleRemoveAvatar}
                 />
+                <div>
+                  <p className="font-semibold">{user.name}</p>
+                  <div className="flex items-center gap-1">
+                    <Chip className="mt-1" color={statusColorMap[user.status]} size="sm" variant="soft">
+                      {formatLabel(user.status)}
+                    </Chip>
+                  </div>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <TextField fullWidth className="max-w-sm" value={formData.name} onChange={(v) => handleInputChange("name", v)}>
+              <h2 className="text-lg font-bold mt-15">Informações Pessoais</h2>
+              <Separator className="mt-4 mb-6" />
+
+              <div className="flex flex-col gap-4">
+                <TextField fullWidth className="max-w-2xl" value={formData.name} onChange={(v) => handleInputChange("name", v)}>
                   <Label className="text-muted">Nome</Label>
                   <InputGroup className="border border-border">
                     <InputGroup.Input className="font-semibold" />
@@ -248,7 +274,7 @@ export default function Profile() {
                 </TextField>
 
                 {/* só leitura: o cargo é alterado pelo MajorAdmin na tabela de funcionários */}
-                <TextField fullWidth isReadOnly isDisabled className="max-w-sm" value={formatLabel(user.role)}>
+                <TextField fullWidth isReadOnly isDisabled className="max-w-70" value={formatLabel(user.role)}>
                   <Label className="text-muted">Cargo</Label>
                   <InputGroup className="border border-border">
                     <InputGroup.Input className="font-semibold" />
@@ -260,7 +286,7 @@ export default function Profile() {
                   type="tel"
                   inputMode="tel"
                   autoComplete="tel-national"
-                  className="max-w-sm"
+                  className="max-w-70"
                   value={formData.phone}
                   onChange={(v) =>
                     setFormData((prev) => ({ ...prev, phone: maskedChange(v, prev.phone, formatPhone) }))
@@ -274,7 +300,7 @@ export default function Profile() {
 
                 <I18nProvider locale="pt-BR">
                   <DatePicker
-                    className="max-w-sm"
+                    className="max-w-70"
                     value={formData.birthdate}
                     onChange={(v) => handleInputChange("birthdate", v)}
                     minValue={MIN_BIRTHDATE}
@@ -342,7 +368,7 @@ export default function Profile() {
                   <TextField
                     fullWidth
                     type="email"
-                    className="max-w-sm"
+                    className="w-150"
                     isDisabled={!isEditingEmail}
                     value={formData.email}
                     onChange={(v) => handleInputChange("email", v)}
@@ -365,7 +391,7 @@ export default function Profile() {
                   <TextField
                     fullWidth
                     type={isVisible ? "text" : "password"}
-                    className="max-w-sm"
+                    className="w-150"
                     isDisabled={!isEditingPassword}
                     value={formData.password}
                     onChange={(v) => handleInputChange("password", v)}
@@ -398,6 +424,18 @@ export default function Profile() {
                     {isEditingPassword ? <><CircleX /> Cancelar</> : <><Pencil /> Editar</>}
                   </Button>
                 </div>
+
+                {/* só faz sentido ao trocar a senha */}
+                {isEditingPassword && (
+                  <Checkbox isSelected={logoutOthers} onChange={setLogoutOthers}>
+                    <Checkbox.Content className="text-muted">
+                      <Checkbox.Control className="size-5 bg-surface-secondary border">
+                        <Checkbox.Indicator />
+                      </Checkbox.Control>
+                      Sair de outros dispositivos
+                    </Checkbox.Content>
+                  </Checkbox>
+                )}
               </div>
 
               <div className="mt-8 flex justify-end">

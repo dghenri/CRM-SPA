@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import { ACCESS_TOKEN_KEY } from '../lib/config.js';
 import { prisma } from '../lib/prisma.js';
 import { MAJOR_ADMIN } from '../services/stock.js';
+import { isSessionRevoked } from '../lib/sessionRevocation.js';
 
 //------------------------------------------------------------- MIDDLEWARE (JWT AUTH)
 export function authenticateToken(req, res, next) {
@@ -10,8 +11,18 @@ export function authenticateToken(req, res, next) {
 
   if (!token) return res.status(401).json({ error: "Não autorizado." });
 
-  jwt.verify(token, ACCESS_TOKEN_KEY, (err, decoded) => {
+  jwt.verify(token, ACCESS_TOKEN_KEY, async (err, decoded) => {
     if (err) return res.status(401).json({ error: "Sessão expirada." });
+
+    // "Sair de outros dispositivos": token emitido antes da data marcada na conta não vale mais
+    try {
+      if (await isSessionRevoked(decoded)) {
+        return res.status(401).json({ error: "Sessão encerrada. Entre novamente." });
+      }
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: "Erro ao validar a sessão." });
+    }
 
     req.user = decoded;
     next();

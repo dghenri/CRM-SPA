@@ -6,6 +6,9 @@ import { useAuth } from "../../../context/AuthContext";
 import { decodeToken } from "../../../utils/jwt";
 import formatCpf, { isValidCpf } from "../../../utils/formatCpf"
 import formatName from "../../../utils/formatName"
+import { validateEmail } from "../../../utils/validators";
+import { evaluatePassword, PASSWORD_MAX } from "../../../utils/passwordPolicy";
+import PasswordStrength from "../../../components/PasswordStrength";
 
 import {
   Card,
@@ -34,10 +37,11 @@ const SUCCESS_OVERLAY_DURATION = 1500;
 
 export default function Register() {
   const [isVisible, setIsVisible] = useState(false);
-  const inputName = useRef();
-  const inputPassword = useRef();
-  const inputConfirmPassword = useRef();
   const submitButtonRef = useRef();
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [emailError, setEmailError] = useState("");
   const [email, setEmail] = useState("");
   const [cpf, setCpf] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -71,25 +75,39 @@ export default function Register() {
     navigate(decoded?.type === "staff" ? '/staff/dashboard' : '/user', { replace: true });
   }, [loading, token, navigate]);
 
+  // requisitos da senha, reavaliados a cada tecla (também olham nome e e-mail digitados)
+  const passwordCheck = evaluatePassword(password, { name, email });
+  const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const name = formatName(inputName.current.value.trim());
-    const password = inputPassword.current.value;
-    const confirmPassword = inputConfirmPassword.current.value;
+    const formattedName = formatName(name.trim());
     const trimmedEmail = email.trim();
     const cpfDigits = cpf.replace(/\D/g, "");
 
-    if (!name || !trimmedEmail || !password || !cpfDigits) {
+    // e-mail: mensagem própria (em vez da do navegador) logo no campo
+    const emailMessage = validateEmail(trimmedEmail);
+    setEmailError(emailMessage);
+
+    if (!formattedName || !cpfDigits || !password) {
       toast.danger("Dados incompletos", {
         description: "Preencha nome, CPF, email e senha.",
       });
       return;
     }
+    if (emailMessage) return;
 
     if (!isValidCpf(cpfDigits)) {
       toast.danger("CPF inválido", {
         description: "Confira o CPF informado e tente novamente.",
+      });
+      return;
+    }
+
+    if (!passwordCheck.passed) {
+      toast.danger("Senha fraca", {
+        description: "Atenda a todos os requisitos da senha antes de continuar.",
       });
       return;
     }
@@ -111,7 +129,7 @@ export default function Register() {
       // ex: "João da SILVA" -> "João da Silva") pra não salvar tudo em
       // caixa alta/baixa do jeito que o usuário digitou.
       const data = {
-        name,
+        name: formattedName,
         cpf: cpfDigits,
         email: trimmedEmail,
         password,
@@ -156,7 +174,7 @@ export default function Register() {
   };
 
   return (
-    <Form onSubmit={handleSubmit}>
+    <Form onSubmit={handleSubmit} validationBehavior="aria" noValidate>
       <div className="h-dvh bg-overlay justify-center gap-2 p-4 md:grid md:grid-cols-4">
 
         {/* Left column */}
@@ -221,7 +239,9 @@ export default function Register() {
                   aria-label="Name"
                   placeholder="Ex: Anakin Skywalker"
                   className="bg-surface-secondary hover:bg-surface-tertiary font-medium text-base md:text-sm p-4"
-                  ref={inputName}
+                  autoComplete="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                 />
               </div>
 
@@ -242,18 +262,25 @@ export default function Register() {
               <TextField
                 name="email"
                 type="email"
+                value={email}
+                onChange={(value) => {
+                  setEmail(value);
+                  if (emailError) setEmailError("");
+                }}
+                isInvalid={!!emailError}
+                validationBehavior="aria"
               >
                 <Label>Email</Label>
                 <Input
+                  autoComplete="email"
                   className="w-full text-base md:text-sm font-medium bg-surface-secondary hover:bg-surface-tertiary p-4"
                   placeholder="nome@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)} />
-                <FieldError />
+                />
+                <FieldError>{emailError}</FieldError>
               </TextField>
 
               {/* Password */}
-              <TextField className="w-full" name="password" type="password">
+              <TextField className="w-full" name="password" type="password" value={password} onChange={setPassword}>
                 <Label>Senha</Label>
 
                 <InputGroup className="justify-between bg-surface-secondary hover:bg-surface-tertiary p-2">
@@ -261,13 +288,14 @@ export default function Register() {
                     className="w-full font-medium text-base md:text-sm"
                     placeholder="Crie sua senha"
                     type={isVisible ? "text" : "password"}
-                    ref={inputPassword}
+                    autoComplete="new-password"
+                    maxLength={PASSWORD_MAX}
                   />
 
                   <InputGroup.Suffix className="pr-0">
                     <Button
                       isIconOnly
-                      aria-label={isVisible ? "Hide password" : "Show password"}
+                      aria-label={isVisible ? "Ocultar senha" : "Mostrar senha"}
                       size="lg"
                       variant="ghost"
                       onPress={() => setIsVisible(!isVisible)}
@@ -277,10 +305,21 @@ export default function Register() {
                     </Button>
                   </InputGroup.Suffix>
                 </InputGroup>
+
+                {/* barra de força + requisitos, atualizados a cada tecla */}
+                <PasswordStrength password={password} name={name} email={email} />
               </TextField>
 
               {/* Confirm password */}
-              <TextField className="w-full" name="confirmPassword" type="password">
+              <TextField
+                className="w-full"
+                name="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={setConfirmPassword}
+                isInvalid={passwordsMismatch}
+                validationBehavior="aria"
+              >
                 <Label>Confirme sua senha</Label>
 
                 <InputGroup className="justify-between bg-surface-secondary hover:bg-surface-tertiary p-2">
@@ -288,13 +327,14 @@ export default function Register() {
                     className="w-full font-medium text-base md:text-sm"
                     placeholder="Repita sua senha"
                     type={isVisible ? "text" : "password"}
-                    ref={inputConfirmPassword}
+                    autoComplete="new-password"
+                    maxLength={PASSWORD_MAX}
                   />
 
                   <InputGroup.Suffix className="pr-0">
                     <Button
                       isIconOnly
-                      aria-label={isVisible ? "Hide password" : "Show password"}
+                      aria-label={isVisible ? "Ocultar senha" : "Mostrar senha"}
                       size="lg"
                       variant="ghost"
                       onPress={() => setIsVisible(!isVisible)}
@@ -304,6 +344,7 @@ export default function Register() {
                     </Button>
                   </InputGroup.Suffix>
                 </InputGroup>
+                <FieldError>As senhas não conferem.</FieldError>
               </TextField>
             </div>
 

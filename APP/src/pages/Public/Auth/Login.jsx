@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import api from "../../../api/api"
 import { useAuth } from "../../../context/AuthContext";
 import { decodeToken } from "../../../utils/jwt";
+import { validateEmail, PASSWORD_REQUIRED_MESSAGE } from "../../../utils/validators";
 
 import Carousel from "../../../components/Carousel";
 
@@ -26,7 +27,7 @@ import {
   Eye,
   EyeOff,
   Mail,
-  SquareArrowOutUpRight as BlankIcon,
+  ArrowRight,
   ChevronLeft,
 } from 'lucide-react';
 
@@ -36,6 +37,8 @@ export default function Login() {
   const [rememberUser, setRememberUser] = useState(false)
   const [isLoading, setLoading] = useState(false)
   const [isVisible, setIsVisible] = useState(false);
+  // mensagens de erro de cada campo (vazio = sem erro)
+  const [errors, setErrors] = useState({ email: "", password: "" });
   // Controla qual aba está ativa, pra sabermos qual rota de login chamar
   const [accountType, setAccountType] = useState("cliente");
   const navigate = useNavigate();
@@ -66,8 +69,27 @@ export default function Login() {
     }
   }, [loading, user, token, navigate]);
 
+  const handleEmailChange = (value) => {
+    setEmail(value);
+    if (errors.email) setErrors((prev) => ({ ...prev, email: "" }));
+  };
+
+  const handlePasswordChange = (value) => {
+    setPassword(value);
+    if (errors.password) setErrors((prev) => ({ ...prev, password: "" }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // valida antes de chamar a API (mensagens nossas, não as do navegador)
+    const nextErrors = {
+      email: validateEmail(email),
+      password: password ? "" : PASSWORD_REQUIRED_MESSAGE,
+    };
+    setErrors(nextErrors);
+    if (nextErrors.email || nextErrors.password) return;
+
     setLoading(true);
 
     try {
@@ -75,7 +97,7 @@ export default function Login() {
       const endpoint = accountType === "colaborador" ? "/auth/staff/login" : "/auth/user/login";
 
       const response = await api.post(endpoint, {
-        email,
+        email: email.trim(),
         password,
         rememberUser,
       });
@@ -102,8 +124,93 @@ export default function Login() {
     }
   };
 
+  // Campos compartilhados pelas duas abas (cliente e colaborador). O estado é controlado,
+  // então o que foi digitado continua ali ao trocar de aba.
+  const formFields = (
+    <div className="w-full max-w-sm space-y-6">
+      {/* Email */}
+      <TextField
+        name="email"
+        type="email"
+        value={email}
+        onChange={handleEmailChange}
+        isInvalid={!!errors.email}
+        validationBehavior="aria"
+      >
+        <Label>Email</Label>
+        <Input
+          autoComplete="email"
+          className="w-full text-base md:text-sm font-medium bg-surface-secondary hover:bg-surface-tertiary p-4"
+          placeholder="nome@email.com"
+        />
+        <FieldError>{errors.email}</FieldError>
+      </TextField>
+
+      {/* Password */}
+      <TextField
+        name="password"
+        type="password"
+        className="md:font-medium"
+        value={password}
+        onChange={handlePasswordChange}
+        isInvalid={!!errors.password}
+        validationBehavior="aria"
+      >
+        <Label>Senha</Label>
+        <InputGroup className="bg-surface-secondary hover:bg-surface-tertiary p-2">
+          <InputGroup.Input
+            type={isVisible ? "text" : "password"}
+            autoComplete="current-password"
+            placeholder="••••••••••••"
+            className="text-base md:text-sm font-medium"
+          />
+          <InputGroup.Suffix className="pr-0">
+            <Button
+              isIconOnly
+              aria-label={isVisible ? "Ocultar senha" : "Mostrar senha"}
+              size="lg"
+              variant="ghost"
+              onPress={() => setIsVisible(!isVisible)}
+              className="hover:bg-surface"
+            >
+              {isVisible ? <Eye className="size-6 text-muted" /> : <EyeOff className="size-6 text-muted" />}
+            </Button>
+          </InputGroup.Suffix>
+        </InputGroup>
+        <FieldError>{errors.password}</FieldError>
+      </TextField>
+
+      {/* Actions */}
+      <div className="flex gap-3 items-center justify-between">
+        <Checkbox name="remember-user" isSelected={rememberUser} onChange={setRememberUser}>
+          <Checkbox.Content className="text-muted">
+            <Checkbox.Control className="size-5 bg-surface-secondary border">
+              <Checkbox.Indicator />
+            </Checkbox.Control>
+            Lembre-se de mim
+          </Checkbox.Content>
+        </Checkbox>
+
+        {/* o e-mail já digitado (e o tipo de conta) vão junto, sem aparecer na URL */}
+        <Link
+          to="/recovery"
+          state={{ email: email.trim(), accountType }}
+          className="group flex items-center gap-1 text-sm font-semibold text-field-placeholder hover:underline"
+        >
+          Esqueceu a senha?
+          <ArrowRight className="size-4 opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0" />
+        </Link>
+      </div>
+
+      {/* Submit */}
+      <Button type="submit" color="primary" className="w-full p-6" size="lg" isDisabled={isLoading}>
+        {isLoading ? <Spinner className="size-6 text-white" /> : "Entrar"}
+      </Button>
+    </div>
+  );
+
   return (
-    <Form onSubmit={handleSubmit}>
+    <Form onSubmit={handleSubmit} validationBehavior="aria" noValidate>
       <div className="h-dvh bg-overlay overflow-hidden justify-center gap-2 p-4 md:grid md:grid-cols-4">
 
         {/* Left column */}
@@ -170,185 +277,8 @@ export default function Login() {
                   </Tabs.Tab>
                 </Tabs.List>
               </Tabs.ListContainer>
-              <Tabs.Panel className="pt-4" id="cliente">
-                <div className="w-full max-w-sm space-y-6">
-                  {/* Email */}
-                  <TextField
-                    name="email"
-                    type="email"
-                  >
-                    <Label>Email</Label>
-                    <Input
-                      className="w-full text-base md:text-sm font-medium bg-surface-secondary hover:bg-surface-tertiary p-4" 
-                      placeholder="nome@email.com" 
-                      onChange={(e) => setEmail(e.target.value)} />
-                    <FieldError />
-                  </TextField>
-
-                  {/* Password */}
-                  <TextField
-                    name="password"
-                    type="password"
-                    className="md:font-medium"
-                  >
-                    <Label>Senha</Label>
-                    <InputGroup className="bg-surface-secondary hover:bg-surface-tertiary p-2">
-                      <InputGroup.Input 
-                        type={isVisible ? "text" : "password"}
-                        placeholder="••••••••••••"
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="text-base md:text-sm font-medium"
-                      />
-                      <InputGroup.Suffix className="pr-0">
-                        <Button
-                          isIconOnly
-                          aria-label={isVisible ? "Hide password" : "Show password"}
-                          size="lg"
-                          variant="ghost"
-                          onPress={() => setIsVisible(!isVisible)}
-                          className="hover:bg-surface"
-                        >
-                          {isVisible ? <Eye className="size-6 text-muted" /> : <EyeOff className="size-6 text-muted" />}
-                        </Button>
-                      </InputGroup.Suffix>
-                    </InputGroup>
-                    <FieldError />
-                  </TextField>
-
-                  {/* Actions */}
-                  <div className="flex gap-3 items-center justify-between">
-                    <Checkbox name="remember-user" onChange={setRememberUser}>
-                      <Checkbox.Content className="text-muted">
-                        <Checkbox.Control className="size-5 bg-surface-secondary border">
-                          <Checkbox.Indicator />
-                        </Checkbox.Control>
-                        Lembre-se de mim
-                      </Checkbox.Content>
-                    </Checkbox>
-
-                    <Link 
-                      target="_blank"
-                      to="/recovery"
-                      className="group flex items-center gap-1 text-sm font-semibold text-field-placeholder hover:underline"
-                    >
-                      Esqueceu a senha?
-                      <BlankIcon className="size-4
-                        opacity-0
-                        -translate-x-1
-                        transition-all
-                        duration-200
-                        group-hover:opacity-100
-                        group-hover:translate-x-0" 
-                      />
-                    </Link>
-                  </div>
-
-                  {/* Submit */}       
-                  <Button
-                    type="submit"
-                    color="primary"
-                    className="w-full p-6"
-                    size="lg"
-                    isDisabled={isLoading}
-                  >
-                    {isLoading ? (
-                      <Spinner className="size-6 text-white" />
-                    ) : (
-                      "Entrar"
-                    )}
-                  </Button>
-
-                </div>
-              </Tabs.Panel>
-              <Tabs.Panel className="pt-4" id="colaborador">
-                <div className="w-full max-w-sm space-y-6">
-                  {/* Email */}
-                  <TextField
-                    name="email"
-                    type="email"
-                  >
-                    <Label>Email</Label>
-                    <Input
-                      className="w-full text-base md:text-sm font-medium bg-surface-secondary hover:bg-surface-tertiary p-4" 
-                      placeholder="nome@email.com" 
-                      onChange={(e) => setEmail(e.target.value)} />
-                    <FieldError />
-                  </TextField>
-
-                  {/* Password */}
-                  <TextField
-                    name="password"
-                    type="password"
-                    className="font-medium"
-                  >
-                    <Label>Senha</Label>
-                    <InputGroup className="bg-surface-secondary hover:bg-surface-tertiary p-2">
-                      <InputGroup.Input 
-                        type={isVisible ? "text" : "password"}
-                        placeholder="••••••••••••"
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="text-base md:text-sm font-medium"
-                      />
-                      <InputGroup.Suffix className="pr-0">
-                        <Button
-                          isIconOnly
-                          aria-label={isVisible ? "Hide password" : "Show password"}
-                          size="lg"
-                          variant="ghost"
-                          onPress={() => setIsVisible(!isVisible)}
-                          className="hover:bg-surface"
-                        >
-                          {isVisible ? <Eye className="size-6 text-muted" /> : <EyeOff className="size-6 text-muted" />}
-                        </Button>
-                      </InputGroup.Suffix>
-                    </InputGroup>
-                    <FieldError />
-                  </TextField>
-
-                  {/* Actions */}
-                  <div className="flex gap-3 items-center justify-between">
-                    <Checkbox name="remember-user" onChange={setRememberUser}>
-                      <Checkbox.Content className="text-muted">
-                        <Checkbox.Control className="size-5 bg-surface-secondary border">
-                          <Checkbox.Indicator />
-                        </Checkbox.Control>
-                        Lembre-se de mim
-                      </Checkbox.Content>
-                    </Checkbox>
-
-                    <Link 
-                      target="_blank"
-                      to="/recovery"
-                      className="group flex items-center gap-1 text-sm font-semibold text-field-placeholder hover:underline"
-                    >
-                      Esqueceu a senha?
-                      <BlankIcon className="size-4
-                        opacity-0
-                        -translate-x-1
-                        transition-all
-                        duration-200
-                        group-hover:opacity-100
-                        group-hover:translate-x-0" 
-                      />
-                    </Link>
-                  </div>
-
-                  {/* Submit */}       
-                  <Button
-                    type="submit"
-                    color="primary"
-                    className="w-full p-6"
-                    size="lg"
-                    isDisabled={isLoading}
-                  >
-                    {isLoading ? (
-                      <Spinner className="size-6 text-white" />
-                    ) : (
-                      "Entrar"
-                    )}
-                  </Button>
-                </div>
-              </Tabs.Panel>
+              <Tabs.Panel className="pt-4" id="cliente">{formFields}</Tabs.Panel>
+              <Tabs.Panel className="pt-4" id="colaborador">{formFields}</Tabs.Panel>
             </Tabs>
           </div>
         </div>

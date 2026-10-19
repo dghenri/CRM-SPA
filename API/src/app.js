@@ -6,6 +6,7 @@ import servicesRoutes from './routes/services.js';
 import usersRoutes from './routes/users.js';
 import favoritesRoutes from './routes/favorites.js';
 import accountRoutes from './routes/account.js';
+import passwordRecoveryRoutes from './routes/passwordRecovery.js';
 import appointmentsRoutes from './routes/appointments.js';
 import couponsRoutes from './routes/coupons.js';
 import productsRoutes from './routes/products.js';
@@ -79,3 +80,4 @@ app.use(revenueRoutes);      // /staff/revenue/summary, /chart, /payment-methods
 app.use(recipesRoutes);      // /admin/recipes, /services/:id/recipe
 app.use(daySummaryRoutes);   // /staff/day-summary
 app.use(notificationsRoutes); // /notifications/me, /banners/me, /admin/notifications, /admin/banners
+app.use(passwordRecoveryRoutes); // /auth/password/*, /auth/sessions/revoke-others

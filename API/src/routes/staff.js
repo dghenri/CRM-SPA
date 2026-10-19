@@ -1,7 +1,4 @@
 import { Router } from 'express';
-import multer from 'multer';
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { ACCESS_TOKEN_KEY } from '../lib/config.js';
@@ -9,58 +6,35 @@ import { prisma } from '../lib/prisma.js';
 import { DEFAULT_STAFF_SETTINGS, toPublicStaff } from '../lib/serializers.js';
 import { authenticateToken, requireMajorAdmin, requireStaff, stockAuth } from '../middleware/auth.js';
 import { broadcastAppointmentsChanged } from '../lib/realtime.js';
+import { deleteAvatarFile, detectImageExtension, receiveAvatar, saveAvatarFile } from '../lib/uploads.js';
 
 const router = Router();
 
 //------------------------------------------------------------- FOTO DE PERFIL (funcionária edita a própria)
-// O front recorta a foto e manda um JPEG (multipart, campo "file"). Gravamos em
-// <UPLOAD_DIR>/avatars e guardamos só o caminho público (/uploads/avatars/...).
-// Pressupõe que /uploads já é servido como estático (o mesmo das fotos dos clientes).
-const UPLOAD_ROOT = process.env.UPLOAD_DIR || path.join(process.cwd(), 'uploads');
-const AVATAR_DIR = path.join(UPLOAD_ROOT, 'avatars');
-const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
-const avatarUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: AVATAR_MAX_BYTES } });
+// Mesma infraestrutura da foto do cliente (lib/uploads.js): o front manda o arquivo já recortado
+// em multipart/form-data no campo "file"; o arquivo vai para uploads/avatars e `avatarUrl`
+// guarda o caminho (ex: /uploads/avatars/abc.jpg).
+router.put('/staff/me/avatar', authenticateToken, requireStaff, receiveAvatar, async (req, res) => {
+  let savedUrl = null;
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Envie a foto no campo "file".' });
 
-const isJpeg = (buf) => buf?.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+    const extension = detectImageExtension(req.file.buffer);
+    if (!extension) return res.status(400).json({ error: 'Formato inválido. Envie uma imagem JPG, PNG ou WEBP.' });
 
-// apaga o arquivo antigo (só os que esta rota criou: prefixo "staff-")
-async function removeAvatarFile(avatarUrl) {
-  if (!avatarUrl) return;
-  const name = path.basename(String(avatarUrl));
-  if (!name.startsWith('staff-')) return;
-  await fs.unlink(path.join(AVATAR_DIR, name)).catch(() => {});
-}
+    const me = await prisma.staff.findUnique({ where: { id: req.user.id } });
+    if (!me) return res.status(401).json({ error: 'Sessão expirada.' });
 
-router.put('/staff/me/avatar', authenticateToken, requireStaff, (req, res) => {
-  avatarUpload.single('file')(req, res, async (uploadError) => {
-    try {
-      if (uploadError) {
-        const tooBig = uploadError.code === 'LIMIT_FILE_SIZE';
-        return res.status(tooBig ? 413 : 400).json({ error: tooBig ? 'A foto passa de 2 MB.' : 'Não foi possível ler a foto enviada.' });
-      }
-      if (!req.file || !isJpeg(req.file.buffer)) {
-        return res.status(400).json({ error: 'Envie a foto em JPEG.' });
-      }
+    savedUrl = await saveAvatarFile(me.id, req.file.buffer, extension);
+    const updated = await prisma.staff.update({ where: { id: me.id }, data: { avatarUrl: savedUrl } });
+    await deleteAvatarFile(me.avatarUrl); // a foto anterior não fica ocupando disco
 
-      const me = await prisma.staff.findUnique({ where: { id: req.user.id } });
-      if (!me) return res.status(401).json({ error: 'Sessão expirada.' });
-
-      await fs.mkdir(AVATAR_DIR, { recursive: true });
-      const fileName = `staff-${me.id}-${Date.now()}.jpg`;
-      await fs.writeFile(path.join(AVATAR_DIR, fileName), req.file.buffer);
-
-      const updated = await prisma.staff.update({
-        where: { id: me.id },
-        data: { avatarUrl: `/uploads/avatars/${fileName}` },
-      });
-      await removeAvatarFile(me.avatarUrl);
-
-      res.status(200).json(toPublicStaff(updated));
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: 'Erro ao salvar a foto.' });
-    }
-  });
+    res.status(200).json(toPublicStaff(updated));
+  } catch (error) {
+    if (savedUrl) await deleteAvatarFile(savedUrl); // não deixa arquivo órfão se o banco falhou
+    console.error(error);
+    res.status(500).json({ error: 'Erro ao salvar a foto.' });
+  }
 });
 
 router.delete('/staff/me/avatar', authenticateToken, requireStaff, async (req, res) => {
@@ -69,7 +43,7 @@ router.delete('/staff/me/avatar', authenticateToken, requireStaff, async (req, r
     if (!me) return res.status(401).json({ error: 'Sessão expirada.' });
 
     const updated = await prisma.staff.update({ where: { id: me.id }, data: { avatarUrl: null } });
-    await removeAvatarFile(me.avatarUrl);
+    await deleteAvatarFile(me.avatarUrl);
 
     res.status(200).json(toPublicStaff(updated));
   } catch (error) {

@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { DEFAULT_USER_NOTIFICATIONS, toPublicUser } from '../lib/serializers.js';
 import { authenticateToken, requireUser } from '../middleware/auth.js';
 import { deleteAvatarFile, detectImageExtension, receiveAvatar, saveAvatarFile } from '../lib/uploads.js';
+import { validatePassword } from '../lib/passwordPolicy.js';
 
 const router = Router();
 
@@ -59,6 +60,10 @@ router.patch('/users/me/password', authenticateToken, requireUser, async (req, r
 
     const matches = await bcrypt.compare(currentPassword, customer.password);
     if (!matches) throw new InputError("Senha atual incorreta.");
+
+    // senha forte (mesma regra do cadastro e da recuperação de senha)
+    const problems = validatePassword(newPassword, { name: customer.name, email: customer.email });
+    if (problems.length) throw new InputError(problems[0]);
 
     await prisma.user.update({
       where: { id: customer.id },

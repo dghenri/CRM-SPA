@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { subscribeRealtime } from "../../../realtime/socket";
 import {
   Alert,
   Button,
@@ -1067,27 +1068,7 @@ export default function Storage() {
   }, [load]);
 
   // tempo real: o servidor avisa "stock-changed" e a tela recarrega
-  useEffect(() => {
-    const token = getToken();
-    if (!token) return;
-    const wsUrl = `${API_URL.replace(/^http/, "ws")}/ws?token=${encodeURIComponent(token)}`;
-    const ws = new WebSocket(wsUrl);
-    ws.onmessage = (ev) => {
-      try {
-        if (JSON.parse(ev.data).type === "stock-changed") load();
-      } catch {
-        /* mensagem que não é JSON: ignora */
-      }
-    };
-    return () => {
-      // em dev o React monta/desmonta o efeito duas vezes; fechar um socket
-      // ainda CONNECTING gera o aviso "closed before the connection is
-      // established", então nesse caso fecha só quando abrir
-      ws.onmessage = null;
-      if (ws.readyState === WebSocket.CONNECTING) ws.onopen = () => ws.close();
-      else ws.close();
-    };
-  }, [load]);
+  useEffect(() => subscribeRealtime("stock-changed", load), [load]);
 
   const pendingRequests = useMemo(() => requests.filter((r) => r.status === "Pending"), [requests]);
   const pendingCount = pendingRequests.length;

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import api from "../../../api/api";
 import { PAYMENT_METHODS } from "../../../components/paymentMethods";
+import { subscribeRealtime } from "../../../realtime/socket";
 
 /* ---------------------------------------------------------------------------
  * Página "Receita" (todos os cargos de staff). Mesmas regras do Overview:
@@ -707,32 +708,13 @@ function ExportModal({ isOpen, defaultPeriod, onClose }) {
 }
 
 /* ------------------------------ página ----------------------------------- */
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-
 export default function Revenue() {
   const [period, setPeriod] = useState("1M");
   const [exportOpen, setExportOpen] = useState(false);
   const [tick, setTick] = useState(0); // sobe quando o tempo real avisa que algo mudou: tudo recarrega
 
   // tempo real: atendimentos concluídos/alterados mudam os números
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-    const ws = new WebSocket(`${API_URL.replace(/^http/, "ws")}/ws?token=${encodeURIComponent(token)}`);
-    ws.onmessage = (ev) => {
-      try {
-        const { type } = JSON.parse(ev.data);
-        if (type === "appointments-changed") setTick((t) => t + 1);
-      } catch {
-        /* mensagem que não é JSON: ignora */
-      }
-    };
-    return () => {
-      ws.onmessage = null;
-      if (ws.readyState === WebSocket.CONNECTING) ws.onopen = () => ws.close();
-      else ws.close();
-    };
-  }, []);
+  useEffect(() => subscribeRealtime("appointments-changed", () => setTick((t) => t + 1)), []);
 
   const periodTitle = PERIODS.find((p) => p.id === period)?.title ?? "";
 

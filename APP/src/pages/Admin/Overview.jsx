@@ -17,6 +17,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+import { subscribeRealtime } from "../../realtime/socket";
 
 /* ---------------------------------------------------------------------------
  * Mesmo cliente de API do Storage.jsx (token em localStorage("token"), API em
@@ -736,24 +737,15 @@ export default function Overview() {
 
   // tempo real: pedidos de estoque e agendamentos concluídos mudam os números
   useEffect(() => {
-    const token = getToken();
-    if (!token) return;
-    const ws = new WebSocket(`${API_URL.replace(/^http/, "ws")}/ws?token=${encodeURIComponent(token)}`);
-    ws.onmessage = (ev) => {
-      try {
-        const { type } = JSON.parse(ev.data);
-        if (type === "stock-changed" || type === "appointments-changed") {
-          load();
-          setTick((t) => t + 1);
-        }
-      } catch {
-        /* mensagem que não é JSON: ignora */
-      }
+    const onChange = () => {
+      load();
+      setTick((t) => t + 1);
     };
+    const offStock = subscribeRealtime("stock-changed", onChange);
+    const offAppointments = subscribeRealtime("appointments-changed", onChange);
     return () => {
-      ws.onmessage = null;
-      if (ws.readyState === WebSocket.CONNECTING) ws.onopen = () => ws.close();
-      else ws.close();
+      offStock();
+      offAppointments();
     };
   }, [load]);
 

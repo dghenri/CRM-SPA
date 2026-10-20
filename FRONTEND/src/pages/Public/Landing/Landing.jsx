@@ -1,6 +1,6 @@
 import { useEffect } from "react";
-import { Button, Separator, } from "@heroui/react";
-import { Sparkles, CalendarCheck, ShieldCheck, ArrowRight, Copyright, } from "lucide-react";
+import { Button, Separator, Card, } from "@heroui/react";
+import { Sparkles, CalendarCheck, ShieldCheck, ArrowRight, Copyright, Clock, } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../../../components/Navbar";
 import ClientServicesPage from "../../../components/LandingServices";
@@ -50,7 +50,7 @@ export default function Landing() {
     <>
       <Navbar />
 
-      <main className="flex bg-white flex-col items-center">
+      <main className="flex bg-overlay flex-col items-center">
         {/* Hero */}
         <section id="hero" className="relative isolate w-full h-screen overflow-hidden">
           {/* Camada de imagem + overlays, isolada em um wrapper com overflow-hidden */}

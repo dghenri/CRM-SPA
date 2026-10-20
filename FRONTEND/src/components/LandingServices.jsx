@@ -10,7 +10,7 @@ function ClientServiceCard({ service }) {
   return (
     <div className="group pb-2">
       {/* Bezel branco em volta de toda a foto/infos, como uma moldura */}
-      <div className="rounded-[28px] bg-white p-1.5 shadow-lg ring-1 ring-black/5 group-hover:shadow-2xl transition-transform duration-500 ease-out group-hover:scale-105">
+      <div className="rounded-[28px] bg-background p-1.5 shadow-lg ring-1 ring-black/5 group-hover:shadow-2xl transition-transform duration-500 ease-out group-hover:scale-105">
         <Card className="relative h-150 overflow-hidden rounded-[22px] border-none">
           {/* Foto de fundo — ocupa o card inteiro como um background */}
           <img
@@ -21,7 +21,7 @@ function ClientServiceCard({ service }) {
 
           {/* Máscara de blur/gradiente atrás do texto — só na parte de baixo da foto. */}
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-5 h-[54%] overflow-hidden rounded-b-[22px] backdrop-blur-md mask-[linear-gradient(to_top,black_35%,transparent_100%)]">
-            <div className="absolute inset-0 bg-linear-to-t from-black/85 via-black/45 to-transparent" />
+            <div className="absolute -inset-2 bg-linear-to-t from-black/85 via-black/45 to-transparent" />
           </div>
 
           {/* Conteúdo textual */}
@@ -46,7 +46,7 @@ function ClientServiceCard({ service }) {
             {/* Botão dentro do card, colado na base — sem vazar pela borda */}
             <Button
               variant="light"
-              className="mt-1 w-full justify-center rounded-full bg-white font-semibold text-foreground shadow-lg hover:bg-white/90"
+              className="w-full flex-1 justify-center rounded-full bg-foreground font-semibold text-default hover:bg-foreground/90 mt-1 p-1"
               onPress={() => navigate("/register")}
             >
               Agendar

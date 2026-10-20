@@ -9,8 +9,15 @@ function getRedis() {
   if (!redisPromise) {
     redisPromise = import('ioredis')
       .then(({ default: Redis }) => {
-        const client = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: 1, enableOfflineQueue: false });
-        client.on('error', (error) => console.error('[redis]', error.message));
+        // O Upstash só aceita conexão criptografada: redis:// vira rediss:// automaticamente
+        const url = process.env.REDIS_URL.replace(/^redis:\/\/([^/]*upstash\.io)/i, 'rediss://$1');
+        const client = new Redis(url, { maxRetriesPerRequest: 1, enableOfflineQueue: false, connectTimeout: 5000 });
+        let lastError = '';
+        client.on('error', (error) => {
+          if (error.message !== lastError) console.error('[redis]', error.message); // não repete a mesma mensagem
+          lastError = error.message;
+        });
+        client.on('ready', () => { lastError = ''; console.log('[rateLimit] Redis conectado'); });
         console.log('[rateLimit] usando Redis');
         return client;
       })
@@ -53,7 +60,8 @@ export const rateLimit = ({ name, windowMs, max }) => async (req, res, next) => 
   let result;
   try {
     const redis = await getRedis();
-    result = redis ? await hitRedis(redis, key, windowMs) : hitMemory(key, windowMs);
+    // enquanto o Redis ainda está conectando (ou caiu), conta na memória em vez de falhar
+    result = redis && redis.status === 'ready' ? await hitRedis(redis, key, windowMs) : hitMemory(key, windowMs);
   } catch (error) {
     console.error('[rateLimit] Redis indisponível, usando memória:', error.message);
     result = hitMemory(key, windowMs);

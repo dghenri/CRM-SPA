@@ -4,7 +4,5 @@ node_modules
 
 # Configuração de Uploads
 uploads/**/*
-!uploads/.gitkeep
-!uploads/avatars/.gitkeep
 
 /generated/prisma

@@ -50,7 +50,7 @@ export default function Landing() {
     <>
       <Navbar />
 
-      <main className="flex bg-white flex-col items-center">
+      <main className="flex bg-overlay flex-col items-center">
         {/* Hero */}
         <section id="hero" className="relative isolate w-full h-screen overflow-hidden">
           {/* Camada de imagem + overlays, isolada em um wrapper com overflow-hidden */}

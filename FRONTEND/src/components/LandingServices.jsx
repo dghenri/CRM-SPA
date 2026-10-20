@@ -10,7 +10,7 @@ function ClientServiceCard({ service }) {
   return (
     <div className="group pb-2">
       {/* Bezel branco em volta de toda a foto/infos, como uma moldura */}
-      <div className="rounded-[28px] bg-white p-1.5 shadow-lg ring-1 ring-black/5 group-hover:shadow-2xl transition-transform duration-500 ease-out group-hover:scale-105">
+      <div className="rounded-[28px] bg-overlay p-1.5 shadow-lg ring-1 ring-black/5 group-hover:shadow-2xl transition-transform duration-500 ease-out group-hover:scale-105">
         <Card className="relative h-150 overflow-hidden rounded-[22px] border-none">
           {/* Foto de fundo — ocupa o card inteiro como um background */}
           <img
@@ -46,7 +46,7 @@ function ClientServiceCard({ service }) {
             {/* Botão dentro do card, colado na base — sem vazar pela borda */}
             <Button
               variant="light"
-              className="mt-1 w-full justify-center rounded-full bg-white font-semibold text-foreground shadow-lg hover:bg-white/90"
+              className="mt-1 w-full justify-center rounded-full bg-foreground font-semibold text-foreground shadow-lg hover:bg-foreground/90"
               onPress={() => navigate("/register")}
             >
               Agendar

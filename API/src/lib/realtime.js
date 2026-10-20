@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import { WebSocketServer, WebSocket } from 'ws';
 import { ACCESS_TOKEN_KEY } from './config.js';
+import { isSessionRevoked } from './sessionRevocation.js';
 
 //------------------------------------------------------------- WEBSOCKET (avisos em tempo real pra equipe)
 // Substitui o polling: em vez de cada aba da equipe perguntar "mudou
@@ -37,7 +38,7 @@ export function attachRealtime(server) {
   // Authorization, então o front passa o token JWT como query string
   // (?token=...). Só a equipe precisa desses avisos - clientes não têm essa
   // tela aberta o tempo todo, então nem participam do canal.
-  wss.on("connection", (ws, req) => {
+  wss.on("connection", async (ws, req) => {
     try {
       const { searchParams } = new URL(req.url, "http://localhost");
       const token = searchParams.get("token");
@@ -47,12 +48,37 @@ export function attachRealtime(server) {
         ws.close(4001, "Não autorizado.");
         return;
       }
+
+      // sessão encerrada ("sair de outros dispositivos") ou conta removida
+      if (await isSessionRevoked(decoded)) {
+        ws.close(4001, "Sessão encerrada.");
+        return;
+      }
     } catch (err) {
       ws.close(4001, "Não autorizado.");
       return;
     }
 
-    // conexão autenticada - fica só esperando os broadcasts, não precisa
-    // responder nada
+    // conexão autenticada. Heartbeat da aplicação: o front manda "ping" de
+    // tempos em tempos e recebe "pong". Além de detectar conexão morta, isso
+    // conta como tráfego e evita que o Render (plano grátis) hiberne a API
+    // enquanto alguém da equipe está com o sistema aberto.
+    ws.isAlive = true;
+    ws.on("pong", () => { ws.isAlive = true; }); // pong do protocolo (resposta ao ping do servidor)
+    ws.on("message", (data) => {
+      ws.isAlive = true;
+      if (String(data) === "ping" && ws.readyState === WebSocket.OPEN) ws.send("pong");
+    });
   });
+
+  // Derruba conexões que não responderam ao ping do servidor (aba fechada
+  // sem aviso, rede caiu) - sem isso elas ficariam na memória para sempre.
+  const sweep = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (ws.isAlive === false) { ws.terminate(); continue; }
+      ws.isAlive = false;
+      ws.ping();
+    }
+  }, 30_000);
+  wss.on("close", () => clearInterval(sweep));
 }

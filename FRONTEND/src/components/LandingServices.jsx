@@ -63,13 +63,13 @@ function ClientServiceCard({ service }) {
 function MoreServicesTile({ count }) {
   return (
     <div className="group pb-2">
-      <div className="rounded-[28px] bg-overlay p-1.5 shadow-lg ring-1 ring-black/5">
+      <div className="rounded-[28px] bg-background p-1.5 shadow-lg ring-1 ring-border/5">
         <Card className="flex h-150 items-center justify-center rounded-[22px] border-none">
           <div className="flex flex-col items-center gap-1 text-center">
             <p className="font-serif text-2xl font-bold text-foreground">
               E mais...
             </p>
-            <p className="text-sm text-default-500">
+            <p className="text-sm text-muted">
               +{count} {count === 1 ? "procedimento" : "procedimentos"} disponíveis
             </p>
           </div>

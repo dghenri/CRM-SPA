@@ -5,6 +5,7 @@
   "description": "",
   "main": "server.js",
   "scripts": {
+    "start": "node server.js",
     "watch": "node --watch server.js"
   },
   "keywords": [],

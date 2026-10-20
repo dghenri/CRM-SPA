@@ -52,8 +52,10 @@ async function sendViaResend({ to, subject, text, html }) {
 export async function sendMail({ to, subject, text, html }) {
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM } = process.env;
 
-  if (process.env.RESEND_API_KEY) return sendViaResend({ to, subject, text, html });
-  if (process.env.BREVO_API_KEY) return sendViaBrevo({ to, subject, text, html });
+  // o log diz qual caminho foi usado: ajuda a achar variável faltando no Render
+  if (process.env.RESEND_API_KEY) { console.log('[mailer] enviando via Resend'); return sendViaResend({ to, subject, text, html }); }
+  if (process.env.BREVO_API_KEY) { console.log('[mailer] enviando via Brevo'); return sendViaBrevo({ to, subject, text, html }); }
+  console.log(SMTP_HOST ? `[mailer] enviando via SMTP (${SMTP_HOST}) - sem RESEND_API_KEY nem BREVO_API_KEY` : '[mailer] nenhum provedor configurado');
 
   if (!SMTP_HOST) {
     console.log(`\n[mailer] SMTP não configurado - e-mail para ${to}\nAssunto: ${subject}\n${text}\n`);

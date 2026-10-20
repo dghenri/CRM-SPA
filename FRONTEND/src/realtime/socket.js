@@ -15,11 +15,7 @@
 //
 // Uso:  useEffect(() => subscribeRealtime("stock-changed", load), [load]);
 
-<<<<<<< HEAD
-const API_BASE = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
-=======
-const API_BASE = import.meta.env.BACKEND_URL || "http://localhost:3000";
->>>>>>> 1c284c745545ae9c1d0242dcf091806ced6143af
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 const PING_MS = 4 * 60 * 1000;
 const MAX_BACKOFF_MS = 30_000;
 const CLOSE_GRACE_MS = 1_000; // o StrictMode monta/desmonta/monta: não fecha à toa

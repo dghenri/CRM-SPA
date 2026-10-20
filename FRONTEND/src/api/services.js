@@ -1,6 +1,6 @@
 // Base da API do backend Express (server.js roda na porta 3000).
-// Ajuste VITE_BACKEND_URL no seu .env se o backend estiver em outro endereço.
-const API_BASE = import.meta.env?.VITE_BACKEND_URL || "http://localhost:3000";
+// Ajuste VITE_API_URL no seu .env se o backend estiver em outro endereço.
+const API_BASE = import.meta.env?.VITE_API_URL || "http://localhost:3000";
 
 // ATENÇÃO: presumi que o token JWT (retornado por /auth/login) fica salvo
 // em localStorage sob a chave "token". Se no seu login.jsx/auth context

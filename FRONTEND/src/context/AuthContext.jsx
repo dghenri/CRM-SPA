@@ -4,11 +4,7 @@ import { decodeToken, isTokenValid } from "../utils/jwt";
 
 const AuthContext = createContext(null);
 
-<<<<<<< HEAD
-const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
-=======
-const API_URL = import.meta.env.BACKEND_URL || "http://localhost:3000";
->>>>>>> 1c284c745545ae9c1d0242dcf091806ced6143af
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 // Staff e cliente têm endpoints "/me" diferentes agora - decide qual
 // bater com base no "type" gravado no próprio token.

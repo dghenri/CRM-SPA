@@ -33,15 +33,9 @@ import { Inbox, Plus, Trash2 } from 'lucide-react';
  * ATENÇÃO: este bloco é o único ponto que depende do resto do seu front.
  * Troque pelo cliente de API / auth que você já usa (me envie esses arquivos
  * que eu adapto). Hoje assume: token JWT em localStorage("token") e a API em
-<<<<<<< HEAD
- * VITE_BACKEND_URL (padrão http://localhost:3000).
+ * VITE_API_URL (padrão http://localhost:3000).
  * ------------------------------------------------------------------------- */
-const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
-=======
- * BACKEND_URL (padrão http://localhost:3000).
- * ------------------------------------------------------------------------- */
-const API_URL = import.meta.env.BACKEND_URL || "http://localhost:3000";
->>>>>>> 1c284c745545ae9c1d0242dcf091806ced6143af
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 const getToken = () => localStorage.getItem("token");
 
 async function api(path, { method = "GET", body } = {}) {

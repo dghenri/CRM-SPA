@@ -48,7 +48,7 @@ function ClientServiceCard({ service }) {
             {/* Botão dentro do card */}
             <Button
               variant="light"
-              className="mt-1 w-full justify-center rounded-full bg-foreground p-1 font-semibold text-background shadow-lg hover:bg-foreground/90"
+              className="mt-1 w-full justify-center rounded-full bg-white p-1 font-semibold text-background shadow-lg hover:bg-white/90"
               onPress={() => navigate("/register")}
             >
               Agendar
@@ -63,8 +63,8 @@ function ClientServiceCard({ service }) {
 function MoreServicesTile({ count }) {
   return (
     <div className="group pb-2">
-      <div className="rounded-[28px] bg-white p-1.5 shadow-lg ring-1 ring-black/5">
-        <Card className="flex h-150 items-center justify-center rounded-[22px] border-none bg-primary-50">
+      <div className="rounded-[28px] bg-field-border p-1.5 shadow-lg ring-1 ring-black/5">
+        <Card className="flex h-150 items-center justify-center rounded-[22px] border-none">
           <div className="flex flex-col items-center gap-1 text-center">
             <p className="font-serif text-2xl font-bold text-foreground">
               E mais...

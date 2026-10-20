@@ -1,8 +1,8 @@
 import React from 'react'
 import { Button } from "@heroui/react";
-import useAuth from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext";
 
-const ComingSoon = () => {
+export default function ComingSoon() {
   const { logout } = useAuth();
 
   return (
@@ -20,5 +20,3 @@ const ComingSoon = () => {
     </div>
   )
 }
-
-export default ComingSoon

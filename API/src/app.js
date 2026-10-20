@@ -36,6 +36,9 @@ app.use((req, res, next) => {
 const ALLOWED_ORIGINS = ["http://localhost:5173"];
 if (process.env.FRONTEND_URL) ALLOWED_ORIGINS.push(process.env.FRONTEND_URL);
 
+// Os túneis do Cloudflare (abaixo) só existem para teste: em produção ficam bloqueados.
+const ALLOW_TUNNELS = process.env.NODE_ENV !== 'production';
+
 app.use(cors({
   origin(origin, callback) {
     // requisições sem "origin" (ex: curl, Postman) não passam por CORS
@@ -46,12 +49,16 @@ app.use(cors({
       // túneis rápidos do Cloudflare geram um subdomínio aleatório a cada
       // execução (ex: https://abc-def.trycloudflare.com) - liberamos o
       // domínio inteiro só pra facilitar testes, não use isso em produção
-      /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(origin);
+      (ALLOW_TUNNELS && /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(origin));
 
     callback(isAllowed ? null : new Error("Origem não permitida por CORS."), isAllowed);
   },
 }))
 app.use(express.json())
+
+// Verificação de saúde: serve para o Render saber que a API está de pé e para
+// um monitor externo (UptimeRobot) acordá-la. Não consulta o banco de propósito.
+app.get('/health', (req, res) => res.json({ ok: true }));
 
 // Arquivos enviados (fotos de perfil). O nome muda a cada upload, então o
 // navegador pode guardar em cache por bastante tempo.

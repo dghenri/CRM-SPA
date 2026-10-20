@@ -21,10 +21,10 @@ import { subscribeRealtime } from "../../realtime/socket";
 
 /* ---------------------------------------------------------------------------
  * Mesmo cliente de API do Storage.jsx (token em localStorage("token"), API em
- * VITE_API_URL). Quando você me enviar o seu cliente de API / auth, eu movo
+ * BACKEND_URL). Quando você me enviar o seu cliente de API / auth, eu movo
  * isto e os helpers de formatação para um arquivo compartilhado.
  * ------------------------------------------------------------------------- */
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_URL = import.meta.env.BACKEND_URL || "http://localhost:3000";
 const getToken = () => localStorage.getItem("token");
 
 async function api(path, { method = "GET", body } = {}) {

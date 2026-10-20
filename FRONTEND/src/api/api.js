@@ -2,9 +2,9 @@
 // (localStorage, chave "token") em toda requisição autenticada.
 //
 // Em dev normal, usa localhost:3000. Pra testar via túnel (Cloudflare,
-// ngrok etc.), defina VITE_API_URL no seu .env com a URL pública da API
-// (ex: VITE_API_URL=https://sua-api.trycloudflare.com) e reinicie o vite.
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+// ngrok etc.), defina BACKEND_URL no seu .env com a URL pública da API
+// (ex: BACKEND_URL=https://sua-api.trycloudflare.com) e reinicie o vite.
+const API_BASE_URL = import.meta.env.BACKEND_URL || "http://localhost:3000";
 
 // Endereço público de um arquivo guardado no servidor (ex: foto de perfil).
 // A API devolve só o caminho ("/uploads/avatars/abc.jpg"); aqui vira URL completa.

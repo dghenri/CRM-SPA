@@ -31,29 +31,36 @@ app.use((req, res, next) => {
   next();
 });
 
-// Origens sempre liberadas (dev local). Pra testar via túnel, defina no
-// .env: FRONTEND_URL=https://sua-url-do-tunel.trycloudflare.com
-const ALLOWED_ORIGINS = ["http://localhost:5173"];
-if (process.env.FRONTEND_URL) ALLOWED_ORIGINS.push(process.env.FRONTEND_URL);
+// Origens permitidas
+const ALLOWED_ORIGINS = [
+  "http://localhost:5173",
+];
 
-// Os túneis do Cloudflare (abaixo) só existem para teste: em produção ficam bloqueados.
-const ALLOW_TUNNELS = process.env.NODE_ENV !== 'production';
+if (process.env.FRONTEND_URL) {
+  ALLOWED_ORIGINS.push(process.env.FRONTEND_URL);
+}
 
-app.use(cors({
-  origin(origin, callback) {
-    // requisições sem "origin" (ex: curl, Postman) não passam por CORS
-    if (!origin) return callback(null, true);
+const ALLOW_TUNNELS = process.env.NODE_ENV !== "production";
 
-    const isAllowed =
-      ALLOWED_ORIGINS.includes(origin) ||
-      // túneis rápidos do Cloudflare geram um subdomínio aleatório a cada
-      // execução (ex: https://abc-def.trycloudflare.com) - liberamos o
-      // domínio inteiro só pra facilitar testes, não use isso em produção
-      (ALLOW_TUNNELS && /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(origin));
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
 
-    callback(isAllowed ? null : new Error("Origem não permitida por CORS."), isAllowed);
-  },
-}))
+      const isAllowed =
+        ALLOWED_ORIGINS.includes(origin) ||
+        (ALLOW_TUNNELS &&
+          /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(origin));
+
+      if (isAllowed) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Origem não permitida por CORS."));
+    },
+  })
+);
+
 app.use(express.json())
 
 // Verificação de saúde: serve para o Render saber que a API está de pé e para

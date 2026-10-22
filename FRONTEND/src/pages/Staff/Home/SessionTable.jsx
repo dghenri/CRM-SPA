@@ -189,10 +189,10 @@ export default function SessionTable({ appointments = [] }) {
   }, [rows, query, activeStatuses]);
 
   return (
-    <div className="flex h-25 flex-col bg-overlay  rounded-2xl">
+    <div className="flex flex-col rounded-2xl bg-overlay">
       {/* barra de busca + filtros */}
-      <div className="grid grid-cols-5 justify-between gap-3 p-3 rounded-2xl font-semibold">
-        <SearchField value={query} onChange={setQuery} aria-label="Buscar agendamentos" className="col-span-2">
+      <div className="grid grid-cols-1 gap-3 rounded-2xl p-3 font-semibold lg:grid-cols-5">
+        <SearchField value={query} onChange={setQuery} aria-label="Buscar agendamentos" className="lg:col-span-2">
           <SearchField.Group className="bg-surface-secondary border border-border">
             <SearchField.SearchIcon />
             <SearchField.Input placeholder="Buscar por nome, telefone, código ou serviço" />
@@ -200,21 +200,24 @@ export default function SessionTable({ appointments = [] }) {
           </SearchField.Group>
         </SearchField>
 
-        <div className="flex col-span-3 flex-wrap items-center justify-end gap-2">
-          <ToggleButtonGroup
-            aria-label="Filtrar por status"
-            selectionMode="multiple"
-            selectedKeys={activeStatuses}
-            onSelectionChange={setActiveStatuses}
-            className="border-2 border-border rounded-2xl"
-          >
-            {STATUS_ORDER.map((status, i) => (
-              <ToggleButton key={status} id={status}>
-                {i > 0 && <ToggleButtonGroup.Separator />}
-                {StatusMap[status].label}
-              </ToggleButton>
-            ))}
-          </ToggleButtonGroup>
+        <div className="flex min-w-0 flex-wrap items-center gap-2 lg:col-span-3 lg:justify-end">
+          {/* os 5 filtros não cabem no celular: rolam na horizontal */}
+          <div className="max-w-full overflow-x-auto rounded-2xl">
+            <ToggleButtonGroup
+              aria-label="Filtrar por status"
+              selectionMode="multiple"
+              selectedKeys={activeStatuses}
+              onSelectionChange={setActiveStatuses}
+              className="w-max rounded-2xl border-2 border-border"
+            >
+              {STATUS_ORDER.map((status, i) => (
+                <ToggleButton key={status} id={status}>
+                  {i > 0 && <ToggleButtonGroup.Separator />}
+                  {StatusMap[status].label}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+          </div>
 
           {activeStatuses.size > 0 && (
             <Button variant="danger-soft" size="sm" onPress={() => setActiveStatuses(new Set())}>
@@ -224,12 +227,43 @@ export default function SessionTable({ appointments = [] }) {
         </div>
       </div>
 
-      {/* tabela */}
-      <Table className="border-2">
-        <Table.ScrollContainer className="h-[280px] overflow-y-auto">
+      {/* celular: cartões (a tabela de 6 colunas não cabe) */}
+      <div className="flex max-h-[28rem] flex-col gap-2 overflow-y-auto px-3 pb-3 md:hidden">
+        {filteredRows.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+            <Inbox className="size-6 text-muted" />
+            <span className="text-sm font-semibold text-muted">Nenhum resultado</span>
+          </div>
+        ) : (
+          filteredRows.map((row) => (
+            <div key={row.id} className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold">{row.service}</p>
+                  <p className="truncate text-sm font-medium text-muted">{row.name}</p>
+                </div>
+                <Chip size="sm" variant="soft" color={StatusMap[row.status]?.color ?? "default"} className="shrink-0">
+                  {StatusMap[row.status]?.label ?? row.status}
+                </Chip>
+              </div>
+              <div className="flex items-center justify-between gap-2 text-xs font-medium text-muted">
+                <span className="font-mono">{row.code}</span>
+                <span>{row.phone || "Sem telefone"}</span>
+              </div>
+              <div className="flex items-center gap-2 border-t border-border pt-2">
+                <StatusPopover row={row} />
+                <ContactAction row={row} />
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* tablet e desktop: tabela */}
+      <Table className="hidden border-2 md:block">
+        <Table.ScrollContainer className="max-h-[280px] overflow-auto">
           <Table.Content aria-label="Agendamentos" className="min-w-[860px]">
             <Table.Header className="sticky top-0 z-10 bg-surface-secondary">
-              
               {columns.map((col) => (
                 <Table.Column key={col.id} id={col.id} isRowHeader={col.id === "name"}>
                   {col.name}
@@ -237,10 +271,10 @@ export default function SessionTable({ appointments = [] }) {
               ))}
             </Table.Header>
             <Table.Body
-                renderEmptyState={() => (
+              renderEmptyState={() => (
                 <EmptyState className="flex h-full w-full flex-col items-center justify-center gap-4 text-center py-8">
                   <Inbox className="size-6 text-muted" />
-                  <span className="text-sm font-semibold text-muted">No results found</span>
+                  <span className="text-sm font-semibold text-muted">Nenhum resultado</span>
                 </EmptyState>
               )}
             >
@@ -265,7 +299,6 @@ export default function SessionTable({ appointments = [] }) {
                   </Table.Row>
                 )}
               </Table.Collection>
-              
             </Table.Body>
           </Table.Content>
         </Table.ScrollContainer>

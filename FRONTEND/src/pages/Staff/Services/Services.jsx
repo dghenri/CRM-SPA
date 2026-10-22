@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { fetchServices, createService, updateService, deleteService } from "../../../api/services";
 import api from "../../../api/api";
 import { useAuth } from "../../../context/AuthContext";
+import KeyHint, { confirmOnEnter } from "../../../components/KeyHint";
 
 import {
   Card, Chip, Button, Modal, TextField, Label, Input, TextArea,
-  Switch, Select, ListBox, toast, AlertDialog, 
+  Switch, Select, ListBox, toast, AlertDialog
 
 } from "@heroui/react";
 
@@ -85,11 +86,11 @@ function RecipeEditor({ rows, setRows, products, status }) {
             const short = product && qty > 0 && product.currentStock < qty;
             return (
               <div key={row.key} className="flex flex-col gap-1">
-                <div className="flex items-start gap-2">
+                <div className="flex flex-wrap items-start gap-2">
                   <Select
                     aria-label="Produto"
                     placeholder="Selecione o produto"
-                    className="flex-1"
+                    className="basis-full sm:flex-1 sm:basis-0"
                     value={row.productId || null}
                     onChange={(key) => setRow(row.key, { productId: key ?? "" })}
                     disabledKeys={usedIds.filter((id) => id !== row.productId)}
@@ -274,10 +275,10 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, products, onSa
   return (
     <Modal>
       <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
-        <Modal.Container placement="center" size="cover" scroll="inside" className="px-100">
+        <Modal.Container placement="center" size="cover" scroll="inside">
           <Modal.Dialog>
             {({ close }) => (
-              <>
+              <div className="contents" onKeyDown={confirmOnEnter(() => handleSubmit(close), false)}>
                 <Modal.Header className="mb-8">
                   <Modal.Heading className="text-xl">{initial ? "Editar procedimento" : "Novo procedimento"}</Modal.Heading>
                 </Modal.Header>
@@ -305,7 +306,7 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, products, onSa
                     />
                   </TextField>
 
-                  <div className="flex gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row">
                     <TextField
                       isRequired
                       className="flex-1 mb-4"
@@ -397,7 +398,7 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, products, onSa
                   {error && <p className="text-sm text-danger">{error}</p>}
                 </Modal.Body>
 
-                <Modal.Footer className="justify-between">
+                <Modal.Footer className="flex-wrap justify-between gap-3">
                   <div>
                     <Switch
                       isSelected={form.available}
@@ -413,18 +414,20 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, products, onSa
                     </Switch>
                   </div>
                   
-                  <div className="gap-2">
-                    <Button variant="secondary" slot="close" className="mr-2">
+                  <div className="flex gap-2">
+                    <Button variant="secondary" slot="close">
                       Cancelar
+                      <KeyHint>Esc</KeyHint>
                     </Button>
 
                     <Button variant="primary" onPress={() => handleSubmit(close)}>
                       Salvar procedimento
+                      <KeyHint keyValue="enter" onFilled />
                     </Button>
                   </div>
                   
                 </Modal.Footer>
-              </>
+              </div>
             )}
           </Modal.Dialog>
         </Modal.Container>
@@ -522,7 +525,7 @@ function ServiceCard({ service, recipe, onEdit, onDelete, onToggle, canEdit = fa
               className={`flex-1 justify-center gap-2 rounded-full font-semibold ${
                 service.available
                   ? "bg-success/10 text-success hover:bg-success/20"
-                  : "bg-default-100 text-default-500"
+                  : "bg-default text-muted"
               }`}
               isDisabled={!canEdit}
               onPress={() => onToggle(service.id)}
@@ -558,9 +561,10 @@ function ServiceCard({ service, recipe, onEdit, onDelete, onToggle, canEdit = fa
 
       {/* Delete service dialog */}
       <AlertDialog isOpen={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <AlertDialog.Backdrop variant="blur">
+        {/* o AlertDialog do HeroUI ignora o Esc por padrão; aqui o Esc cancela */}
+        <AlertDialog.Backdrop variant="blur" isKeyboardDismissDisabled={false}>
           <AlertDialog.Container>
-            <AlertDialog.Dialog className="sm:max-w-115 border-6">
+            <AlertDialog.Dialog className="max-w-[calc(100vw-2rem)] sm:max-w-115 border-6">
               <AlertDialog.Header className="items-center">
                 <AlertDialog.Icon status="danger" className="size-15">
                   <Trash2 className="size-8" />
@@ -575,8 +579,10 @@ function ServiceCard({ service, recipe, onEdit, onDelete, onToggle, canEdit = fa
                 </p>
               </AlertDialog.Body>
               <AlertDialog.Footer>
+                {/* sem dica de Enter: é uma ação destrutiva, o foco fica no Cancelar de propósito */}
                 <Button slot="close" variant="tertiary" className="w-full">
-                  Cancel
+                  Cancelar
+                  <KeyHint>Esc</KeyHint>
                 </Button>
                 <Button
                   slot="close"
@@ -584,7 +590,7 @@ function ServiceCard({ service, recipe, onEdit, onDelete, onToggle, canEdit = fa
                   className="w-full"
                   onPress={() => onDelete(service.id)}
                 >
-                  Confirm
+                  Excluir
                 </Button>
               </AlertDialog.Footer>
             </AlertDialog.Dialog>
@@ -732,7 +738,7 @@ export default function AdminServicesPage() {
   };
 
   return (
-    <section className="flex flex-col gap-6 p-6">
+    <section className="flex flex-col gap-6 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Procedimentos</h1>
@@ -757,7 +763,7 @@ export default function AdminServicesPage() {
       )}
 
       {isLoading ? (
-        <div className="flex mt-100 items-center justify-center gap-2">
+        <div className="flex items-center justify-center gap-2 py-20">
           <p className="text-sm text-muted font-semibold">Carregando...</p>
         </div>
       ) : (

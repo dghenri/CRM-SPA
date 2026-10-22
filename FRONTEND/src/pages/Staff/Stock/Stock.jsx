@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { subscribeRealtime } from "../../../realtime/socket";
+import KeyHint, { confirmOnEnter } from "../../../components/KeyHint";
 import {
   Alert,
   Button,
@@ -14,7 +15,6 @@ import {
   EmptyState,
   I18nProvider,
   Input,
-  Kbd,
   Label,
   ListBox,
   Modal,
@@ -87,43 +87,6 @@ function describeRequest(r) {
   const who = `${r.requestedBy?.name ?? "—"} (${ROLE_LABEL[r.requestedBy?.role] ?? "—"})`;
   const verb = { Purchase: "adicionar ao estoque", Loss: "registrar perda de", Adjustment: "ajustar o estoque de" }[r.type];
   return `${who} quer ${verb}:`;
-}
-
-/* ------------------------------ atalhos de teclado ----------------------- */
-// Dica visual de tecla. Some em telas pequenas (celular não tem Esc/Enter).
-// - `keyValue`: tecla que o HeroUI desenha como símbolo (ex: "enter" => ↵,
-//   "escape" => ⎋), com o nome acessível ("Enter") no title.
-// - sem `keyValue`: mostra o texto de `children` (ex: "Esc").
-// - `onFilled`: use dentro de botão colorido (primário/danger), onde o cinza
-//   padrão do Kbd perde contraste.
-function KeyHint({ keyValue, children, onFilled = false }) {
-  return (
-    <Kbd
-      variant="light"
-      className={`ml-1 hidden sm:inline-flex ${onFilled ? "bg-white/25 text-white **:text-white" : ""}`}
-    >
-      {keyValue ? <Kbd.Abbr keyValue={keyValue} /> : <Kbd.Content>{children}</Kbd.Content>}
-    </Kbd>
-  );
-}
-
-// Enter confirma o modal (o Esc o React Aria já trata sozinho). Regras:
-// - Shift+Enter não confirma (quebra linha no campo de texto longo).
-// - Só vale para teclas pressionadas DENTRO do próprio diálogo: os popovers do
-//   Select e do calendário renderizam em portal, mas o React repassa o evento
-//   pela árvore, então checamos o diálogo mais próximo do alvo.
-// - Enter em botão/link/select mantém a função própria deles (clicar, abrir).
-// - Ignora Enter de composição (IME) e enquanto está salvando.
-function confirmOnEnter(onConfirm, isDisabled) {
-  return (e) => {
-    if (e.key !== "Enter" || e.shiftKey || e.defaultPrevented || e.nativeEvent.isComposing) return;
-    const dialogSelector = '[role="dialog"], [role="alertdialog"]';
-    if (e.target.closest(dialogSelector) !== e.currentTarget.closest(dialogSelector)) return;
-    if (e.target.closest('button, a, [role="button"], [role="combobox"], [role="listbox"]')) return;
-    if (isDisabled) return;
-    e.preventDefault();
-    onConfirm();
-  };
 }
 
 /* ------------------------------ campos ----------------------------------- */
@@ -379,7 +342,7 @@ function ProductModal({ product, onClose, onSaved }) {
 
                 </div>
               </Modal.Body>
-              <Modal.Footer className="justify-between">
+              <Modal.Footer className="flex-wrap justify-between gap-3">
                 <div>
                   {isEdit && (
                     <Switch isSelected={form.active} onChange={set("active")}>
@@ -392,8 +355,8 @@ function ProductModal({ product, onClose, onSaved }) {
                     </Switch>
                   )}
                 </div>
-                <div className="gap-2">
-                  <Button variant="tertiary" onPress={onClose} isDisabled={saving} className="mr-2">
+                <div className="flex gap-2">
+                  <Button variant="tertiary" onPress={onClose} isDisabled={saving}>
                     Cancelar
                     <KeyHint>Esc</KeyHint>
                   </Button>
@@ -797,8 +760,8 @@ function PendingApprovalsToast({ requests, isVisible, onReview }) {
       : "Entradas, baixas e ajustes só mudam o estoque depois de aprovados.";
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4" role="region" aria-label="Solicitações pendentes">
-      <Alert status="warning" className="pointer-events-auto w-full max-w-xl shadow-overlay">
+    <div className="pointer-events-none fixed inset-x-0 bottom-20 z-40 flex justify-center px-4 md:bottom-4" role="region" aria-label="Solicitações pendentes">
+      <Alert status="warning" className="pointer-events-auto w-full max-w-xl flex-wrap shadow-overlay sm:flex-nowrap">
         <Alert.Indicator />
         <Alert.Content>
           <Alert.Title>
@@ -806,7 +769,7 @@ function PendingApprovalsToast({ requests, isVisible, onReview }) {
           </Alert.Title>
           <Alert.Description className="line-clamp-2 pr-5 ">{description}</Alert.Description>
         </Alert.Content>
-        <div className="flex shrink-0 items-center gap-1 self-center">
+        <div className="flex w-full shrink-0 items-center justify-end gap-1 self-center sm:w-auto">
           <Button size="sm" variant="ghost" onPress={() => setDismissedIds(requests.map((r) => r.id))}>
             Ignorar
           </Button>
@@ -830,7 +793,53 @@ function ProductsTab({ products, isAdmin, onEdit, onBatches }) {
         <Input placeholder="Buscar produto…" className="font-semibold" />
       </TextField>
 
-      <Table>
+      {/* celular: cartões (a tabela de 5 colunas não cabe) */}
+      <div className="flex flex-col gap-2 md:hidden">
+        {filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
+            <Inbox />
+            <span className="text-sm font-semibold text-muted">Nenhum produto encontrado</span>
+          </div>
+        ) : (
+          filtered.map((p) => {
+            const hasAlert = Object.values(p.alerts).some(Boolean);
+            return (
+              <div key={p.id} className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-medium">
+                      {p.name} {!p.active && <Chip size="sm" variant="soft">Inativo</Chip>}
+                    </p>
+                    {p.category && <p className="text-xs text-muted">{p.category}</p>}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="font-semibold">{fmtQty(p.currentStock, p.unit)}</p>
+                    {p.purchaseUnitSize > 1 && p.purchaseUnitLabel && (
+                      <p className="text-xs text-muted">≈ {fmtNum(p.currentStock / p.purchaseUnitSize)} {p.purchaseUnitLabel}(s)</p>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs font-medium text-muted">Mínimo: {p.minStock > 0 ? fmtQty(p.minStock, p.unit) : "—"}</p>
+                {hasAlert && (
+                  <div className="flex flex-wrap gap-1">
+                    {p.alerts.lowStock && <Chip color="warning" variant="soft" size="sm">Repor</Chip>}
+                    {p.alerts.expired && <Chip color="danger" variant="soft" size="sm">Lote vencido</Chip>}
+                    {p.alerts.expiringSoon && <Chip color="warning" variant="soft" size="sm">Vence em breve</Chip>}
+                    {p.alerts.openedExpired && <Chip color="danger" variant="soft" size="sm">Frasco aberto vencido</Chip>}
+                  </div>
+                )}
+                <div className="flex gap-2 border-t border-border pt-2">
+                  <Button size="sm" variant="secondary" onPress={() => onBatches(p.id)}>Lotes</Button>
+                  {isAdmin && <Button size="sm" variant="ghost" onPress={() => onEdit(p)}>Editar</Button>}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* tablet e desktop: tabela */}
+      <Table className="hidden md:block">
         <Table.ScrollContainer>
           <Table.Content aria-label="Produtos em estoque">
             <Table.Header>
@@ -956,7 +965,7 @@ function RequestsTab({ requests, isAdmin, meId, onApprove, onReject, onCancel, b
               )}
             </Card.Content>
             {r.status === "Pending" && (isAdmin || r.requestedBy?.id === meId) && (
-              <Card.Footer className="flex gap-2">
+              <Card.Footer className="flex flex-wrap gap-2">
                 {isAdmin && (
                   <>
                     <Button onPress={() => onApprove(r)} isPending={busyId === r.id}>
@@ -983,7 +992,38 @@ function RequestsTab({ requests, isAdmin, meId, onApprove, onReject, onCancel, b
 
 function HistoryTab({ movements }) {
   return (
-    <Table>
+    <>
+    {/* celular: cartões (a tabela de 7 colunas não cabe) */}
+    <div className="flex flex-col gap-2 md:hidden">
+      {movements.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
+          <Inbox />
+          <span className="text-sm font-semibold text-muted">Sem movimentações</span>
+        </div>
+      ) : (
+        movements.map((m) => (
+          <div key={m.id} className="flex flex-col gap-1 rounded-xl border border-border bg-surface p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate font-medium">{m.product?.name ?? "—"}</p>
+                <p className="text-xs font-medium text-muted">{TYPE_LABEL[m.type]} · {fmtDateTime(m.createdAt)}</p>
+              </div>
+              <span className={`shrink-0 font-semibold ${m.quantity > 0 ? "text-success" : "text-danger"}`}>
+                {m.quantity > 0 ? "+" : ""}
+                {fmtQty(m.quantity, m.product?.unit)}
+              </span>
+            </div>
+            <p className="text-xs font-medium text-muted">
+              Lote {m.batch?.lotNumber || "—"} · {m.staff?.name ?? "—"}
+            </p>
+            {m.reason && <p className="text-xs text-muted">Motivo: {m.reason}</p>}
+          </div>
+        ))
+      )}
+    </div>
+
+    {/* tablet e desktop: tabela */}
+    <Table className="hidden md:block">
       <Table.ScrollContainer>
         <Table.Content aria-label="Histórico de movimentações">
           <Table.Header>
@@ -1022,6 +1062,7 @@ function HistoryTab({ movements }) {
         </Table.Content>
       </Table.ScrollContainer>
     </Table>
+    </>
   );
 }
 
@@ -1113,7 +1154,7 @@ export default function Storage() {
             {alertCount > 0 && ` · ${alertCount} com alerta`}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           {isAdmin && <Button variant="tertiary" className="rounded-lg" onPress={() => setProductModal({})}>Novo produto</Button>}
           <Button className="rounded-lg" onPress={() => setRequestType("Purchase")}>{isAdmin ? "Dar entrada" : "Solicitar entrada"}</Button>
           <Button className="rounded-lg" variant="danger-soft" onPress={() => setRequestType("Loss")}>{isAdmin ? "Registrar perda" : "Solicitar baixa"}</Button>
@@ -1132,7 +1173,7 @@ export default function Storage() {
       )}
 
       <Tabs selectedKey={tab} onSelectionChange={(k) => setTab(String(k))}>
-        <Tabs.ListContainer>
+        <Tabs.ListContainer className="overflow-x-auto">
           <Tabs.List aria-label="Seções do estoque">
             <Tabs.Tab id="products">
               Produtos

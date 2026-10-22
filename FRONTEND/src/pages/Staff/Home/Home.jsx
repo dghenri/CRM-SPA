@@ -7,6 +7,7 @@ import { useAuth } from "../../../context/AuthContext";
 import { DayView, formatClock, useAppointments, notifyAppointmentsChanged } from '../Scheduling/Scheduling';
 import { colorForAppointment } from '../Scheduling/schedulingConstants';
 import SessionTable from "./SessionTable"
+import KeyHint from '../../../components/KeyHint';
 
 /* --------------------------- date/session utils -------------------------- */
 
@@ -182,7 +183,7 @@ function CurrentSessionCard({ appointments, now, summary, hidden, onChanged }) {
   if (!active) {
     return (
       <div key="idle" className="flex h-full flex-col items-center justify-center gap-1.5 p-4 text-center">
-        <div className="container w-100">
+        <div className="container max-w-full">
           <div className="tumbleweed"></div>
         </div>
         <span className="font-bold text-surface-danger-foreground">Nenhuma sessão em andamento</span>
@@ -212,7 +213,7 @@ function CurrentSessionCard({ appointments, now, summary, hidden, onChanged }) {
     <>
     <div key={active.id} className="flex h-full flex-col justify-between p-4">
       <div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <span className="absolute h-2.5 w-2.5 rounded-full" style={{ backgroundColor: dotColor }} />
           <span className="relative h-2.5 w-2.5 rounded-full animate-ping" style={{ backgroundColor: dotColor }} />
           <span className="text-xs font-semibold uppercase tracking-wide" >{active.code}</span>
@@ -267,7 +268,7 @@ function CurrentSessionCard({ appointments, now, summary, hidden, onChanged }) {
         )}
 
         {/* ações rápidas */}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {isLate ? (
             <>
               <Button
@@ -330,7 +331,7 @@ function CurrentSessionCard({ appointments, now, summary, hidden, onChanged }) {
       {/* o AlertDialog do HeroUI ignora o Esc por padrão; aqui o Esc cancela, como nos demais modais */}
       <AlertDialog.Backdrop variant="blur" isKeyboardDismissDisabled={false}>
         <AlertDialog.Container>
-          <AlertDialog.Dialog className="sm:max-w-115 border-6">
+          <AlertDialog.Dialog className="max-w-[calc(100vw-2rem)] sm:max-w-115 border-6">
             <AlertDialog.Header className="items-center">
               <AlertDialog.Icon status="success" className="size-15">
                 <CheckCheck className="size-8" />
@@ -350,14 +351,18 @@ function CurrentSessionCard({ appointments, now, summary, hidden, onChanged }) {
             <AlertDialog.Footer>
               <Button slot="close" variant="tertiary" className="w-full">
                 Cancelar
+                <KeyHint>Esc</KeyHint>
               </Button>
+              {/* autoFocus: o Enter já confirma, então a dica ↵ é verdadeira */}
               <Button
                 slot="close"
                 variant="primary"
                 className="w-full"
+                autoFocus
                 onPress={() => run("finish", () => api.put(`/appointments/${active.id}`, { status: "Completed" }), "Atendimento finalizado.")}
               >
                 Finalizar
+                <KeyHint keyValue="enter" onFilled />
               </Button>
             </AlertDialog.Footer>
           </AlertDialog.Dialog>
@@ -395,10 +400,10 @@ function useDayStats(appointments, now, summary) {
 // Card individual de KPI, no estilo "label em cima / número + chip embaixo".
 function KpiCard({ label, value, chip }) {
   return (
-    <div className="flex h-full w-full flex-col justify-between rounded-xl bg-surface p-4">
-      <span className="text-sm font-semibold text-muted">{label}</span>
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-2xl font-bold tabular-nums">{value}</span>
+    <div className="flex h-full min-h-20 w-full min-w-0 flex-col justify-between gap-1 rounded-xl bg-surface p-3 sm:p-4">
+      <span className="truncate text-xs font-semibold text-muted sm:text-sm">{label}</span>
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <span className="text-xl font-bold tabular-nums sm:text-2xl">{value}</span>
         {chip}
       </div>
     </div>
@@ -429,9 +434,9 @@ function FinanceCard({ summary, hidden, onToggle, unfinished = 0 }) {
     : "";
 
   return (
-    <div className="col-span-3 flex flex-col gap-1.5 rounded-xl bg-overlay p-2">
-      <div className="flex h-7 items-center justify-between px-1">
-        <div className="flex min-w-0 items-center gap-2">
+    <div className="col-span-3 flex min-w-0 flex-col gap-1.5 rounded-xl bg-overlay p-2">
+      <div className="flex min-h-7 items-center justify-between gap-2 px-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <span className="text-sm font-semibold text-muted">Financeiro de hoje</span>
           {unfinished > 0 && (
             <span title="Só atendimentos com status Finalizado entram em Entradas e Saídas. Marque estas sessões como Finalizado na agenda.">
@@ -458,9 +463,9 @@ function FinanceCard({ summary, hidden, onToggle, unfinished = 0 }) {
         {items.map((it) => {
           const m = summary?.[it.key];
           return (
-            <div key={it.key} className="flex min-w-0 flex-col justify-between rounded-lg bg-surface p-2" title={it.title}>
+            <div key={it.key} className="flex min-w-0 flex-col justify-between rounded-lg bg-surface p-1.5 sm:p-2" title={it.title}>
               <span className="truncate text-xs font-semibold text-muted">{it.label}</span>
-              <span className="truncate text-base font-bold tabular-nums">{summary ? moneyText(m.value, hidden) : "…"}</span>
+              <span className="truncate text-sm font-bold tabular-nums sm:text-base">{summary ? moneyText(m.value, hidden) : "…"}</span>
               <span className="h-6" title={m ? `vs. ${weekday} passada: ${hidden ? MASK : formatBRL(m.compare)}` : undefined}>
                 {summary && !hidden && <DeltaChip change={m.change} invert={it.invert} />}
               </span>
@@ -495,12 +500,13 @@ const Home = () => {
   const showClockSeconds = user?.settings?.showClockSeconds ?? true;
 
   return (
-    <div className="-pr-8">
+    <div className="w-full min-w-0">
       <header>
-        <div className="relative grid grid-cols-9 h-40 w-full bg-background rounded-2xl gap-2 p-1">
+        {/* até xl: relógio e financeiro em linhas próprias + 3 KPIs; xl+: tudo numa linha só */}
+        <div className="relative grid w-full grid-cols-3 gap-2 rounded-2xl bg-background p-1 xl:h-40 xl:grid-cols-9">
 
           {/* CLOCK */}
-          <div className="flex col-span-3 h-full w-full justify-center overflow-hidden items-center rounded-xl">
+          <div className="col-span-3 flex h-32 w-full items-center justify-center overflow-hidden rounded-xl sm:h-36 xl:h-full">
             <LiveClock withSeconds={showClockSeconds} />
           </div>
 
@@ -526,23 +532,21 @@ const Home = () => {
         </div>
       </header>
 
-      <div className="grid grid-cols-2 mt-4 gap-4">
-        <div className='h-80 bg-background rounded-2xl'>
+      {/* agenda do dia e sessão atual: lado a lado só em telas largas */}
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="h-80 min-w-0 rounded-2xl bg-background">
           <DayView date={new Date()} appointments={appointments} />
         </div>
 
-        <div className="h-80 bg-background rounded-2xl p-1">
-          <div className="bg-overlay h-full rounded-2xl overflow-hidden">
+        <div className="min-h-80 min-w-0 rounded-2xl bg-background p-1 lg:h-80">
+          <div className="h-full min-h-78 overflow-hidden rounded-2xl bg-overlay">
             <CurrentSessionCard appointments={appointments} now={now} summary={summary} hidden={hidden} onChanged={refreshSummary} />
           </div>
         </div>
       </div>
 
-      <div className=" mt-4 gap-4">
-        <div className='h-65 bg-overlay rounded-2xl'>
-          <SessionTable appointments={appointments} />
-        </div>
-        
+      <div className="mt-4 min-w-0">
+        <SessionTable appointments={appointments} />
       </div>
     </div>
   )

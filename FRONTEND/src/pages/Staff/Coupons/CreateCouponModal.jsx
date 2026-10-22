@@ -21,6 +21,7 @@ import {
 import { TicketPercent } from 'lucide-react';
 
 import api from '../../../api/api';
+import KeyHint from '../../../components/KeyHint';
 
 // ---------------------------------------------------------------------------
 // Helpers de conversão entre DateTime (string ISO vindo do back-end/Mongo) e
@@ -177,8 +178,8 @@ export default function CreatCuponModal({ isOpen, onOpenChange, coupon, onSaved 
   }
 
   return (
-    <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
-      <Modal.Container placement="center" scroll="inside" size="cover" className="px-100">
+    <Modal.Backdrop isOpen={isOpen} onOpenChange={onOpenChange} isDismissable={!isSubmitting} isKeyboardDismissDisabled={isSubmitting}>
+      <Modal.Container placement="center" scroll="inside" size="cover" className="px-2 sm:px-8 md:px-20 lg:px-50 xl:px-100">
         <Modal.Dialog>
           <Modal.Header className="flex flex-row items-center mb-8">
             <Modal.Icon className="bg-accent-soft text-accent-soft-foreground">
@@ -263,7 +264,7 @@ export default function CreatCuponModal({ isOpen, onOpenChange, coupon, onSaved 
                   <Label>
                     Valor do desconto {form.discountType === 'Percentage' ? '(%)' : '(R$)'}
                   </Label>
-                  <NumberField.Group className="flex w-50 h-10 items-stretch overflow-hidden rounded-lg border border-default">
+                  <NumberField.Group className="flex h-10 w-full items-stretch sm:w-50 overflow-hidden rounded-lg border border-default">
                     <NumberField.DecrementButton className="flex w-10 shrink-0 items-center justify-center" />
                     <NumberField.Input className="min-w-0 flex-1 border-0 px-3 py-0 leading-none focus:outline-none" />
                     {form.discountType === 'Percentage' && (
@@ -286,7 +287,7 @@ export default function CreatCuponModal({ isOpen, onOpenChange, coupon, onSaved 
                   className="w-full"
                 >
                   <Label>Desconto máximo (R$)</Label>
-                  <NumberField.Group className="flex w-50 h-10 items-stretch overflow-hidden rounded-lg border border-default">
+                  <NumberField.Group className="flex h-10 w-full items-stretch sm:w-50 overflow-hidden rounded-lg border border-default">
                     <NumberField.DecrementButton className="flex w-10 shrink-0 items-center justify-center" />
                     <NumberField.Input className="min-w-0 flex-1 border-0 px-3 py-0 leading-none focus:outline-none" />
                     <NumberField.IncrementButton className="flex w-10 shrink-0 items-center justify-center" />
@@ -305,7 +306,7 @@ export default function CreatCuponModal({ isOpen, onOpenChange, coupon, onSaved 
                   onChange={(value) => updateField('minPurchase', value)}
                 >
                   <Label>Compra mínima (R$)</Label>
-                  <NumberField.Group className="flex w-50 h-10 items-stretch overflow-hidden rounded-lg border border-default">
+                  <NumberField.Group className="flex h-10 w-full items-stretch sm:w-50 overflow-hidden rounded-lg border border-default">
                       <NumberField.DecrementButton className="flex w-10 shrink-0 items-center justify-center" />
                       <NumberField.Input className="min-w-0 flex-1 border-0 px-3 py-0 leading-none focus:outline-none" />
                       <NumberField.IncrementButton className="flex w-10 shrink-0 items-center justify-center" />
@@ -327,7 +328,7 @@ export default function CreatCuponModal({ isOpen, onOpenChange, coupon, onSaved 
                   onSelectionChange={(key) => updateField('scope', key)}
                 >
                   <Label>Aplicável a</Label>
-                  <Select.Trigger className="w-fit border border-default rounded-lg">
+                  <Select.Trigger className="w-full border border-default rounded-lg sm:w-fit">
                     <Select.Value />
                     <Select.Indicator />
                   </Select.Trigger>
@@ -418,7 +419,7 @@ export default function CreatCuponModal({ isOpen, onOpenChange, coupon, onSaved 
                   minValue={today(getLocalTimeZone())}
                 >
                   <Label>Início da validade</Label>
-                  <DateField.Group fullWidth className="w-fit items-center border border-default rounded-lg">
+                  <DateField.Group fullWidth className="w-full items-center border border-default rounded-lg sm:w-fit">
                     <DateField.Input>
                       {(segment) => <DateField.Segment segment={segment} />}
                     </DateField.Input>
@@ -461,7 +462,7 @@ export default function CreatCuponModal({ isOpen, onOpenChange, coupon, onSaved 
                   minValue={form.startsAt ?? today(getLocalTimeZone())}
                 >
                   <Label>Fim da validade</Label>
-                  <DateField.Group fullWidth className="w-fit items-center border border-default rounded-lg">
+                  <DateField.Group fullWidth className="w-full items-center border border-default rounded-lg sm:w-fit">
                     <DateField.Input>
                       {(segment) => <DateField.Segment segment={segment} />}
                     </DateField.Input>
@@ -512,7 +513,7 @@ export default function CreatCuponModal({ isOpen, onOpenChange, coupon, onSaved 
                   onChange={(value) => updateField('usageLimit', value)}
                 >
                   <Label>Limite total de usos</Label>
-                  <NumberField.Group className="flex w-40 h-10 items-stretch overflow-hidden rounded-lg border border-default">
+                  <NumberField.Group className="flex h-10 w-full items-stretch sm:w-40 overflow-hidden rounded-lg border border-default">
                     <NumberField.DecrementButton className="flex w-10 shrink-0 items-center justify-center" />
                     <NumberField.Input className="min-w-0 flex-1 border-0 px-3 py-0 leading-none focus:outline-none" />
                     <NumberField.IncrementButton className="flex w-10 shrink-0 items-center justify-center" />
@@ -527,7 +528,7 @@ export default function CreatCuponModal({ isOpen, onOpenChange, coupon, onSaved 
                   onChange={(value) => updateField('perUserLimit', value)}
                 >
                   <Label>Limite por cliente</Label>
-                  <NumberField.Group className="flex w-40 h-10 items-stretch overflow-hidden rounded-lg border border-default">
+                  <NumberField.Group className="flex h-10 w-full items-stretch sm:w-40 overflow-hidden rounded-lg border border-default">
                     <NumberField.DecrementButton className="flex w-10 shrink-0 items-center justify-center" />
                     <NumberField.Input className="min-w-0 flex-1 border-0 px-3 py-0 leading-none focus:outline-none" />
                     <NumberField.IncrementButton className="flex w-10 shrink-0 items-center justify-center" />
@@ -544,10 +545,13 @@ export default function CreatCuponModal({ isOpen, onOpenChange, coupon, onSaved 
             <Modal.Footer>
               <Button slot="close" variant="tertiary" isDisabled={isSubmitting}>
                 Cancelar
+                <KeyHint>Esc</KeyHint>
               </Button>
 
+              {/* Enter dentro de um campo envia o formulário (comportamento nativo do <Form>) */}
               <Button type="submit" isPending={isSubmitting}>
                 {isEditing ? 'Salvar alterações' : 'Criar cupom'}
+                <KeyHint keyValue="enter" onFilled />
               </Button>
             </Modal.Footer>
           </Form>

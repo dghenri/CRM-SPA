@@ -3,6 +3,7 @@ import { useLocation, NavLink, Link, Navigate, useNavigate } from "react-router-
 import ThemeSwitcher from "../components/ThemeSwitcher"
 import { useAuth } from "../context/AuthContext";
 import { assetUrl } from "../api/api";
+import KeyHint from "../components/KeyHint";
 
 import {
   Avatar,
@@ -98,12 +99,29 @@ function readSidebarOpen() {
   }
 }
 
+// true em telas menores que o breakpoint "md" do Tailwind (768px): celular
+const MOBILE_QUERY = "(max-width: 767px)";
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia(MOBILE_QUERY).matches);
+  useEffect(() => {
+    const query = window.matchMedia(MOBILE_QUERY);
+    const onChange = (e) => setIsMobile(e.matches);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+  return isMobile;
+}
+
 export default function Sidebar ({
   open,
   setOpen,
 }) {
   const [expanded, setExpanded] = useState(false);
   const [isLogoutOpen, setIsLogoutOpen] = useState(false);
+  const isMobile = useIsMobile();
+  // No celular a sidebar vira uma gaveta: quando aberta, sempre mostra os textos (nunca a versão só de ícones)
+  const showFull = isMobile || open;
   const location = useLocation();
   const usersRoutes = usersItems.map(item => item.to);
   const isUsersRoute = usersRoutes.includes(location.pathname);
@@ -116,17 +134,21 @@ export default function Sidebar ({
   );
 
   useEffect(() => {
-    if (!open) {
+    if (!showFull) {
       setExpanded(false);
     }
-  }, [open]);
+  }, [showFull]);
 
   // Restaura o estado salvo antes da primeira pintura (evita "piscar" aberta e fechar)
   const persistReady = useRef(false);
   useLayoutEffect(() => {
+    if (isMobile) {
+      setOpen(false); // celular: a gaveta sempre começa fechada
+      return;
+    }
     const saved = readSidebarOpen();
     if (saved !== null) setOpen(saved);
-  }, [setOpen]);
+  }, [setOpen, isMobile]);
 
   // Salva a cada mudança (a primeira execução é a montagem: não sobrescreve o valor salvo)
   useEffect(() => {
@@ -134,12 +156,30 @@ export default function Sidebar ({
       persistReady.current = true;
       return;
     }
+    if (isMobile) return; // abrir/fechar a gaveta no celular não muda a preferência do desktop
     try {
       localStorage.setItem(SIDEBAR_STORAGE_KEY, String(open));
     } catch {
       /* sem localStorage: só não lembra na próxima visita */
     }
-  }, [open]);
+  }, [open, isMobile]);
+
+  // celular: fecha a gaveta ao trocar de página, com Esc, e trava a rolagem do fundo enquanto aberta
+  useEffect(() => {
+    if (isMobile) setOpen(false);
+  }, [location.pathname, isMobile, setOpen]);
+
+  useEffect(() => {
+    if (!isMobile || !open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (e) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isMobile, open, setOpen]);
 
   const avatarSrc = assetUrl(user?.avatarUrl);
 
@@ -163,16 +203,40 @@ export default function Sidebar ({
   };
 
   return (
+    <>
+    {/* celular: "marcador de página" colado na borda esquerda, embaixo, esticado para a direita */}
+    {isMobile && !open && (
+      <button
+        type="button"
+        aria-label="Abrir menu"
+        onClick={() => setOpen(true)}
+        className="fixed bottom-6 left-0 z-30 flex h-11 items-center gap-2 rounded-r-2xl border border-l-0 border-border bg-overlay pl-3 pr-6 text-sm font-semibold text-foreground shadow-lg transition-transform duration-200 active:translate-x-1"
+      >
+        <PanelLeft className="size-5" aria-hidden="true" />
+        Menu
+      </button>
+    )}
+
+    {/* celular: fundo escurecido, toque fora fecha */}
+    {isMobile && open && (
+      <div
+        aria-hidden="true"
+        onClick={() => setOpen(false)}
+        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px]"
+      />
+    )}
+
     <aside
-      className={`flex shrink-0 flex-col gap-3 bg-background transition-all duration-300 ${
-        open ? "w-70" : "w-16"
+      inert={isMobile && !open ? true : undefined}
+      className={`flex shrink-0 flex-col gap-3 bg-background transition-all duration-300 max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-72 max-md:max-w-[85vw] max-md:overflow-y-auto max-md:shadow-2xl ${
+        open ? "md:w-70" : "max-md:-translate-x-full md:w-16"
       }`}
     >
       {/* Brand */}
       <div className="flex items-center justify-between mt-3 px-4 py-2.5">
           
         <div className="flex items-center gap-2">
-          {open ? (
+          {showFull ? (
             <img className="size-11" src="/LotusIcon.svg" alt="" />
           ) : (
             <Tooltip delay={0}>
@@ -191,12 +255,12 @@ export default function Sidebar ({
             </Tooltip>
           )}
 
-          <SLabel open={open} className="font-bold">
+          <SLabel open={showFull} className="font-bold">
             Viva Bem SPA
           </SLabel>
         </div>
 
-        {open && (
+        {showFull && (
           <Tooltip delay={0}>
             <Button
               isIconOnly
@@ -219,7 +283,7 @@ export default function Sidebar ({
         {visibleMainItems.map(({ key, label, tooltip, Icon, to, badge }) => (
           <Tooltip
             key={key}
-            isDisabled={open}
+            isDisabled={showFull}
             delay={0}
           >
             <Tooltip.Trigger>
@@ -239,14 +303,14 @@ export default function Sidebar ({
                   <Icon className="size-5 shrink-0" />
 
                   <SLabel
-                    open={open}
+                    open={showFull}
                     className="font-semibold"
                   >
                     {label}
                   </SLabel>
                 </div>
 
-                {open && badge > 0 && (
+                {showFull && badge > 0 && (
                   <span className="ml-auto flex min-w-5 h-5 items-center justify-center rounded-full
                   bg-danger text-white text-xs font-semibold px-1">
                     {badge}
@@ -268,14 +332,14 @@ export default function Sidebar ({
       {/* Spaces - seção inteira só aparece pra MajorAdmin */}
       {isMajorAdmin && (
       <>
-      <SLabel open={open} className="mt-2 ml-2 px-2 text-xs font-medium uppercase tracking-wide text-muted">
+      <SLabel open={showFull} className="mt-2 ml-2 px-2 text-xs font-medium uppercase tracking-wide text-muted">
         Management
       </SLabel>
 
       <div className="rounded-md px-2 py-1.5">
         <Disclosure
-          isDisabled={!open}
-          expanded={open && (isUsersRoute || expanded)}
+          isDisabled={!showFull}
+          expanded={showFull && (isUsersRoute || expanded)}
           onExpandedChange={setExpanded}
         >
           <Disclosure.Heading>
@@ -283,12 +347,12 @@ export default function Sidebar ({
             className="group flex w-full items-center justify-between rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-default">
               <div className="flex px-2 items-center gap-2">
                 <UserRoundCog className="size-5 text-field-placeholder" />
-                <SLabel open={open} className="font-semibold text-field-placeholder">Usuários</SLabel>
+                <SLabel open={showFull} className="font-semibold text-field-placeholder">Usuários</SLabel>
               </div>
-              <SLabel open={open}><Disclosure.Indicator /></SLabel>
+              <SLabel open={showFull}><Disclosure.Indicator /></SLabel>
             </Disclosure.Trigger>
           </Disclosure.Heading>
-          <Disclosure.Content className={!open ? "hidden" : ""}>
+          <Disclosure.Content className={!showFull ? "hidden" : ""}>
             <Disclosure.Body className="ml-3 flex flex-col gap-0.5">
               {usersItems.map(({ key, label, Icon, to }) => (
                 <NavLink
@@ -303,7 +367,7 @@ export default function Sidebar ({
                   }
                 >
                   <Icon className="size-4.5 text-default-500" />
-                  <SLabel open={open}>{label}</SLabel>
+                  <SLabel open={showFull}>{label}</SLabel>
                 </NavLink>
               ))}
             </Disclosure.Body>
@@ -314,7 +378,7 @@ export default function Sidebar ({
           {managementItems.map(({ key, label, tooltip, Icon, to }) => (
             <Tooltip
               key={key}
-              isDisabled={open}
+              isDisabled={showFull}
               delay={0}
             >
               <Tooltip.Trigger>
@@ -332,7 +396,7 @@ export default function Sidebar ({
                   <Icon className="h-5 w-5 shrink-0" />
 
                   <SLabel
-                    open={open}
+                    open={showFull}
                     className="font-semibold"
                   >
                     {label}
@@ -352,7 +416,7 @@ export default function Sidebar ({
       </>
       )}
 
-      <SLabel open={open}>
+      <SLabel open={showFull}>
         <Label>Theme</Label>
         <ThemeSwitcher />
       </SLabel>
@@ -366,7 +430,7 @@ export default function Sidebar ({
               role="button"
               tabIndex={0}
               className={`flex items-center w-full h-auto py-2 rounded-xl cursor-pointer transition-all duration-200 hover:bg-default
-              ${!open ? "justify-center px-0" : "justify-start px-3"}`}
+              ${!showFull ? "justify-center px-0" : "justify-start px-3"}`}
             >
               <Badge.Anchor>
                 <Avatar size="sm">
@@ -379,8 +443,8 @@ export default function Sidebar ({
                 <Badge color={getStatusColor(user?.status)} placement="bottom-right" size="sm" />
               </Badge.Anchor>
             
-              {open && (
-                <SLabel open={open} className="flex w-full items-center justify-between gap-2 ml-3">
+              {showFull && (
+                <SLabel open={showFull} className="flex w-full items-center justify-between gap-2 ml-3">
                   <span className="font-semibold">{getShortName(user?.name)}</span>
                   <ChevronUp size={20} />
                 </SLabel>
@@ -432,7 +496,8 @@ export default function Sidebar ({
         </Dropdown>
 
         <AlertDialog>
-          <AlertDialog.Backdrop isOpen={isLogoutOpen} onOpenChange={setIsLogoutOpen}>
+          {/* o AlertDialog do HeroUI ignora o Esc por padrão; aqui o Esc cancela, como nos demais modais */}
+          <AlertDialog.Backdrop isOpen={isLogoutOpen} onOpenChange={setIsLogoutOpen} isKeyboardDismissDisabled={false}>
             <AlertDialog.Container>
               <AlertDialog.Dialog>
                 <AlertDialog.CloseTrigger />
@@ -449,6 +514,7 @@ export default function Sidebar ({
                 <AlertDialog.Footer>
                   <Button slot="close" variant="tertiary">
                     Cancelar
+                    <KeyHint>Esc</KeyHint>
                   </Button>
                   <Button
                     slot="close"
@@ -464,5 +530,6 @@ export default function Sidebar ({
         </AlertDialog>
       </div>
     </aside>
+    </>
   );
 }

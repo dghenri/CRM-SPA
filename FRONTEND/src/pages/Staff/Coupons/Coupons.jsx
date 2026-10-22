@@ -6,6 +6,7 @@ import { TicketPercent, Plus, Pencil, Archive, ArchiveRestore, Trash2, Calendar,
 
 import api from '../../../api/api';
 import CreateCuponModal from './CreateCouponModal';
+import KeyHint from '../../../components/KeyHint';
 
 const TAB_TO_STATUS = {
   all: undefined,
@@ -143,7 +144,7 @@ export default function Coupons() {
 
       <div className="w-full h-10 bg-surface-tertiary rounded-full">
         <Tabs className="w-full" defaultSelectedKey="actives">
-          <Tabs.ListContainer className='flex items-center justify-start'>
+          <Tabs.ListContainer className='flex items-center justify-start overflow-x-auto'>
             <Tabs.List aria-label="Options">
               <Tabs.Tab id="all">
                 Todos
@@ -203,14 +204,14 @@ function CouponList({ coupons, isLoading, onCreate, onEdit, onToggleArchive, onD
   }
 
   return (
-    <div className="grid md:grid-cols-1 lg:grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
       {coupons.map((coupon) => (
         <div
           key={coupon.id}
-          className="relative flex items-stretch justify-between gap-4 overflow-visible rounded-xl border border-default bg-overlay"
+          className="relative flex flex-col items-stretch justify-between gap-2 overflow-visible rounded-xl border border-default bg-overlay sm:flex-row sm:gap-4"
         >
-          <div className="flex min-w-0 flex-1 items-stretch gap-8">
-            <div className="flex shrink-0 items-center py-2 pl-8">
+          <div className="flex min-w-0 flex-1 items-stretch gap-4 sm:gap-8">
+            <div className="flex shrink-0 items-center py-3 pl-4 sm:py-2 sm:pl-8">
               <div className={`flex size-12 items-center justify-center rounded-lg ${coupon.discountType === 'Percentage' ? "bg-accent-soft text-accent" : "bg-danger-soft text-danger"}`}>
                 {coupon.discountType === 'Percentage' ? <BadgePercent className="size-7" /> : <BadgeDollarSign className="size-7" />}
                 
@@ -224,8 +225,8 @@ function CouponList({ coupons, isLoading, onCreate, onEdit, onToggleArchive, onD
               <span className="absolute bottom-0 left-1/2 size-6 -translate-x-1/2 translate-y-1/2 rounded-full bg-surface border-t" />
             </div>
 
-            <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-2">
-              <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-3 pr-3 sm:py-2 sm:pr-0">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="font-bold">{coupon.code}</span>
                 <Chip size="sm" variant="soft" color={STATUS_COLOR[coupon.status] ?? 'default'}>
                   {STATUS_LABEL[coupon.status] ?? coupon.status}
@@ -242,7 +243,7 @@ function CouponList({ coupons, isLoading, onCreate, onEdit, onToggleArchive, onD
                   {SCOPE_LABEL[coupon.scope] ?? coupon.scope}
                 </span>
               </div>
-              <div className="flex items-center gap-4 text-xs text-muted font-medium mt-3">
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-medium text-muted">
                 <span className="flex items-center gap-1">
                   <Calendar size={13} />
                   {coupon.expiresAt ? `Válido até ${formatDate(coupon.expiresAt)}` : 'Sem data de expiração'}
@@ -255,7 +256,7 @@ function CouponList({ coupons, isLoading, onCreate, onEdit, onToggleArchive, onD
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1 py-4 pr-8">
+          <div className="flex shrink-0 items-center justify-end gap-1 border-t border-dashed border-border px-3 py-2 sm:border-0 sm:px-0 sm:py-4 sm:pr-8">
             <Tooltip delay={0}>
               <Tooltip.Trigger>
                 <Button variant="ghost" isIconOnly aria-label="Editar cupom" onPress={() => onEdit(coupon)} className="hover:bg-accent-soft hover:text-accent transition-all duration-180">
@@ -301,9 +302,10 @@ function CouponList({ coupons, isLoading, onCreate, onEdit, onToggleArchive, onD
                       Excluir
                     </Tooltip.Content>
                   </Tooltip>
-                  <AlertDialog.Backdrop>
+                  {/* o AlertDialog do HeroUI ignora o Esc por padrão; aqui o Esc cancela */}
+                  <AlertDialog.Backdrop isKeyboardDismissDisabled={false}>
                     <AlertDialog.Container>
-                      <AlertDialog.Dialog className="sm:max-w-130">
+                      <AlertDialog.Dialog className="max-w-[calc(100vw-2rem)] sm:max-w-130">
                         <AlertDialog.Header>
                           <AlertDialog.Icon status="danger"> <Trash2 size={20} /> </AlertDialog.Icon>
                           <AlertDialog.Heading>Remover cupom "{coupon.code}"?</AlertDialog.Heading>
@@ -315,7 +317,11 @@ function CouponList({ coupons, isLoading, onCreate, onEdit, onToggleArchive, onD
                           </p>
                         </AlertDialog.Body>
                         <AlertDialog.Footer>
-                          <Button slot="close" variant="tertiary">Cancelar</Button>
+                          {/* sem dica de Enter: é uma ação destrutiva, o foco fica no Cancelar de propósito */}
+                          <Button slot="close" variant="tertiary">
+                            Cancelar
+                            <KeyHint>Esc</KeyHint>
+                          </Button>
                           <Button slot="close" variant="danger" onPress={() => onDelete(coupon)}>
                             Remover
                           </Button>

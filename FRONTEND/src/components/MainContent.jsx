@@ -50,27 +50,30 @@ const MainContent = ({ open, setOpen, children }) => {
   }, [location.pathname]);
 
   return (
-    <main className="flex flex-1 flex-col bg-background">
+    <main className="flex min-w-0 flex-1 flex-col bg-background">
       <section
         className={
-          `relative flex flex-1 flex-col min-h-0 overflow-hidden max-h-full mt-2 mr-2 mb-2 border-border bg-overlay rounded-3xl ` +
-          (isSchedulingRoot ? "p-0" : "p-4 border")
+          `relative flex flex-1 flex-col min-h-0 overflow-hidden max-h-full mx-2 mt-2 mb-2 md:ml-0 border-border bg-overlay rounded-3xl ` +
+          (isSchedulingRoot ? "p-0" : "p-3 sm:p-4 border")
         }
       >
 
         {isDashboardRoot && (
           <>
-          <div className="flex justify-between items-center">
+          <div className="flex items-center justify-between gap-3">
             <div className="relative z-10">
               <p className="mb-1 text-sm font-medium text-overlay-foreground/70">
                 {formattedDate}
               </p>
-              <h1 className="mb-4 shrink-0 text-2xl font-bold text-overlay-foreground drop-shadow-xl">
+              <h1 className="mb-4 shrink-0 text-xl font-bold sm:text-2xl text-overlay-foreground drop-shadow-xl">
                 {greeting}, {getShortName(user?.name)}!
               </h1>
             </div>
 
-            <FullscreenButton />
+            {/* tela cheia não faz sentido no celular */}
+            <div className="hidden sm:block">
+              <FullscreenButton />
+            </div>
           </div>
           </>
         )}
@@ -83,7 +86,8 @@ const MainContent = ({ open, setOpen, children }) => {
               // a gente "estica" esse container até a borda de verdade
               // (-mr-4) e devolve o respiro só pro conteúdo (pr-4), então a
               // scrollbar fica colada na lateral em vez de flutuando no meio.
-              (isSchedulingRoot ? "" : " -mr-4 pr-4")
+              // max-md:pb-16 deixa espaço para o "marcador" do menu no celular
+              (isSchedulingRoot ? " max-md:pb-16" : " -mr-3 pr-3 sm:-mr-4 sm:pr-4 max-md:pb-16")
             }
           >
             {children}

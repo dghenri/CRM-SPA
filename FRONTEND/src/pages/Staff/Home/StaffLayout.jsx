@@ -48,10 +48,10 @@ export default function StaffLayout() {
       <RealtimeProvider>
         <SoundProvider>
           <div className={tabletMode ? "staff-tablet-mode" : undefined}>
-            <div className="fixed inset-0 z-9999 md:hidden">
+            {/* <div className="fixed inset-0 z-9999 md:hidden">
               <ComingSoon className="h-full w-full" />
-            </div>
-            <div className="hidden md:flex h-screen">
+            </div> */}
+            <div className="flex h-screen"> {/* className="hidden md:flex h-screen" */}
               <Sidebar
                 open={open}
                 setOpen={setOpen}

@@ -18,6 +18,7 @@ import {
 import api from "../../../api/api";
 import { PAYMENT_METHODS } from "../../../components/paymentMethods";
 import { subscribeRealtime } from "../../../realtime/socket";
+import KeyHint, { confirmOnEnter } from "../../../components/KeyHint";
 
 /* ---------------------------------------------------------------------------
  * Página "Receita" (todos os cargos de staff). Mesmas regras do Overview:
@@ -239,7 +240,7 @@ function BarChart({ series, metric, title }) {
     <div className="flex flex-col gap-2">
       <div className="flex gap-3">
         {/* eixo Y */}
-        <div className="flex h-56 w-14 shrink-0 flex-col justify-between text-right text-xs text-muted" aria-hidden="true">
+        <div className="flex h-56 w-11 shrink-0 flex-col justify-between text-right text-[10px] text-muted sm:w-14 sm:text-xs" aria-hidden="true">
           {ticks.map((t) => (
             <span key={t} className="-my-1.5">
               {m.axis(top * t)}
@@ -293,7 +294,7 @@ function BarChart({ series, metric, title }) {
 
       {/* eixo X */}
       <div className="flex gap-3" aria-hidden="true">
-        <div className="w-14 shrink-0" />
+        <div className="w-11 shrink-0 sm:w-14" />
         <div className={`flex flex-1 ${dense ? "gap-0.5" : "gap-1 sm:gap-2"}`}>
           {series.map((s, i) => (
             <span key={s.key} className="relative h-4 min-w-0 flex-1 text-xs capitalize text-muted">
@@ -557,7 +558,35 @@ function TransactionsCard({ tick, period }) {
             <span className="text-sm font-semibold text-muted">Nenhuma transação neste período</span>
           </div>
         ) : (
-          <div className={`overflow-x-auto transition-opacity ${loading ? "opacity-50" : ""}`} aria-busy={loading}>
+          <>
+          {/* celular: cartões (a tabela de 4 colunas não cabe) */}
+          <ul className={`flex flex-col gap-2 transition-opacity md:hidden ${loading ? "opacity-50" : ""}`} aria-busy={loading}>
+            {items.map((t) => (
+              <li key={t.id} className="flex flex-col gap-1.5 rounded-xl border border-border bg-surface p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold">{t.customerName}</p>
+                    <p className="truncate text-xs text-muted">
+                      {t.serviceTitle} · <span className="font-serif font-bold">{t.code}</span>
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="font-semibold">{brl.format(t.net)}</p>
+                    {t.discount > 0 && <p className="text-xs text-muted">cupom −{brl.format(t.discount)}</p>}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2 text-xs text-muted">
+                  <span>{fmtDateTime(t.date)}</span>
+                  <Chip size="sm" variant="soft" color={t.paymentMethod ? "default" : "warning"}>
+                    {methodMeta(t.paymentMethod).label}
+                  </Chip>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {/* tablet e desktop: tabela */}
+          <div className={`hidden overflow-x-auto transition-opacity md:block ${loading ? "opacity-50" : ""}`} aria-busy={loading}>
             <table className="w-full min-w-136 text-left text-sm">
               <thead>
                 <tr className="border-b border-border text-xs font-semibold uppercase tracking-wide text-muted">
@@ -591,6 +620,7 @@ function TransactionsCard({ tick, period }) {
               </tbody>
             </table>
           </div>
+          </>
         )}
 
         {data && data.total > 0 && (
@@ -654,6 +684,7 @@ function ExportModal({ isOpen, defaultPeriod, onClose }) {
       >
         <Modal.Container size="md">
           <Modal.Dialog>
+           <div className="contents" onKeyDown={confirmOnEnter(generate, busy)}>
             <Modal.Header>
               <Modal.Heading>Exportar relatório em PDF</Modal.Heading>
             </Modal.Header>
@@ -694,12 +725,15 @@ function ExportModal({ isOpen, defaultPeriod, onClose }) {
             <Modal.Footer>
               <Button variant="tertiary" onPress={onClose} isDisabled={busy}>
                 Cancelar
+                <KeyHint>Esc</KeyHint>
               </Button>
               <Button onPress={generate} isPending={busy}>
                 <FileDown size={16} aria-hidden="true" />
                 Gerar PDF
+                <KeyHint keyValue="enter" onFilled />
               </Button>
             </Modal.Footer>
+           </div>
           </Modal.Dialog>
         </Modal.Container>
       </Modal.Backdrop>
@@ -727,7 +761,7 @@ export default function Revenue() {
             Atendimentos concluídos, <span>{periodTitle}</span>. O líquido já desconta os cupons usados.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <div className="flex w-full flex-wrap items-center justify-between gap-x-5 gap-y-2 sm:w-auto sm:justify-start">
           <Button size="sm" variant="tertiary" className="rounded-lg" onPress={() => setExportOpen(true)}>
             <FileDown size={16} aria-hidden="true" />
             Exportar PDF

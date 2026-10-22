@@ -4,6 +4,7 @@ import { colorMap, colorForAppointment, SLOT_MIN, SLOT_PX, fmtTime } from "./sch
 import AppointmentCard from "./AppointmentCard";
 import { useAuth } from "../../../context/AuthContext";
 import api from "../../../api/api";
+import KeyHint, { confirmOnEnter } from "../../../components/KeyHint";
 import {
   fetchSchedulingData,
   fetchAppointments,
@@ -25,6 +26,19 @@ import {
 } from "lucide-react";
 
 /* ------------------------------- constants ------------------------------- */
+
+// true em telas menores que o breakpoint "md" do Tailwind (celular)
+const MOBILE_QUERY = "(max-width: 767px)";
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia(MOBILE_QUERY).matches);
+  useEffect(() => {
+    const query = window.matchMedia(MOBILE_QUERY);
+    const onChange = (e) => setIsMobile(e.matches);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+  return isMobile;
+}
 
 const SLOTS_PER_HOUR = 60 / SLOT_MIN;
 const TOTAL_SLOTS = 24 * SLOTS_PER_HOUR;
@@ -240,7 +254,9 @@ export default function Agenda() {
   const { user } = useAuth();
   const [now] = useState(() => new Date());
   const [cursor, setCursor] = useState(() => startOfDay(now));
-  const [view, setView] = useState("week");
+  const isMobile = useIsMobile();
+  // celular: começa no dia (a semana de 7 colunas não cabe) e o arrastar fica desligado (conflita com a rolagem por toque)
+  const [view, setView] = useState(() => (window.matchMedia(MOBILE_QUERY).matches ? "day" : "week"));
   const [appointments, setAppointments] = useState([]);
   const [clients, setClients] = useState([]);
   const [services, setServices] = useState([]);
@@ -480,7 +496,7 @@ export default function Agenda() {
             onDelete={onDelete}
             onEdit={(a) => setEditing(a)}
             onStatusChange={onStatusChange}
-            dragEnabled={dragEnabled}
+            dragEnabled={dragEnabled && !isMobile}
           />
         )}
       </div>
@@ -522,7 +538,8 @@ export default function Agenda() {
       <Button
         isIconOnly
         onPress={() => setCreating(true)}
-        className="fixed bottom-7 right-7 h-13 w-13 z-9999"
+        aria-label="Novo agendamento"
+        className="fixed bottom-5 right-5 z-30 h-13 w-13 sm:bottom-7 sm:right-7"
       >
         <Plus className="size-8" />
       </Button>
@@ -748,40 +765,41 @@ export { isWeekend, weekendBgClass, formatClock, colorMap, notifyAppointmentsCha
 /* ------------------------------- Header ------------------------------ */
 
 function Header({ title, view, onViewChange, onPrev, onNext, onToday }) {
-  
+  // Mobile: linha 1 = título + navegação; linha 2 = abas Dia/Semana/Mês em largura total.
+  // sm+: tudo numa linha (título à esquerda; abas + navegação à direita).
   return (
-    <header className="flex items-center justify-between gap-4 border-danger bg-overlay rounded-t-3xl px-6 py-4">
-      <div className="flex items-center gap-3">
-        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-      </div>
+    <header className="flex flex-wrap items-center gap-x-3 gap-y-3 border-danger bg-overlay rounded-t-3xl px-3 py-3 sm:justify-between sm:px-6 sm:py-4">
+      <h1 className="order-1 min-w-0 flex-1 text-base font-semibold tracking-tight first-letter:uppercase sm:flex-none sm:text-xl">
+        {title}
+      </h1>
 
-      <div className="flex items-center gap-2">
-        <Tabs
-          className="w-60 max-w-md"
-          selectedKey={view}
-          onSelectionChange={(key) => onViewChange(key)}
-        >
-          <Tabs.ListContainer>
-            <Tabs.List aria-label="View options">
-              <Tabs.Tab id="day">
-                Dia
-                <Tabs.Indicator />
-              </Tabs.Tab>
+      <Tabs
+        className="order-3 w-full sm:order-2 sm:ml-auto sm:w-72"
+        selectedKey={view}
+        onSelectionChange={(key) => onViewChange(key)}
+      >
+        <Tabs.ListContainer>
+          <Tabs.List aria-label="View options" className="w-full">
+            <Tabs.Tab id="day" className="flex-1">
+              Dia
+              <Tabs.Indicator />
+            </Tabs.Tab>
 
-              <Tabs.Tab id="week">
-                Semana
-                <Tabs.Indicator />
-              </Tabs.Tab>
+            <Tabs.Tab id="week" className="flex-1">
+              Semana
+              <Tabs.Indicator />
+            </Tabs.Tab>
 
-              <Tabs.Tab id="month">
-                Mês
-                <Tabs.Indicator />
-              </Tabs.Tab>
-            </Tabs.List>
-          </Tabs.ListContainer>
-        </Tabs>
+            <Tabs.Tab id="month" className="flex-1">
+              Mês
+              <Tabs.Indicator />
+            </Tabs.Tab>
+          </Tabs.List>
+        </Tabs.ListContainer>
+      </Tabs>
 
-        <Separator className="mx-1 h-6 w-px bg-border mt-2" orientation="vertical" />
+      <div className="order-2 flex shrink-0 items-center gap-1 sm:order-3 sm:gap-2">
+        <Separator className="mr-1 hidden h-6 w-px bg-border sm:block" orientation="vertical" />
 
         <Tooltip delay={0}>
           <Button isIconOnly size="sm" variant="ghost" onPress={onPrev} aria-label="Prev">
@@ -818,6 +836,11 @@ function TimeGrid({ cursor, view, appointments, onCreate, onUpdate, onDelete, on
     const s = startOfWeek(cursor);
     return Array.from({ length: 7 }, (_, i) => addDays(s, i));
   }, [cursor, view]);
+
+  const isMobile = useIsMobile();
+  // coluna das horas mais estreita no celular; a semana rola na horizontal (cada dia com largura mínima)
+  const timeCol = isMobile ? 44 : 64;
+  const minGridWidth = isMobile && days.length > 1 ? timeCol + days.length * 112 : undefined;
 
   const scrollRef = useRef(null);
   const columnsRef = useRef(null);
@@ -988,12 +1011,13 @@ function TimeGrid({ cursor, view, appointments, onCreate, onUpdate, onDelete, on
         move={move}
         appointment={ appointments.find(a => a.id === move?.id) }
       />
-      <div ref={scrollRef} className="h-full overflow-y-auto hide-scrollbar">
+      <div ref={scrollRef} className="h-full overflow-auto hide-scrollbar">
+       <div style={{ minWidth: minGridWidth }}>
         <div
           className="sticky top-0 z-99 grid border-b border-border bg-overlay"
-          style={{ gridTemplateColumns: `64px repeat(${days.length}, minmax(0, 1fr))` }}
+          style={{ gridTemplateColumns: `${timeCol}px repeat(${days.length}, minmax(0, 1fr))` }}
         >
-          <div />
+          <div className="sticky left-0 z-10 bg-overlay" />
             {days.map((d) => {
               const isToday = sameDay(d, new Date());
 
@@ -1032,9 +1056,9 @@ function TimeGrid({ cursor, view, appointments, onCreate, onUpdate, onDelete, on
 
         <div
           className="relative grid"
-          style={{ gridTemplateColumns: `64px repeat(${days.length}, minmax(0, 1fr))` }}
+          style={{ gridTemplateColumns: `${timeCol}px repeat(${days.length}, minmax(0, 1fr))` }}
         >
-          <div className="border-r border-border font-semibold">
+          <div className="sticky left-0 z-30 border-r border-border bg-overlay font-semibold">
             {Array.from({ length: 24 }, (_, h) => (
               <div key={h} className="relative text-right text-[11px] text-muted-foreground" style={{ height: HOUR_PX }}>
                 <span className="absolute -top-3 right-2">{h === 0 ? "" : `${String(h).padStart(2, "0")}:00`}</span>
@@ -1149,14 +1173,15 @@ function TimeGrid({ cursor, view, appointments, onCreate, onUpdate, onDelete, on
               );
             })}
           </div>
-          {todayIdx >= 0 && <NowLine days={days} todayIdx={todayIdx} now={now} />}
+          {todayIdx >= 0 && <NowLine days={days} todayIdx={todayIdx} now={now} timeCol={timeCol} />}
         </div>
+       </div>
       </div>
     </>
   );
 }
 
-function NowLine({ days = [], todayIdx = -1, now = new Date() }) {
+function NowLine({ days = [], todayIdx = -1, now = new Date(), timeCol = 64 }) {
   const minutes = now.getHours() * 60 + now.getMinutes();
   const top = (minutes / SLOT_MIN) * SLOT_PX;
   const colWidthPct = days.length > 0 ? 100 / days.length : 100;
@@ -1164,12 +1189,12 @@ function NowLine({ days = [], todayIdx = -1, now = new Date() }) {
   return (
     <div
       className="pointer-events-none absolute inset-x-0 z-20 grid"
-      style={{ top, gridTemplateColumns: `64px repeat(${days.length}, minmax(0, 1fr))` }}
+      style={{ top, gridTemplateColumns: `${timeCol}px repeat(${days.length}, minmax(0, 1fr))` }}
     >
 
       <div className="relative">
-        <div className="absolute -top-2.5 right-0 z-10 flex h-4.5 items-center rounded-full bg-red-500 py-2.5 px-2 leading-none">
-          <span className="whitespace-nowrap text-[12px] font-semibold text-white">
+        <div className="absolute -top-2.5 right-0 z-10 flex h-4.5 items-center rounded-full bg-red-500 px-1 py-2.5 leading-none sm:px-2">
+          <span className="whitespace-nowrap text-[11px] font-semibold text-white sm:text-[12px]">
             {formatClock(now)}
           </span>
         </div>
@@ -1288,9 +1313,10 @@ function EditModal({ appointment, clients = [], services = [], staff = [], isAdm
   };
 
   return (
-    <AlertDialog.Backdrop isOpen onOpenChange={(o) => !o && onClose()}>
+    <AlertDialog.Backdrop isOpen onOpenChange={(o) => !o && onClose()} isKeyboardDismissDisabled={false}>
       <AlertDialog.Container className="sm:max-w-lg">
         <AlertDialog.Dialog>
+         <div className="contents" onKeyDown={confirmOnEnter(save, false)}>
           <AlertDialog.Header>
             <AlertDialog.Heading className="flex items-center text-xl gap-2 mb-4">
               <Pencil className="size-5" /> Editar agendamento
@@ -1394,7 +1420,7 @@ function EditModal({ appointment, clients = [], services = [], staff = [], isAdm
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3 mb-2">
+              <div className="grid grid-cols-1 gap-3 mb-2 sm:grid-cols-2">
                 <div className="grid grid-rows space-y-1.5 space-x-2 items-center">
                   <Label className="text-muted">Data inicial</Label>
                   <DatePicker
@@ -1472,7 +1498,7 @@ function EditModal({ appointment, clients = [], services = [], staff = [], isAdm
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mb-8">
+              <div className="grid grid-cols-1 gap-3 mb-8 sm:grid-cols-2">
                 <div className="grid grid-rows space-y-1.5 space-x-2 items-center">
                   <Label className="text-muted">Data final</Label>
                   <DatePicker
@@ -1557,10 +1583,17 @@ function EditModal({ appointment, clients = [], services = [], staff = [], isAdm
               <Trash2 className="mr-1.5 h-4 w-4" /> Excluir
             </Button>
             <div className="flex gap-2">
-              <Button variant="outline" onPress={onClose}>Cancelar</Button>
-              <Button variant="primary" onPress={save}>Salvar</Button>
+              <Button variant="outline" onPress={onClose}>
+                Cancelar
+                <KeyHint>Esc</KeyHint>
+              </Button>
+              <Button variant="primary" onPress={save}>
+                Salvar
+                <KeyHint keyValue="enter" onFilled />
+              </Button>
             </div>
           </AlertDialog.Footer>
+         </div>
         </AlertDialog.Dialog>
       </AlertDialog.Container>
     </AlertDialog.Backdrop>
@@ -1626,9 +1659,10 @@ function CreateModal({ defaultDate, clients = [], services = [], staff = [], isA
   };
 
   return (
-    <AlertDialog.Backdrop isOpen onOpenChange={(o) => !o && onClose()}>
+    <AlertDialog.Backdrop isOpen onOpenChange={(o) => !o && onClose()} isKeyboardDismissDisabled={false}>
       <AlertDialog.Container className="sm:max-w-lg">
         <AlertDialog.Dialog>
+         <div className="contents" onKeyDown={confirmOnEnter(save, false)}>
           <AlertDialog.Header>
             <AlertDialog.Heading className="flex items-center text-xl gap-2 mb-4">
               <Plus />Novo evento
@@ -1732,7 +1766,7 @@ function CreateModal({ defaultDate, clients = [], services = [], staff = [], isA
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3 mb-2">
+              <div className="grid grid-cols-1 gap-3 mb-2 sm:grid-cols-2">
                 <div className="grid grid-rows space-y-1.5 space-x-2 items-center">
                   <Label className="text-muted">Data inicial</Label>
                   <DatePicker
@@ -1810,7 +1844,7 @@ function CreateModal({ defaultDate, clients = [], services = [], staff = [], isA
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mb-8">
+              <div className="grid grid-cols-1 gap-3 mb-8 sm:grid-cols-2">
                 <div className="grid grid-rows space-y-1.5 space-x-2 items-center">
                   <Label className="text-muted">Data final</Label>
                   <DatePicker
@@ -1891,9 +1925,16 @@ function CreateModal({ defaultDate, clients = [], services = [], staff = [], isA
             </div>
           </AlertDialog.Body>
           <AlertDialog.Footer>
-            <Button variant="outline" onPress={onClose}>Cancelar</Button>
-            <Button variant="primary" onPress={save}>Criar</Button>
+            <Button variant="outline" onPress={onClose}>
+              Cancelar
+              <KeyHint>Esc</KeyHint>
+            </Button>
+            <Button variant="primary" onPress={save}>
+              Criar
+              <KeyHint keyValue="enter" onFilled />
+            </Button>
           </AlertDialog.Footer>
+         </div>
         </AlertDialog.Dialog>
       </AlertDialog.Container>
     </AlertDialog.Backdrop>
@@ -1911,8 +1952,9 @@ function MonthView({ cursor, appointments, onSelectDay, onEditAppointment }) {
     <div className="flex h-full flex-col">
       <div className="grid grid-cols-7 border-b border-border bg-overlay">
         {DAYS_PT_SHORT.map((d) => (
-          <div key={d} className="px-2 py-2 text-center font-semibold text-sm tracking-wide text-muted">
-            {d}
+          <div key={d} className="px-0.5 py-2 text-center text-xs font-semibold tracking-wide text-muted sm:px-2 sm:text-sm">
+            <span className="sm:hidden">{d[0]}</span>
+            <span className="hidden sm:inline">{d}</span>
           </div>
         ))}
       </div>
@@ -1935,12 +1977,12 @@ function MonthView({ cursor, appointments, onSelectDay, onEditAppointment }) {
             <div
               key={i}
               className={
-                "flex flex-col gap-1 overflow-hidden border-b border-r border-border p-1.5 text-left transition hover:bg-focus/20 " +
+                "flex flex-col gap-1 overflow-hidden border-b border-r border-border p-0.5 text-left transition hover:bg-focus/20 sm:p-1.5 " +
                 (inMonth ? `bg-background ${weekendClass}` : "bg-surface-tertiary text-muted-foreground")
               }
               onClick={() => onSelectDay(d)}
             >
-              <div className="flex shrink-0 justify-end">
+              <div className="flex shrink-0 justify-center sm:justify-end">
                 <span
                   className={
                     "flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium " +
@@ -1961,14 +2003,22 @@ function MonthView({ cursor, appointments, onSelectDay, onEditAppointment }) {
                         e.stopPropagation();
                         onEditAppointment(a);
                       }}
-                      className={"shrink-0 truncate rounded border px-1.5 py-0.5 text-left text-[11px] font-medium " + c.soft}
+                      className={"hidden shrink-0 truncate rounded border px-1.5 py-0.5 text-left text-[11px] font-medium sm:block " + c.soft}
                     >
                       {isContinuation ? "▸ " : `${fmtTime(a.start)} `}{a.title}
                     </button>
                   );
                 })}
+                {/* celular: só pontinhos coloridos (um por sessão, até 4); tocar no dia abre o dia */}
+                {dayAppts.length > 0 && (
+                  <div className="flex flex-wrap justify-center gap-0.5 sm:hidden" aria-label={`${dayAppts.length} sessões`}>
+                    {dayAppts.slice(0, 4).map((a) => (
+                      <span key={a.id} className="size-1.5 rounded-full" style={{ backgroundColor: colorForAppointment(a).color }} />
+                    ))}
+                  </div>
+                )}
                 {dayAppts.length > visibleCount && (
-                  <span className="shrink-0 px-1 text-[10px] font-semibold text-muted">+ {dayAppts.length - visibleCount} more</span>
+                  <span className="hidden shrink-0 px-1 text-[10px] font-semibold text-muted sm:block">+ {dayAppts.length - visibleCount} mais</span>
                 )}
               </div>
             </div>

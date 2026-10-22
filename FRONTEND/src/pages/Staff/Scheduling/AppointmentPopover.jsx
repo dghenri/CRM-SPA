@@ -78,7 +78,7 @@ export default function AppointmentPopover({ appointment, color, onStatusChange,
         <UserRound className="size-8" />
       </Button>
 
-      <Popover.Content className="max-w-100 rounded-2xl">
+      <Popover.Content className="max-w-[min(20rem,calc(100vw-1.5rem))] rounded-2xl">
         <Popover.Dialog>
           <Popover.Heading className="flex items-center gap-3">
             <Avatar size="lg">

@@ -211,7 +211,8 @@ function CouponList({ coupons, isLoading, onCreate, onEdit, onToggleArchive, onD
           className="relative flex flex-col items-stretch justify-between gap-2 overflow-visible rounded-xl border border-default bg-overlay sm:flex-row sm:gap-4"
         >
           <div className="flex min-w-0 flex-1 items-stretch gap-4 sm:gap-8">
-            <div className="flex shrink-0 items-center py-3 pl-4 sm:py-2 sm:pl-8">
+            {/* ícone e linha de corte só aparecem a partir de sm; no celular o cartão fica mais enxuto */}
+            <div className="hidden shrink-0 items-center py-2 pl-8 sm:flex">
               <div className={`flex size-12 items-center justify-center rounded-lg ${coupon.discountType === 'Percentage' ? "bg-accent-soft text-accent" : "bg-danger-soft text-danger"}`}>
                 {coupon.discountType === 'Percentage' ? <BadgePercent className="size-7" /> : <BadgeDollarSign className="size-7" />}
                 
@@ -219,31 +220,37 @@ function CouponList({ coupons, isLoading, onCreate, onEdit, onToggleArchive, onD
             </div>
 
             {/* linha de corte, com as mordidas em meia-lua nas pontas (efeito de ticket picotado) */}
-            <div className="relative w-px shrink-0 self-stretch">
+            <div className="relative hidden w-px shrink-0 self-stretch sm:block">
               <div className="absolute inset-y-3 left-1/2 -translate-x-1/2 border-l-2 border-dashed border-border" />
               <span className="absolute left-1/2 top-0 size-6 -translate-x-1/2 -translate-y-1/2 rounded-full bg-surface border-b" />
               <span className="absolute bottom-0 left-1/2 size-6 -translate-x-1/2 translate-y-1/2 rounded-full bg-surface border-t" />
             </div>
 
-            <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-3 pr-3 sm:py-2 sm:pr-0">
+            <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 px-4 py-3 sm:px-0 sm:py-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-bold">{coupon.code}</span>
                 <Chip size="sm" variant="soft" color={STATUS_COLOR[coupon.status] ?? 'default'}>
                   {STATUS_LABEL[coupon.status] ?? coupon.status}
                 </Chip>
+                {/* celular: o desconto vira o destaque da linha (no desktop ele aparece abaixo) */}
+                <span className="ml-auto text-base font-bold text-accent sm:hidden">
+                  {DISCOUNT_LABEL[coupon.discountType]?.(coupon) ?? coupon.discountValue}
+                </span>
               </div>
-              <div className="block truncate text-sm font-medium mt-0">
+              <div className="mt-0 hidden truncate text-sm font-medium sm:block">
                 <span className="text-foreground">Descrição: </span>
                 <span className="text-muted">{coupon.description || 'Sem descrição'}</span>
               </div>
               <div className="text-sm text-muted font-medium">
                 <span>
-                  {DISCOUNT_LABEL[coupon.discountType]?.(coupon) ?? coupon.discountValue}
-                  {' • '}
+                  <span className="hidden sm:inline">
+                    {DISCOUNT_LABEL[coupon.discountType]?.(coupon) ?? coupon.discountValue}
+                    {' • '}
+                  </span>
                   {SCOPE_LABEL[coupon.scope] ?? coupon.scope}
                 </span>
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-medium text-muted">
+              <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-medium text-muted sm:mt-3">
                 <span className="flex items-center gap-1">
                   <Calendar size={13} />
                   {coupon.expiresAt ? `Válido até ${formatDate(coupon.expiresAt)}` : 'Sem data de expiração'}

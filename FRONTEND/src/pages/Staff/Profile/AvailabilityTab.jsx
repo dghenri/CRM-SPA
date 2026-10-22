@@ -155,8 +155,8 @@ export default function AvailabilityTab({ staffId }) {
 
         return (
           <div key={weekday}>
-            <div className="flex items-start justify-between gap-6 py-5">
-              <div className="flex w-48 items-center gap-3 pt-2">
+            <div className="flex flex-col items-start justify-between gap-3 py-5 sm:flex-row sm:gap-6">
+              <div className="flex items-center gap-3 sm:w-48 sm:pt-2">
                 <Switch
                   aria-label={`Trabalha na ${label}`}
                   isSelected={enabled}
@@ -171,11 +171,11 @@ export default function AvailabilityTab({ staffId }) {
                 <span className="font-semibold">{label}</span>
               </div>
 
-              <div className="flex flex-1 flex-col gap-2">
-                {!enabled && <span className="pt-2 text-sm text-muted">Indisponível</span>}
+              <div className="flex w-full flex-1 flex-col gap-2">
+                {!enabled && <span className="text-sm text-muted sm:pt-2">Indisponível</span>}
 
                 {intervals.map((interval, index) => (
-                  <div key={index} className="flex items-center gap-3">
+                  <div key={index} className="flex flex-wrap items-center gap-2 sm:gap-3">
                     <Input
                       type="time"
                       aria-label="Início"
@@ -220,7 +220,7 @@ export default function AvailabilityTab({ staffId }) {
           variant="tertiary"
           onPress={handleSave}
           isDisabled={isSaving}
-          className="bg-field-foreground hover:bg-field-foreground/80 text-background p-6 mt-8 fixed right-8 bottom-6"
+          className="bg-field-foreground hover:bg-field-foreground/80 text-background p-6 mt-8 fixed right-4 bottom-5 z-30 shadow-lg sm:right-8 sm:bottom-6"
         >
           {isSaving ? <><Spinner color="currentColor" /> Salvando...</> : "Salvar"}
         </Button>

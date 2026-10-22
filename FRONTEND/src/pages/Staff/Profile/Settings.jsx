@@ -86,9 +86,9 @@ export default function Settings() {
   };
 
   return (
-    <div className="px-50 pt-6">
+    <div className="px-1 pt-2 sm:px-6 sm:pt-6 md:px-20 xl:px-50">
       <div>
-        <div className="flex justify-between items-center pr-10">
+        <div className="flex items-center justify-between gap-4 sm:pr-10">
           <div>
             <h1 className="font-bold">Arrastar agendamentos</h1>
             <span className="text-sm text-muted">Clique e arraste agendamentos para alterar dia e hora</span>
@@ -102,11 +102,11 @@ export default function Settings() {
             </Switch.Content>
           </Switch>
         </div>
-        <Separator className="my-6" />
+        <Separator className="my-4 sm:my-6" />
       </div>
 
       <div>
-        <div className="flex justify-between items-center pr-10">
+        <div className="flex items-center justify-between gap-4 sm:pr-10">
           <div>
             <h1 className="font-bold">Tema</h1>
             <span className="text-sm text-muted">Escolha o tema que melhor lhe agrada</span>
@@ -114,11 +114,11 @@ export default function Settings() {
 
           <ThemeSwitcher />
         </div>
-        <Separator className="my-6" />
+        <Separator className="my-4 sm:my-6" />
       </div>
 
       <div>
-        <div className="flex justify-between items-center pr-10">
+        <div className="flex items-center justify-between gap-4 sm:pr-10">
           <div>
             <h1 className="font-bold">Permitir notificações</h1>
             <span className="text-sm text-muted">Receba alerta de novos agendamentos</span>
@@ -132,11 +132,11 @@ export default function Settings() {
             </Switch.Content>
           </Switch>
         </div>
-        <Separator className="my-6" />
+        <Separator className="my-4 sm:my-6" />
       </div>
 
       <div>
-        <div className="flex justify-between items-center pr-10">
+        <div className="flex items-center justify-between gap-4 sm:pr-10">
           <div>
             <h1 className="font-bold">Modo tablet</h1>
             <span className="text-sm text-muted">Amplie a interface para melhorar a navegação</span>
@@ -150,11 +150,11 @@ export default function Settings() {
             </Switch.Content>
           </Switch>
         </div>
-        <Separator className="my-6" />
+        <Separator className="my-4 sm:my-6" />
       </div>
 
       <div>
-        <div className="flex justify-between items-center pr-10">
+        <div className="flex items-center justify-between gap-4 sm:pr-10">
           <div>
             <h1 className="font-bold">Mostrar segundos no relógio</h1>
             <span className="text-sm text-muted">Exibe os segundos, menores, ao lado da hora no relógio digital</span>
@@ -168,7 +168,7 @@ export default function Settings() {
             </Switch.Content>
           </Switch>
         </div>
-        <Separator className="my-6" />
+        <Separator className="my-4 sm:my-6" />
       </div>
     </div>
   )

@@ -55,6 +55,11 @@ export default function AppointmentCard({
           e.stopPropagation();
           onEdit?.();
         }}
+        // toque (celular/tablet): não existe duplo clique confiável, então um toque no cartão abre a edição
+        onClick={(e) => {
+          if (overlay || e.target.closest("button")) return;
+          if (window.matchMedia("(pointer: coarse)").matches) onEdit?.();
+        }}
         className={
           "absolute inset-x-1 z-5 select-none overflow-hidden border-l-4 px-2 py-1 text-default-foreground shadow-sm transition-shadow " +
           (dragEnabled ? "cursor-grab active:cursor-grabbing " : "cursor-default ") +

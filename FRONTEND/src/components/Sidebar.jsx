@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
-import { useLocation, NavLink, Link, Navigate, useNavigate } from "react-router-dom";
+import { useLocation, NavLink, useNavigate } from "react-router-dom";
 import ThemeSwitcher from "../components/ThemeSwitcher"
 import { useAuth } from "../context/AuthContext";
 import { assetUrl } from "../api/api";
@@ -12,29 +12,17 @@ import {
   Disclosure,
   Dropdown,
   Label,
-  ListBox,
-  ListBoxItem,
   Separator,
   Badge,
   Tooltip,
-
 } from "@heroui/react";
 
 import {
-  House,
-  CalendarCheck,
-  Globe,
-  File as FileIcon,
-  BookUser,
-  Paintbrush,
-  Users,
-  Plus,
   ChevronUp,
   Settings,
   PanelLeft,
   LogOut as LogOutIcon,
   UserRoundCog,
-
 } from 'lucide-react';
 
 import {
@@ -416,10 +404,10 @@ export default function Sidebar ({
       </>
       )}
 
-      <SLabel open={showFull}>
+      {/* <SLabel open={showFull}>
         <Label>Theme</Label>
         <ThemeSwitcher />
-      </SLabel>
+      </SLabel> */}
 
       {/* USER */} 
       <div className=" p-1 mt-auto">

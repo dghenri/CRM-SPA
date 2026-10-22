@@ -59,7 +59,21 @@ function formatLabel(text) {
   return text.replace(/([a-z])([A-Z])/g, "$1 $2");
 }
 
+// true em telas menores que o breakpoint "md" do Tailwind (celular)
+function useIsMobile() {
+  const query = "(max-width: 767px)";
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = (e) => setIsMobile(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return isMobile;
+}
+
 export default function Profile() {
+  const isMobile = useIsMobile();
   const { user, updateUser, login } = useAuth();
   const [isVisible, setIsVisible] = useState(false);
   const [isSavingInfo, setIsSavingInfo] = useState(false);
@@ -206,12 +220,12 @@ export default function Profile() {
   }
 
   const saveButtonClass =
-    "bg-field-foreground hover:bg-field-foreground/80 text-background p-6 mt-8 fixed right-8 bottom-6";
+    "bg-field-foreground hover:bg-field-foreground/80 text-background p-6 mt-8 fixed right-4 bottom-5 z-30 shadow-lg sm:right-8 sm:bottom-6";
 
   return (
     <div className="flex min-h-screen w-full flex-col p-2">
       <Tabs className="flex w-full flex-1 flex-col" variant="secondary">
-        <Tabs.ListContainer className="sticky top-0 z-20 bg-overlay -mx-2 -mt-2">
+        <Tabs.ListContainer className="sticky top-0 z-20 -mx-2 -mt-2 overflow-x-auto bg-overlay">
           <Tabs.List aria-label="Perfil">
             <Tabs.Tab id="profile">
               Meu perfil
@@ -229,9 +243,9 @@ export default function Profile() {
         </Tabs.ListContainer>
 
         <Tabs.Panel className="flex flex-1 pt-4" id="profile">
-          <Tabs className="flex w-full items-stretch -ml-4.5" orientation="vertical" variant="secondary">
-            <Tabs.ListContainer className="self-stretch">
-              <Tabs.List className="flex h-full flex-col space-y-10" aria-label="Seções do perfil">
+          <Tabs className="flex w-full flex-col items-stretch md:-ml-4.5 md:flex-row" orientation={isMobile ? "horizontal" : "vertical"} variant="secondary">
+            <Tabs.ListContainer className="md:self-stretch">
+              <Tabs.List className="flex md:h-full md:flex-col md:space-y-10" aria-label="Seções do perfil">
                 <Tabs.Tab id="personal-info">
                   Informações
                   <Tabs.Indicator />
@@ -244,10 +258,10 @@ export default function Profile() {
             </Tabs.ListContainer>
 
             {/* ---------- Aba: Informações ---------- */}
-            <Tabs.Panel className="flex-1 px-4" id="personal-info">
+            <Tabs.Panel className="flex-1 px-1 pt-4 md:px-4 md:pt-0" id="personal-info">
               <h2 className="text-lg font-bold">Informações Pessoais</h2>
               <Separator className="mt-4 mb-6" />
-              <div className="flex items-center gap-4 mb-18">
+              <div className="mb-10 flex items-center gap-4 sm:mb-18">
                 <AvatarUploader
                   name={user.name}
                   avatarUrl={user.avatarUrl}
@@ -350,17 +364,17 @@ export default function Profile() {
             </Tabs.Panel>
 
             {/* ---------- Aba: Segurança ---------- */}
-            <Tabs.Panel className="flex-1 px-4" id="security">
+            <Tabs.Panel className="flex-1 px-1 pt-4 md:px-4 md:pt-0" id="security">
               <h2 className="text-lg font-bold">Segurança da conta</h2>
               <Separator className="mt-4 mb-6" />
 
               <div className="flex flex-col gap-6">
                 {/* Email */}
-                <div className="flex items-end gap-3">
+                <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end sm:gap-3">
                   <TextField
                     fullWidth
                     type="email"
-                    className="w-150"
+                    className="w-full sm:w-150"
                     isDisabled={!isEditingEmail}
                     value={formData.email}
                     onChange={(v) => handleInputChange("email", v)}
@@ -379,11 +393,11 @@ export default function Profile() {
                 </div>
 
                 {/* Password */}
-                <div className="flex items-end gap-3">
+                <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end sm:gap-3">
                   <TextField
                     fullWidth
                     type={isVisible ? "text" : "password"}
-                    className="w-150"
+                    className="w-full sm:w-150"
                     isDisabled={!isEditingPassword}
                     value={formData.password}
                     onChange={(v) => handleInputChange("password", v)}
@@ -445,7 +459,7 @@ export default function Profile() {
         </Tabs.Panel>
 
         {/* ---------- Aba: Disponibilidade ---------- */}
-        <Tabs.Panel className="pt-4 px-4" id="availability">
+        <Tabs.Panel className="px-1 pt-4 md:px-4" id="availability">
           <AvailabilityTab staffId={user.id} />
         </Tabs.Panel>
 

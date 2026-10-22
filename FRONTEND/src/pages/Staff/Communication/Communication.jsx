@@ -38,6 +38,7 @@ import {
   setBannerActive,
   updateBanner,
 } from "../../../api/notifications";
+import KeyHint, { confirmOnEnter } from "../../../components/KeyHint";
 import NotificationAlert, { NOTIFICATION_STATUS_OPTIONS } from "../../../components/NotificationAlert";
 
 /* ---------------------------------------------------------------------------
@@ -168,7 +169,7 @@ function ConfirmDialog({ isOpen, onOpenChange, title, children, confirmLabel = "
     <AlertDialog isOpen={isOpen} onOpenChange={onOpenChange}>
       <AlertDialog.Backdrop variant="blur" isKeyboardDismissDisabled={false}>
         <AlertDialog.Container>
-          <AlertDialog.Dialog className="sm:max-w-115 border-6">
+          <AlertDialog.Dialog className="border-6 sm:max-w-115">
             <AlertDialog.Header className="items-center">
               <AlertDialog.Icon status={status} className="size-15">
                 <Icon className="size-8" />
@@ -178,9 +179,10 @@ function ConfirmDialog({ isOpen, onOpenChange, title, children, confirmLabel = "
             <AlertDialog.Body>
               <div className="text-center text-sm font-semibold leading-5 text-muted">{children}</div>
             </AlertDialog.Body>
-            <AlertDialog.Footer>
+            <AlertDialog.Footer className="flex-col-reverse gap-2 sm:flex-row">
               <Button slot="close" variant="tertiary" className="w-full">
                 Cancelar
+                <KeyHint>Esc</KeyHint>
               </Button>
               <Button slot="close" variant={status === "danger" ? "danger" : "primary"} className="w-full" onPress={onConfirm}>
                 {confirmLabel}
@@ -314,7 +316,7 @@ function NotificationsTab() {
   };
 
   return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-2">
       <Card className="rounded-2xl border border-border">
         <Card.Header>
           <Card.Title className="text-lg font-semibold">Nova notificação</Card.Title>
@@ -381,8 +383,8 @@ function NotificationsTab() {
             )}
           </div>
 
-          <div className="flex justify-end">
-            <Button variant="primary" isPending={sending} onPress={requestSend}>
+          <div className="flex sm:justify-end">
+            <Button variant="primary" isPending={sending} onPress={requestSend} className="w-full sm:w-auto">
               <Send size={16} />
               Enviar para {recipientsLabel}
             </Button>
@@ -390,7 +392,7 @@ function NotificationsTab() {
         </Card.Content>
       </Card>
 
-      <div className="flex flex-col gap-6">
+      <div className="flex min-w-0 flex-col gap-4 sm:gap-6">
         <Card className="rounded-2xl border border-border">
           <Card.Header>
             <Card.Title className="text-lg font-semibold">Prévia</Card.Title>
@@ -406,49 +408,82 @@ function NotificationsTab() {
             <Card.Title className="text-lg font-semibold">Enviadas</Card.Title>
           </Card.Header>
           <Card.Content>
-            <Table>
-              <Table.ScrollContainer>
-                <Table.Content aria-label="Notificações enviadas">
-                  <Table.Header>
-                    <Table.Column isRowHeader>Aviso</Table.Column>
-                    <Table.Column>Entregues</Table.Column>
-                    <Table.Column>Lidas</Table.Column>
-                    <Table.Column>Enviada</Table.Column>
-                    <Table.Column> </Table.Column>
-                  </Table.Header>
-                  <Table.Body items={history} renderEmptyState={() => <Empty>{isLoading ? "Carregando..." : "Nenhuma notificação enviada ainda"}</Empty>}>
-                    {(b) => (
-                      <Table.Row id={b.id}>
-                        <Table.Cell>
-                          <div className="flex flex-col">
-                            <span className="font-semibold">{b.title}</span>
-                            <span className="text-xs text-muted">
-                              {b.audience === "all" ? "Todos os clientes" : "Clientes específicos"}
-                              {b.category !== "General" && ` · ${b.category === "Promotions" ? "Promoção" : "Novidade"}`}
-                            </span>
-                          </div>
-                        </Table.Cell>
-                        <Table.Cell>
-                          {b.delivered}/{b.recipientCount}
-                        </Table.Cell>
-                        <Table.Cell>{b.readCount}</Table.Cell>
-                        <Table.Cell>
-                          <div className="flex flex-col">
-                            <span>{fmtDateTime(b.createdAt)}</span>
-                            {b.createdByName && <span className="text-xs text-muted">{b.createdByName}</span>}
-                          </div>
-                        </Table.Cell>
-                        <Table.Cell>
-                          <Button isIconOnly size="sm" variant="ghost" aria-label="Retirar dos clientes" onPress={() => setToDelete(b)}>
-                            <Trash2 size={16} />
-                          </Button>
-                        </Table.Cell>
-                      </Table.Row>
-                    )}
-                  </Table.Body>
-                </Table.Content>
-              </Table.ScrollContainer>
-            </Table>
+            {/* celular: cartões */}
+            <div className="flex flex-col gap-2 md:hidden">
+              {history.length === 0 ? (
+                <Empty>{isLoading ? "Carregando..." : "Nenhuma notificação enviada ainda"}</Empty>
+              ) : (
+                history.map((b) => (
+                  <div key={b.id} className="flex items-start gap-3 rounded-xl border border-border bg-surface-secondary p-3">
+                    <div className="flex min-w-0 flex-1 flex-col gap-1">
+                      <span className="truncate font-semibold">{b.title}</span>
+                      <span className="text-xs text-muted">
+                        {b.audience === "all" ? "Todos os clientes" : "Clientes específicos"}
+                        {b.category !== "General" && ` · ${b.category === "Promotions" ? "Promoção" : "Novidade"}`}
+                      </span>
+                      <span className="text-xs text-muted">
+                        {fmtDateTime(b.createdAt)}
+                        {b.createdByName && ` · ${b.createdByName}`}
+                      </span>
+                      <div className="mt-1 flex gap-1.5">
+                        <Chip size="sm" variant="soft">Entregues {b.delivered}/{b.recipientCount}</Chip>
+                        <Chip size="sm" variant="soft">Lidas {b.readCount}</Chip>
+                      </div>
+                    </div>
+                    <Button isIconOnly size="sm" variant="ghost" aria-label="Retirar dos clientes" onPress={() => setToDelete(b)}>
+                      <Trash2 size={16} />
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* tablet/desktop: tabela */}
+            <div className="hidden md:block">
+              <Table>
+                <Table.ScrollContainer>
+                  <Table.Content aria-label="Notificações enviadas">
+                    <Table.Header>
+                      <Table.Column isRowHeader>Aviso</Table.Column>
+                      <Table.Column>Entregues</Table.Column>
+                      <Table.Column>Lidas</Table.Column>
+                      <Table.Column>Enviada</Table.Column>
+                      <Table.Column> </Table.Column>
+                    </Table.Header>
+                    <Table.Body items={history} renderEmptyState={() => <Empty>{isLoading ? "Carregando..." : "Nenhuma notificação enviada ainda"}</Empty>}>
+                      {(b) => (
+                        <Table.Row id={b.id}>
+                          <Table.Cell>
+                            <div className="flex flex-col">
+                              <span className="font-semibold">{b.title}</span>
+                              <span className="text-xs text-muted">
+                                {b.audience === "all" ? "Todos os clientes" : "Clientes específicos"}
+                                {b.category !== "General" && ` · ${b.category === "Promotions" ? "Promoção" : "Novidade"}`}
+                              </span>
+                            </div>
+                          </Table.Cell>
+                          <Table.Cell>
+                            {b.delivered}/{b.recipientCount}
+                          </Table.Cell>
+                          <Table.Cell>{b.readCount}</Table.Cell>
+                          <Table.Cell>
+                            <div className="flex flex-col">
+                              <span>{fmtDateTime(b.createdAt)}</span>
+                              {b.createdByName && <span className="text-xs text-muted">{b.createdByName}</span>}
+                            </div>
+                          </Table.Cell>
+                          <Table.Cell>
+                            <Button isIconOnly size="sm" variant="ghost" aria-label="Retirar dos clientes" onPress={() => setToDelete(b)}>
+                              <Trash2 size={16} />
+                            </Button>
+                          </Table.Cell>
+                        </Table.Row>
+                      )}
+                    </Table.Body>
+                  </Table.Content>
+                </Table.ScrollContainer>
+              </Table>
+            </div>
           </Card.Content>
         </Card>
       </div>
@@ -544,6 +579,7 @@ function BannerModal({ banner, onClose, onSaved }) {
       <Modal.Backdrop isOpen={!!banner} onOpenChange={(o) => !o && onClose()} isDismissable={!saving} isKeyboardDismissDisabled={saving}>
         <Modal.Container size="lg" scroll="inside">
           <Modal.Dialog>
+           <div className="contents" onKeyDown={confirmOnEnter(save, saving)}>
             <Modal.CloseTrigger />
             <Modal.Header>
               <Modal.Heading>{isEdit ? "Editar banner" : "Novo banner"}</Modal.Heading>
@@ -560,11 +596,11 @@ function BannerModal({ banner, onClose, onSaved }) {
                 )}
 
                 {/* prévia no formato do carrossel */}
-                <div className="relative h-40 overflow-hidden rounded-2xl bg-black p-4 text-white">
+                <div className="relative h-44 overflow-hidden rounded-2xl bg-black p-4 text-white sm:h-40">
                   <div className="absolute inset-0 bg-linear-to-br from-black via-black to-[#4881fe]/60" />
                   <div className="relative z-10 flex h-full flex-col gap-2">
                     <h3 className="text-xl font-bold">{form.title.trim() || "Título do banner"}</h3>
-                    <p className="pr-20 text-sm">{form.description.trim() || "Descrição do banner"}</p>
+                    <p className="line-clamp-2 pr-4 text-sm sm:pr-20">{form.description.trim() || "Descrição do banner"}</p>
                     {hasButton && (
                       <span className="mt-auto w-fit rounded-full bg-white/90 px-4 py-2 text-sm font-semibold text-black">
                         {form.buttonLabel.trim() || "Abrir"}
@@ -590,7 +626,7 @@ function BannerModal({ banner, onClose, onSaved }) {
 
               </div>
             </Modal.Body>
-            <Modal.Footer className="justify-between">
+            <Modal.Footer className="flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <Switch isSelected={form.isActive} onChange={set("isActive")}>
                   <Switch.Content>
@@ -601,15 +637,18 @@ function BannerModal({ banner, onClose, onSaved }) {
                   </Switch.Content>
                 </Switch>
               </div>
-              <div>
-                <Button slot="close" variant="tertiary" isDisabled={saving} className="mr-2">
+              <div className="flex gap-2">
+                <Button slot="close" variant="tertiary" isDisabled={saving} className="flex-1 sm:flex-none">
                   Cancelar
+                  <KeyHint>Esc</KeyHint>
                 </Button>
-                <Button variant="primary" isPending={saving} onPress={save}>
+                <Button variant="primary" isPending={saving} onPress={save} className="flex-1 sm:flex-none">
                   Salvar
+                  <KeyHint keyValue="enter" onFilled />
                 </Button>
               </div>
             </Modal.Footer>
+           </div>
           </Modal.Dialog>
         </Modal.Container>
       </Modal.Backdrop>
@@ -673,67 +712,113 @@ function BannersTab() {
         </Alert.Content>
       </Alert>
 
-      <div className="flex justify-end">
-        <Button variant="primary" onPress={() => setEditing({})}>
+      <div className="flex sm:justify-end">
+        <Button variant="primary" onPress={() => setEditing({})} className="w-full sm:w-auto">
           <Plus size={16} />
           Novo banner
         </Button>
       </div>
 
-      <Table>
-        <Table.ScrollContainer>
-          <Table.Content aria-label="Banners do carrossel">
-            <Table.Header>
-              <Table.Column isRowHeader>Banner</Table.Column>
-              <Table.Column>Botão</Table.Column>
-              <Table.Column>Período</Table.Column>
-              <Table.Column>Situação</Table.Column>
-              <Table.Column>Ativo</Table.Column>
-              <Table.Column> </Table.Column>
-            </Table.Header>
-            <Table.Body items={banners} renderEmptyState={() => <Empty>{isLoading ? "Carregando..." : "Nenhum banner criado"}</Empty>}>
-              {(b) => (
-                <Table.Row id={b.id}>
-                  <Table.Cell>
-                    <div className="flex flex-col">
-                      <span className="font-semibold">{b.title}</span>
-                      {b.description && <span className="max-w-xs truncate text-xs text-muted">{b.description}</span>}
-                    </div>
-                  </Table.Cell>
-                  <Table.Cell>{b.buttonLabel ? `${b.buttonLabel} → ${destinationLabel(b.path)}` : "—"}</Table.Cell>
-                  <Table.Cell>
-                    {b.startsAt || b.endsAt ? `${fmtDate(b.startsAt)} – ${fmtDate(b.endsAt)}` : "Sem prazo"}
-                  </Table.Cell>
-                  <Table.Cell>
-                    <Chip size="sm" variant="soft" color={BANNER_STATUS[b.status]?.color ?? "default"}>
-                      {BANNER_STATUS[b.status]?.label ?? b.status}
-                    </Chip>
-                  </Table.Cell>
-                  <Table.Cell>
-                    <Switch aria-label={`Ativar ${b.title}`} isSelected={b.isActive} onChange={(v) => toggle(b, v)}>
-                      <Switch.Content>
-                        <Switch.Control>
-                          <Switch.Thumb />
-                        </Switch.Control>
-                      </Switch.Content>
-                    </Switch>
-                  </Table.Cell>
-                  <Table.Cell>
-                    <div className="flex gap-1">
-                      <Button isIconOnly size="sm" variant="ghost" aria-label="Editar" onPress={() => setEditing(b)}>
-                        <Pencil size={16} />
-                      </Button>
-                      <Button isIconOnly size="sm" variant="ghost" aria-label="Remover" onPress={() => setToDelete(b)}>
-                        <Trash2 size={16} />
-                      </Button>
-                    </div>
-                  </Table.Cell>
-                </Table.Row>
-              )}
-            </Table.Body>
-          </Table.Content>
-        </Table.ScrollContainer>
-      </Table>
+      {/* celular: cartões */}
+      <div className="flex flex-col gap-2 md:hidden">
+        {banners.length === 0 ? (
+          <Empty>{isLoading ? "Carregando..." : "Nenhum banner criado"}</Empty>
+        ) : (
+          banners.map((b) => (
+            <div key={b.id} className="flex flex-col gap-3 rounded-xl border border-border bg-surface-secondary p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 flex-col">
+                  <span className="truncate font-semibold">{b.title}</span>
+                  {b.description && <span className="line-clamp-2 text-xs text-muted">{b.description}</span>}
+                </div>
+                <Chip size="sm" variant="soft" color={BANNER_STATUS[b.status]?.color ?? "default"} className="shrink-0">
+                  {BANNER_STATUS[b.status]?.label ?? b.status}
+                </Chip>
+              </div>
+              <div className="flex flex-col gap-0.5 text-xs text-muted">
+                <span>Botão: {b.buttonLabel ? `${b.buttonLabel} → ${destinationLabel(b.path)}` : "—"}</span>
+                <span>Período: {b.startsAt || b.endsAt ? `${fmtDate(b.startsAt)} – ${fmtDate(b.endsAt)}` : "Sem prazo"}</span>
+              </div>
+              <div className="flex items-center justify-between border-t border-border pt-2">
+                <Switch aria-label={`Ativar ${b.title}`} isSelected={b.isActive} onChange={(v) => toggle(b, v)}>
+                  <Switch.Content>
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
+                    <Label>Ativo</Label>
+                  </Switch.Content>
+                </Switch>
+                <div className="flex gap-1">
+                  <Button isIconOnly size="sm" variant="ghost" aria-label="Editar" onPress={() => setEditing(b)}>
+                    <Pencil size={16} />
+                  </Button>
+                  <Button isIconOnly size="sm" variant="ghost" aria-label="Remover" onPress={() => setToDelete(b)}>
+                    <Trash2 size={16} />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* tablet/desktop: tabela */}
+      <div className="hidden md:block">
+        <Table>
+          <Table.ScrollContainer>
+            <Table.Content aria-label="Banners do carrossel">
+              <Table.Header>
+                <Table.Column isRowHeader>Banner</Table.Column>
+                <Table.Column>Botão</Table.Column>
+                <Table.Column>Período</Table.Column>
+                <Table.Column>Situação</Table.Column>
+                <Table.Column>Ativo</Table.Column>
+                <Table.Column> </Table.Column>
+              </Table.Header>
+              <Table.Body items={banners} renderEmptyState={() => <Empty>{isLoading ? "Carregando..." : "Nenhum banner criado"}</Empty>}>
+                {(b) => (
+                  <Table.Row id={b.id}>
+                    <Table.Cell>
+                      <div className="flex flex-col">
+                        <span className="font-semibold">{b.title}</span>
+                        {b.description && <span className="max-w-xs truncate text-xs text-muted">{b.description}</span>}
+                      </div>
+                    </Table.Cell>
+                    <Table.Cell>{b.buttonLabel ? `${b.buttonLabel} → ${destinationLabel(b.path)}` : "—"}</Table.Cell>
+                    <Table.Cell>
+                      {b.startsAt || b.endsAt ? `${fmtDate(b.startsAt)} – ${fmtDate(b.endsAt)}` : "Sem prazo"}
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Chip size="sm" variant="soft" color={BANNER_STATUS[b.status]?.color ?? "default"}>
+                        {BANNER_STATUS[b.status]?.label ?? b.status}
+                      </Chip>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Switch aria-label={`Ativar ${b.title}`} isSelected={b.isActive} onChange={(v) => toggle(b, v)}>
+                        <Switch.Content>
+                          <Switch.Control>
+                            <Switch.Thumb />
+                          </Switch.Control>
+                        </Switch.Content>
+                      </Switch>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <div className="flex gap-1">
+                        <Button isIconOnly size="sm" variant="ghost" aria-label="Editar" onPress={() => setEditing(b)}>
+                          <Pencil size={16} />
+                        </Button>
+                        <Button isIconOnly size="sm" variant="ghost" aria-label="Remover" onPress={() => setToDelete(b)}>
+                          <Trash2 size={16} />
+                        </Button>
+                      </div>
+                    </Table.Cell>
+                  </Table.Row>
+                )}
+              </Table.Body>
+            </Table.Content>
+          </Table.ScrollContainer>
+        </Table>
+      </div>
 
       <BannerModal banner={editing} onClose={() => setEditing(null)} onSaved={load} />
 
@@ -755,11 +840,11 @@ export default function CommunicationPage() {
   const [tab, setTab] = useState("notifications");
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-4 p-3 sm:gap-6 sm:p-6">
       <div className="flex items-center gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Comunicação</h1>
-          <p className="text-sm text-muted font-semibold">Notificações no sino e banners do carrossel da Home dos clientes.</p>
+          <h1 className="text-xl font-bold sm:text-2xl">Comunicação</h1>
+          <p className="text-xs font-semibold text-muted sm:text-sm">Notificações no sino e banners do carrossel da Home dos clientes.</p>
         </div>
       </div>
 

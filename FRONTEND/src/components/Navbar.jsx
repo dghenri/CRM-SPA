@@ -4,7 +4,6 @@ import { Button } from "@heroui/react";
 import { Menu, X } from 'lucide-react';
 import { useRevealReady } from "./Reveal";
 
-
 // Cada id precisa existir como <section id="..."> na página onde a Navbar
 // for usada (hoje, a Landing), assim como a seção "hero" (ver
 // HOME_SECTION_ID abaixo). Em páginas sem essas seções, o scroll spy e o
@@ -161,7 +160,7 @@ export default function Navbar({ overHero = false }) {
         <div className="flex items-center gap-3">
           <Link
             to="/auth/login"
-            className="hidden rounded-lg px-4 py-2 text-sm font-semibold text-blue-50 transition hover:outline-2 outline-muted md:inline-flex"
+            className="hidden rounded-lg px-4 py-2hover:outline-2 outline-muted md:inline-flex text-md font-semibold transition-colors text-blue-50/50 hover:text-blue-50"
           >
             Entrar
           </Link>
@@ -205,26 +204,11 @@ export default function Navbar({ overHero = false }) {
             <Button
               onPress={() => navigate("/auth/login")}
               variant="ghost"
-              className="w-full bg-black/5 text-white active:bg-black/50 transition-all"
+              className="w-full bg-black/50 text-white active:bg-black/50 transition-all"
             >
               Entrar
             </Button>
 
-            <Button
-              onPress={() => navigate("/register")}
-              variant="ghost"
-              className="w-full bg-black/5 text-white active:bg-black/50 transition-all"
-            >
-              Criar minha conta
-            </Button>
-
-            {/* <Link
-              to="/register"
-              onClick={() => setMobileMenuOpen(false)}
-              className="rounded-lg bg-accent px-4 py-2 text-center text-sm font-semibold text-white transition hover:opacity-90"
-            >
-              Cadastrar
-            </Link> */}
           </div>
         </nav>
       </div>

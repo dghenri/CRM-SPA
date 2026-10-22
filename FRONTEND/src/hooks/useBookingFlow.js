@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarDateTime, getLocalTimeZone, today } from "@internationalized/date";
 import api from "../api/api";
 import { fetchBusyWindows, createAppointment } from "../api/appointments";
@@ -85,6 +85,46 @@ function buildTimeSlots({ calendarDate, duration, intervals, busyWindows, now })
   return slots.sort((a, b) => a.start - b.start);
 }
 
+const formatBRL = (value) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+/** Desconto que o cupom daria nesse valor (espelha computeCouponDiscount da API; é só uma prévia). */
+export function previewCouponDiscount(coupon, amount) {
+  const base = Number(amount) || 0;
+  let discount = coupon.discountType === "Percentage" ? (base * coupon.discountValue) / 100 : coupon.discountValue;
+  if (coupon.maxDiscount) discount = Math.min(discount, coupon.maxDiscount);
+  return Math.max(0, Math.min(discount, base));
+}
+
+/**
+ * Por que um cupom da carteira NÃO pode ser aplicado a esse procedimento
+ * (null = pode). Espelha as regras de /coupons/validate para o cliente nem
+ * precisar tentar; a API continua sendo quem decide de verdade (ex.: o escopo
+ * "primeira compra" só ela consegue conferir).
+ */
+export function couponBlockReason(coupon, service) {
+  if (!service) return "Escolha um procedimento.";
+  const now = new Date();
+  if (coupon.archivedAt || coupon.status === "archived") return "Cupom arquivado.";
+  if (coupon.status === "expired" || (coupon.expiresAt && new Date(coupon.expiresAt) <= now)) return "Cupom expirado.";
+  if (coupon.status === "scheduled" || (coupon.startsAt && new Date(coupon.startsAt) > now)) {
+    return `Disponível a partir de ${new Date(coupon.startsAt).toLocaleDateString("pt-BR")}.`;
+  }
+  if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit) return "Atingiu o limite de usos.";
+  if (coupon.myAvailableCount === 0) {
+    return coupon.myUsageCount > 0 ? "Você já usou este cupom." : "Resgate este cupom na aba Cupons.";
+  }
+  if (coupon.scope === "SpecificServices" && !(coupon.serviceIds ?? []).includes(service.id)) {
+    return "Não vale para este procedimento.";
+  }
+  if (coupon.scope === "Category" && service.category && service.category !== coupon.category) {
+    return "Não vale para esta categoria.";
+  }
+  if (coupon.minPurchase && service.price < coupon.minPurchase) {
+    return `Compra mínima de ${formatBRL(coupon.minPurchase)}.`;
+  }
+  return null;
+}
+
 /**
  * Toda a lógica do fluxo de agendamento, sem nenhuma UI.
  * Usado tanto pela página (SchedulingNew, com serviço pré-selecionado via
@@ -123,6 +163,22 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
   const [appliedCoupon, setAppliedCoupon] = useState(null); // { redemptionId, coupon, discountAmount }
   const [couponError, setCouponError] = useState("");
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+
+  // Carteira: cupons que o cliente já tem (pessoais + resgatados), para sugerir no passo de pagamento
+  const [wallet, setWallet] = useState([]);
+  const [isLoadingWallet, setIsLoadingWallet] = useState(true);
+  const loadWallet = useCallback(async () => {
+    try {
+      setWallet(await api.get("/coupons/me"));
+    } catch {
+      setWallet([]); // sem carteira: o campo de digitar o código continua funcionando
+    } finally {
+      setIsLoadingWallet(false);
+    }
+  }, []);
+  useEffect(() => {
+    loadWallet();
+  }, [loadWallet]);
 
   const minDate = today(getLocalTimeZone());
 
@@ -292,15 +348,20 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
     setCouponError("");
   }
 
-  /** Valida (sem consumir) o cupom digitado contra o serviço escolhido. */
-  async function applyCoupon() {
-    if (!couponCode.trim() || !selectedService) return;
+  /**
+   * Valida (sem consumir) um cupom contra o serviço escolhido: o digitado no
+   * campo ou, se `code` for informado, um da carteira.
+   */
+  async function applyCoupon(code) {
+    const value = (typeof code === "string" ? code : couponCode).trim().toUpperCase();
+    if (!value || !selectedService) return;
 
+    setCouponCode(value);
     setIsApplyingCoupon(true);
     setCouponError("");
     try {
       const result = await api.post("/coupons/validate", {
-        code: couponCode.trim().toUpperCase(),
+        code: value,
         serviceId: selectedService.id,
         purchaseAmount: selectedService.price,
       });
@@ -312,6 +373,23 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
       setIsApplyingCoupon(false);
     }
   }
+
+  // cupons da carteira separados entre "pode aplicar agora" e "não vale aqui" (com o motivo)
+  const { applicableCoupons, blockedCoupons } = useMemo(() => {
+    const applicable = [];
+    const blocked = [];
+    for (const coupon of wallet) {
+      const reason = couponBlockReason(coupon, selectedService);
+      if (!reason) {
+        applicable.push({ coupon, discount: previewCouponDiscount(coupon, selectedService?.price) });
+      } else if (coupon.status !== "archived" && coupon.myAvailableCount !== 0) {
+        // já usados/sem resgate ficam fora da lista: não ajudam o cliente nessa tela
+        blocked.push({ coupon, reason });
+      }
+    }
+    applicable.sort((a, b) => b.discount - a.discount); // o que mais desconta primeiro
+    return { applicableCoupons: applicable, blockedCoupons: blocked };
+  }, [wallet, selectedService]);
 
   function removeCoupon() {
     setAppliedCoupon(null);
@@ -494,6 +572,10 @@ export function useBookingFlow({ initialServiceId = null } = {}) {
     isApplyingCoupon,
     applyCoupon,
     removeCoupon,
+    isLoadingWallet,
+    applicableCoupons,
+    blockedCoupons,
+    reloadWallet: loadWallet,
     goToDateTime,
     goToPayment,
     goToConfirmation,

@@ -1,10 +1,20 @@
+import { useEffect, useState } from "react";
 import { Button, Calendar, Chip, I18nProvider, Label, Radio, RadioGroup, Spinner, Separator } from "@heroui/react";
-import { Clock, OctagonAlert, Ban, Ticket, X } from "lucide-react";
+import { Clock, OctagonAlert, Ban, Ticket, X, ChevronDown } from "lucide-react";
 import ServiceSelectField from "./ServiceSelectField";
 import { PAYMENT_METHODS, getPaymentMethod } from "./paymentMethods";
 
 function formatPrice(value) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function couponDiscountLabel(coupon) {
+  return coupon.discountType === "Percentage" ? `${coupon.discountValue}% OFF` : `${formatPrice(coupon.discountValue)} OFF`;
+}
+
+function couponExpiryLabel(coupon) {
+  if (!coupon.expiresAt) return null;
+  return `Vence em ${new Date(coupon.expiresAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`;
 }
 
 /**
@@ -275,7 +285,18 @@ export function BookingStepPayment({ flow }) {
     isApplyingCoupon,
     applyCoupon,
     removeCoupon,
+    isLoadingWallet,
+    applicableCoupons,
+    blockedCoupons,
+    reloadWallet,
   } = flow;
+  const [showBlocked, setShowBlocked] = useState(false);
+
+  // atualiza a carteira ao abrir o passo (ex.: cupom resgatado em outra aba)
+  useEffect(() => {
+    reloadWallet?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!selectedService) return null;
 
@@ -339,23 +360,102 @@ export function BookingStepPayment({ flow }) {
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={couponCode}
-              onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-              placeholder="Digite o código do cupom"
-              className="h-12 flex-1 rounded-xl border border-default bg-default px-3 text-base font-semibold uppercase tracking-wide outline-none placeholder:font-normal placeholder:normal-case focus:border-accent"
-            />
-            <Button
-              variant="outline"
-              isDisabled={!couponCode.trim() || isApplyingCoupon}
-              onPress={applyCoupon}
-              className="h-12 shrink-0 rounded-xl px-4 font-semibold"
-            >
-              {isApplyingCoupon ? <Spinner size="sm" color="current" /> : "Aplicar"}
-            </Button>
-          </div>
+          <>
+            {/* cupons da carteira do cliente */}
+            {isLoadingWallet ? (
+              <div className="flex items-center gap-2 py-2 text-muted">
+                <Spinner size="sm" color="current" />
+                <p className="text-xs font-medium">Procurando cupons na sua carteira</p>
+              </div>
+            ) : (
+              applicableCoupons.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs font-semibold text-muted">
+                    {applicableCoupons.length === 1 ? "1 cupom disponível na sua carteira" : `${applicableCoupons.length} cupons disponíveis na sua carteira`}
+                  </p>
+                  {applicableCoupons.map(({ coupon, discount }) => (
+                    <div
+                      key={coupon.id}
+                      className="flex items-center gap-3 rounded-2xl border border-dashed border-accent/60 bg-accent/5 p-3"
+                    >
+                      <Ticket size={18} className="shrink-0 text-accent" />
+                      <div className="min-w-0 flex-1">
+                        <p className="flex flex-wrap items-center gap-x-2 text-sm font-bold text-accent">
+                          <span className="truncate">{coupon.code}</span>
+                          <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[11px]">{couponDiscountLabel(coupon)}</span>
+                        </p>
+                        <p className="text-xs text-muted">
+                          {discount > 0 ? `Você economiza ${formatPrice(discount)} neste procedimento` : "Vale para este procedimento"}
+                          {couponExpiryLabel(coupon) && ` · ${couponExpiryLabel(coupon)}`}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        isDisabled={isApplyingCoupon}
+                        onPress={() => applyCoupon(coupon.code)}
+                        className="shrink-0 rounded-xl font-semibold"
+                      >
+                        Aplicar
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )
+            )}
+
+            {/* os que o cliente tem mas não valem aqui, com o motivo */}
+            {!isLoadingWallet && blockedCoupons.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowBlocked((v) => !v)}
+                  className="flex items-center gap-1 self-start text-xs font-semibold text-muted"
+                >
+                  <ChevronDown size={14} className={`transition-transform ${showBlocked ? "rotate-180" : ""}`} />
+                  {blockedCoupons.length === 1 ? "1 cupom indisponível para este procedimento" : `${blockedCoupons.length} cupons indisponíveis para este procedimento`}
+                </button>
+                {showBlocked &&
+                  blockedCoupons.map(({ coupon, reason }) => (
+                    <div key={coupon.id} className="flex items-center gap-3 rounded-2xl border border-default bg-default p-3 opacity-70">
+                      <Ticket size={18} className="shrink-0 text-muted" />
+                      <div className="min-w-0 flex-1">
+                        <p className="flex flex-wrap items-center gap-x-2 text-sm font-bold text-muted">
+                          <span className="truncate">{coupon.code}</span>
+                          <span className="rounded-full bg-default-200 px-2 py-0.5 text-[11px]">{couponDiscountLabel(coupon)}</span>
+                        </p>
+                        <p className="text-xs font-semibold text-danger">{reason}</p>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            {/* digitar um código (precisa já estar resgatado na carteira) */}
+            {(applicableCoupons.length > 0 || blockedCoupons.length > 0) && (
+              <p className="mt-1 text-xs font-semibold text-muted">Ou digite um código</p>
+            )}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && couponCode.trim() && !isApplyingCoupon) applyCoupon();
+                }}
+                placeholder="Digite o código do cupom"
+                className="h-12 min-w-0 flex-1 rounded-xl border border-default bg-default px-3 text-base font-semibold uppercase tracking-wide outline-none placeholder:font-normal placeholder:normal-case focus:border-accent"
+              />
+              <Button
+                variant="outline"
+                isDisabled={!couponCode.trim() || isApplyingCoupon}
+                onPress={() => applyCoupon()}
+                className="h-12 shrink-0 rounded-xl px-4 font-semibold"
+              >
+                {isApplyingCoupon ? <Spinner size="sm" color="current" /> : "Aplicar"}
+              </Button>
+            </div>
+          </>
         )}
 
         {couponError && (
@@ -472,6 +572,7 @@ export function BookingStepConfirmation({ flow }) {
       <p className="text-xs leading-5 text-muted">
         O horário fica reservado imediatamente, mas a equipe ainda pode revisar o agendamento.
       </p>
+
     </div>
   );
 }

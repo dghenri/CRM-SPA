@@ -1,14 +1,129 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Button, Spinner, toast } from "@heroui/react";
-import { CalendarCheck2, ChevronLeft, ArrowRight } from "lucide-react";
+import { ChevronLeft, ArrowRight, Check, MessageCircle } from "lucide-react";
 import api from "../api/api";
 import { useBookingFlow } from "../hooks/useBookingFlow";
 import { BookingStepOne, BookingStepTwo, BookingStepPayment, BookingStepConfirmation } from "./BookingFlowFields";
 import Steps from "./Steps";
 import MobileNav from "./MobileNav";
+import SlideCommit from "./SlideButton";
 
 const STEP_LABELS = ["Procedimento", "Data e horário", "Pagamento", "Confirmação"];
+
+// Número do WhatsApp do studio (só dígitos, com DDI+DDD). Defina VITE_WHATSAPP_NUMBER no .env do front;
+// enquanto isso, este é um número de exemplo que você corrige.
+const STUDIO_WHATSAPP = import.meta.env.VITE_WHATSAPP_NUMBER || "5571999999999";
+const SUCCESS_GREEN = "#22c55e"; // mesmo verde do botão deslizante, para a transição ser contínua
+
+const brl = (v) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+/**
+ * Tela cheia pós-agendamento: um círculo verde cresce a partir do botão deslizante até cobrir a tela
+ * e pergunta se o cliente quer confirmar agora pelo WhatsApp ou deixar para depois.
+ */
+function BookingDoneOverlay({ origin, expanded, summary, onWhatsApp, onLater }) {
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e) => e.key === "Escape" && onLater();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expanded, onLater]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="booking-done-title"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-6 py-10 text-white transition-[clip-path] duration-600 ease-out"
+      style={{
+        background: SUCCESS_GREEN,
+        clipPath: expanded
+          ? `circle(150% at ${origin.x}% ${origin.y}%)`
+          : `circle(0% at ${origin.x}% ${origin.y}%)`,
+      }}
+    >
+      <div
+        className={`flex w-full max-w-sm flex-col items-center gap-6 text-center transition-all duration-500 ease-out ${
+          expanded ? "translate-y-0 opacity-100 delay-400" : "translate-y-4 opacity-0"
+        }`}
+      >
+        <div className="flex size-24 items-center justify-center rounded-full bg-white/20">
+          <Check className="size-14" strokeWidth={3} />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <h2 id="booking-done-title" className="text-2xl font-bold">
+            Agendamento realizado!
+          </h2>
+          {summary && <p className="text-sm font-semibold text-white/85">{summary}</p>}
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <p className="text-lg font-bold">Quer confirmar agora pelo WhatsApp?</p>
+          <p className="text-sm font-medium text-white/80">
+            É rapidinho: abrimos uma mensagem pronta para a nossa equipe. Se preferir, você confirma depois.
+          </p>
+        </div>
+
+        <div className="flex w-full flex-col gap-3">
+          <Button
+            size="lg"
+            className="h-14 w-full justify-center rounded-full bg-white text-base font-bold text-[#15803d]"
+            onPress={onWhatsApp}
+          >
+            <MessageCircle size={20} />
+            Confirmar pelo WhatsApp
+          </Button>
+          <Button
+            size="lg"
+            variant="ghost"
+            className="h-12 w-full justify-center rounded-full text-base font-semibold text-white hover:bg-white/15"
+            onPress={onLater}
+          >
+            Deixar para depois
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Botão "deslize para agendar": ocupa a largura disponível (o componente pede largura em px). */
+function ConfirmSlider({ boxRef, onConfirm, onDone, onError }) {
+  const [width, setWidth] = useState(300);
+
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const measure = () => setWidth(Math.max(240, Math.min(Math.round(el.clientWidth), 440)));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [boxRef]);
+
+  return (
+    <div ref={boxRef} className="flex w-full justify-center">
+      <SlideCommit
+        label="Deslize para agendar"
+        doneLabel="Agendado!"
+        errorLabel="Não foi possível agendar"
+        onConfirm={onConfirm}
+        onDone={onDone}
+        onError={onError}
+        trackColor="#262626"
+        handleColor="#ffffff"
+        successColor="#22c55e"
+        dangerColor="#e5484d"
+        width={width}
+        height={60}
+        radius={30}
+        holdMs={1500}
+      />
+    </div>
+  );
+}
 
 export default function SchedulingNewPage() {
   const navigate = useNavigate();
@@ -70,39 +185,84 @@ export default function SchedulingNewPage() {
     }
   };
 
-  const handleConfirm = async () => {
-    try {
-      const result = await flow.confirmBooking();
+  // Chamado pelo botão deslizante: ele mostra o carregando enquanto a Promise não resolve,
+  // "Agendado!" se resolver e o erro se rejeitar (por isso lançamos nos casos de falha).
+  const confirmResult = useRef(null);
+  const handleSlideConfirm = async () => {
+    const result = await flow.confirmBooking();
 
-      if (!result.ok && result.conflict) {
-        toast("Esse horário acabou de ser reservado", {
-          description: "Escolha outro horário para continuar.",
-          variant: "danger",
-        });
-        return;
-      }
-
-      toast("Agendamento realizado!", {
-        description: result.discountAmount
-          ? `${flow.selectedService.title} · ${flow.formattedDate} às ${flow.selectedSlot.label} · cupom aplicado (-${result.discountAmount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}).`
-          : `${flow.selectedService.title} · ${flow.formattedDate} às ${flow.selectedSlot.label}.`,
-        variant: "success",
+    if (!result.ok && result.conflict) {
+      toast("Esse horário acabou de ser reservado", {
+        description: "Escolha outro horário para continuar.",
+        variant: "danger",
       });
+      const error = new Error("conflict");
+      error.handled = true; // já avisamos acima
+      throw error;
+    }
 
-      if (result.couponFailed) {
-        toast("O cupom não pôde ser aplicado", {
-          description: "Seu agendamento foi confirmado normalmente.",
-          variant: "danger",
-        });
-      }
+    confirmResult.current = result;
+    return result;
+  };
 
-      navigate("/user/scheduling", { replace: true });
-    } catch (err) {
-      toast("Não foi possível confirmar", {
-        description: err.message || "Tente novamente em instantes.",
+  // tela de sucesso (círculo verde que cresce a partir do botão deslizante)
+  const sliderBoxRef = useRef(null);
+  const [doneOverlay, setDoneOverlay] = useState(null); // { origin, expanded, appointment, summary }
+  const overlayTimer = useRef(0);
+  useEffect(() => () => clearTimeout(overlayTimer.current), []);
+
+  const handleSlideDone = () => {
+    const result = confirmResult.current;
+    if (!result) return;
+
+    if (result.couponFailed) {
+      toast("O cupom não pôde ser aplicado", {
+        description: "Seu agendamento foi confirmado normalmente.",
         variant: "danger",
       });
     }
+
+    const summary = [
+      `${flow.selectedService.title} · ${flow.formattedDate} às ${flow.selectedSlot.label}`,
+      result.discountAmount ? `cupom aplicado (-${brl(result.discountAmount)})` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+    // deixa o "Agendado!" verde aparecer um instante; aí o círculo cresce a partir do botão
+    overlayTimer.current = setTimeout(() => {
+      const rect = sliderBoxRef.current?.getBoundingClientRect();
+      const origin = rect
+        ? {
+            x: ((rect.left + rect.width / 2) / window.innerWidth) * 100,
+            y: ((rect.top + rect.height / 2) / window.innerHeight) * 100,
+          }
+        : { x: 50, y: 90 };
+      setDoneOverlay({ origin, expanded: false, appointment: result.appointment, summary });
+      // dois frames: um para pintar em 0% e outro para animar até o tamanho final
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => setDoneOverlay((o) => (o ? { ...o, expanded: true } : o)))
+      );
+    }, 600);
+  };
+
+  const goToAppointments = () => navigate("/user/scheduling", { replace: true });
+
+  const confirmOnWhatsApp = () => {
+    const a = doneOverlay?.appointment;
+    const message =
+      `Olá! Acabei de agendar ${flow.selectedService.title} para ${flow.formattedDate} às ${flow.selectedSlot.label}` +
+      `${a?.code ? ` (código #${a.code})` : ""}. Gostaria de confirmar meu agendamento.`;
+    window.open(`https://wa.me/${STUDIO_WHATSAPP}?text=${encodeURIComponent(message)}`, "_blank", "noopener");
+    goToAppointments();
+  };
+
+  const handleSlideError = (err) => {
+    if (err?.handled) return;
+    toast("Não foi possível confirmar", {
+      description: err?.message || "Tente novamente em instantes.",
+      variant: "danger",
+    });
   };
 
   const handleBack = () => {
@@ -185,23 +345,19 @@ export default function SchedulingNewPage() {
             <ArrowRight />
           </Button>
         ) : (
-          <Button
-            variant="primary"
-            isDisabled={flow.isSubmitting}
-            className="h-15 w-full justify-center rounded-full text-lg font-semibold"
-            onPress={handleConfirm}
-          >
-            {flow.isSubmitting ? (
-              <Spinner size="sm" color="current" />
-            ) : (
-              <>
-                <CalendarCheck2 size={16} />
-                Confirmar agendamento
-              </>
-            )}
-          </Button>
+          <ConfirmSlider boxRef={sliderBoxRef} onConfirm={handleSlideConfirm} onDone={handleSlideDone} onError={handleSlideError} />
         )}
       </div>
+
+      {doneOverlay && (
+        <BookingDoneOverlay
+          origin={doneOverlay.origin}
+          expanded={doneOverlay.expanded}
+          summary={doneOverlay.summary}
+          onWhatsApp={confirmOnWhatsApp}
+          onLater={goToAppointments}
+        />
+      )}
     </div>
   );
 }

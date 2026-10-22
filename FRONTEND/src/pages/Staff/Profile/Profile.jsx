@@ -245,6 +245,8 @@ export default function Profile() {
 
             {/* ---------- Aba: Informações ---------- */}
             <Tabs.Panel className="flex-1 px-4" id="personal-info">
+              <h2 className="text-lg font-bold">Informações Pessoais</h2>
+              <Separator className="mt-4 mb-6" />
               <div className="flex items-center gap-4 mb-18">
                 <AvatarUploader
                   name={user.name}
@@ -252,18 +254,8 @@ export default function Profile() {
                   onSave={handleSaveAvatar}
                   onRemove={handleRemoveAvatar}
                 />
-                <div>
-                  <p className="font-semibold">{user.name}</p>
-                  <div className="flex items-center gap-1">
-                    <Chip className="mt-1" color={statusColorMap[user.status]} size="sm" variant="soft">
-                      {formatLabel(user.status)}
-                    </Chip>
-                  </div>
-                </div>
               </div>
 
-              <h2 className="text-lg font-bold mt-15">Informações Pessoais</h2>
-              <Separator className="mt-4 mb-6" />
 
               <div className="flex flex-col gap-4">
                 <TextField fullWidth className="max-w-2xl" value={formData.name} onChange={(v) => handleInputChange("name", v)}>

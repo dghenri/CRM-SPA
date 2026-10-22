@@ -260,7 +260,7 @@ export default function AvatarUploader({ name, avatarUrl, onSave, onRemove }) {
               </Button>
             )}
           </div>
-          <Description>
+          <Description className="font-semibold">
             Tamanho do aquivo deve ser até 2MB
           </Description>
         </div>

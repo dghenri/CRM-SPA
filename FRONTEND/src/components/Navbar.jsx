@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@heroui/react";
 import { Menu, X } from 'lucide-react';
+import { useRevealReady } from "./Reveal";
 
 
 // Cada id precisa existir como <section id="..."> na página onde a Navbar
@@ -11,6 +12,7 @@ import { Menu, X } from 'lucide-react';
 const NAV_LINKS = [
   { id: "diferenciais", label: "Diferenciais" },
   { id: "procedimentos", label: "Procedimentos" },
+  { id: "plataforma", label: "Plataforma" },
   { id: "sobre", label: "Sobre" },
   { id: "contato", label: "Contato" },
 ];
@@ -21,10 +23,33 @@ const HEADER_OFFSET = 130;
 // Seção que a logo leva de volta ao ser clicada
 const HOME_SECTION_ID = "hero";
 
-export default function Navbar() {
+// overHero: usa a barra sobre uma imagem (landing). Ela fica transparente no topo da página, ganha
+// fundo com blur só depois que a pessoa começa a rolar, encolhe um pouco e entra deslizando quando o
+// carregamento da página termina. Sem a prop, o visual continua o de sempre (fundo escuro com blur).
+export default function Navbar({ overHero = false }) {
   const [activeId, setActiveId] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [entered, setEntered] = useState(!overHero);
+  const ready = useRevealReady();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!overHero) return;
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [overHero]);
+
+  useEffect(() => {
+    if (!overHero || !ready) return;
+    const frame = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(frame);
+  }, [overHero, ready]);
+
+  // com o menu do celular aberto o fundo fica sempre visível, senão os links somem sobre a foto
+  const solid = !overHero || scrolled || mobileMenuOpen;
 
   useEffect(() => {
     // Ordem precisa bater com a ordem das seções na página (hero primeiro).
@@ -87,8 +112,17 @@ export default function Navbar() {
   const handleLogoClick = (event) => handleNavClick(event, HOME_SECTION_ID);
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-50 mx-4 mt-4 rounded-3xl bg-black/50 backdrop-blur-sm sm:mx-10 sm:mt-8">
-      <div className="flex h-20 items-center justify-between px-6 sm:px-10">
+    <header
+      className={`fixed left-0 right-0 top-0 z-50 mx-4 rounded-3xl sm:mx-10 ${
+        overHero
+          ? `transition-[background-color,backdrop-filter,box-shadow,margin,transform,opacity] duration-500 ease-out ${
+              scrolled ? "mt-2 sm:mt-4" : "mt-4 sm:mt-8"
+            } ${solid ? "bg-black/55 shadow-lg shadow-black/10 backdrop-blur-md" : "bg-transparent backdrop-blur-none"}`
+          : "mt-4 bg-black/50 backdrop-blur-sm sm:mt-8"
+      }`}
+      style={overHero ? { opacity: entered ? 1 : 0, transform: entered ? "none" : "translateY(-24px)" } : undefined}
+    >
+      <div className={`flex items-center justify-between px-6 transition-[height] duration-500 ease-out sm:px-10 ${overHero && scrolled ? "h-16" : "h-20"}`}>
         {/* Logo */}
         <Link to="/" onClick={handleLogoClick} className="flex items-center gap-3">
           <img className="hidden size-15 md:block " src="/LotusIcon.svg" alt="icon" />
@@ -105,13 +139,20 @@ export default function Navbar() {
               key={id}
               href={`#${id}`}
               onClick={(event) => handleNavClick(event, id)}
-              className={`text-md font-semibold transition-colors text-blue-50 hover:text-blue-50 ${
+              className={`relative text-md font-semibold transition-colors text-blue-50 hover:text-blue-50 ${
                 activeId === id
                   ? "text-blue-50"
                   : "text-blue-50/50"
               }`}
             >
               {label}
+              {/* sublinhado que cresce no link da seção atual */}
+              <span
+                aria-hidden="true"
+                className={`absolute -bottom-1.5 left-0 h-0.5 w-full origin-left rounded-full bg-accent transition-transform duration-300 ${
+                  activeId === id ? "scale-x-100" : "scale-x-0"
+                }`}
+              />
             </a>
           ))}
         </nav>

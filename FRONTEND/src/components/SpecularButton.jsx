@@ -87,6 +87,8 @@ const SpecularButton = ({
   thickness = 1,
   speed = 0.35,
   followMouse = true,
+  shadow = 'inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 24px rgba(0,0,0,0.25)',
+  hoverShadow = shadow,
   proximity = 250,
   autoAnimate = false,
   disabled = false,
@@ -140,11 +142,11 @@ const SpecularButton = ({
 
     const sizeRef = { w: 1, h: 1 };
     const resize = () => {
-      // Fractional size + explicit center keep the SDF pinned to the exact
-      // CSS border, instead of drifting up to a pixel from offsetWidth rounding.
-      const rect = btn.getBoundingClientRect();
-      const w = rect.width;
-      const h = rect.height;
+      // Tamanho de LAYOUT (offsetWidth/Height): ignora transform. getBoundingClientRect() devolve
+      // o tamanho já escalado, então um botão dentro de um wrapper com scale() (animação de
+      // entrada) ou com hover:-translate-y media errado e o brilho ficava deslocado.
+      const w = btn.offsetWidth;
+      const h = btn.offsetHeight;
       sizeRef.w = w;
       sizeRef.h = h;
       renderer.setSize(w + PAD * 2, h + PAD * 2);
@@ -234,13 +236,15 @@ const SpecularButton = ({
       type={type}
       disabled={disabled}
       onClick={onClick}
-      className={`relative m-0 inline-flex cursor-pointer items-center justify-center border-none font-medium leading-none tracking-[0.01em] outline-none transition-transform duration-150 active:scale-[0.97] disabled:cursor-default disabled:opacity-55 disabled:active:scale-100 [color:var(--sb-text-color)] [border-radius:var(--sb-radius)] [background:color-mix(in_srgb,var(--sb-tint)_calc(var(--sb-tint-opacity)*100%),transparent)] [backdrop-filter:blur(var(--sb-blur))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_8px_24px_rgba(0,0,0,0.25)] focus-visible:outline-2 focus-visible:outline-offset-[3px] ${SIZES[size] || SIZES.md}${className ? ` ${className}` : ''}`}
+      className={`relative m-0 inline-flex cursor-pointer items-center justify-center border-none font-medium leading-none tracking-[0.01em] outline-none transition-[transform,translate,box-shadow] duration-300 ease-out active:scale-[0.97] disabled:cursor-default disabled:opacity-55 disabled:active:scale-100 [color:var(--sb-text-color)] [border-radius:var(--sb-radius)] [background:color-mix(in_srgb,var(--sb-tint)_calc(var(--sb-tint-opacity)*100%),transparent)] [backdrop-filter:blur(var(--sb-blur))] [box-shadow:var(--sb-shadow)] hover:[box-shadow:var(--sb-shadow-hover)] focus-visible:outline-2 focus-visible:outline-offset-[3px] ${SIZES[size] || SIZES.md}${className ? ` ${className}` : ''}`}
       style={{
         '--sb-radius': `${radius}px`,
         '--sb-tint': tint,
         '--sb-tint-opacity': tintOpacity,
         '--sb-blur': `${blur}px`,
-        '--sb-text-color': textColor
+        '--sb-text-color': textColor,
+        '--sb-shadow': shadow,
+        '--sb-shadow-hover': hoverShadow
       }}
     >
       <span

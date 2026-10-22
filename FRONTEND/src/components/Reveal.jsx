@@ -14,6 +14,8 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 const RevealContext = createContext(true);
 export const RevealProvider = ({ ready, children }) => <RevealContext.Provider value={ready}>{children}</RevealContext.Provider>;
+// Para componentes que animam por conta própria (ex: Navbar) saberem se já podem começar
+export const useRevealReady = () => useContext(RevealContext);
 
 export function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(() => (typeof window !== "undefined" ? window.matchMedia("(prefers-reduced-motion: reduce)").matches : false));

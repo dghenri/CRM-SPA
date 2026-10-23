@@ -109,8 +109,8 @@ O sistema tem **três áreas** que compartilham a mesma API:
 ### 1. Clonar
 
 ```bash
-git clone https://github.com/SEU-USUARIO/viva-bem-spa.git
-cd viva-bem-spa
+git clone https://github.com/dghenri/CRM-SPA.git
+cd CRM-SPA
 ```
 
 ### 2. API
@@ -172,7 +172,7 @@ O Vite só expõe ao navegador as variáveis que começam com `VITE_`. **Nunca**
 ## Estrutura do projeto
 
 ```text
-viva-bem-spa/
+CRM-SPA/
 ├── BACKEND/
 │   ├── prisma/              # schema.prisma (modelos do banco)
 │   ├── scripts/             # utilitários (ex.: grant-welcome-coupon.js)

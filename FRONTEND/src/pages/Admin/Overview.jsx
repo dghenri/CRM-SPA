@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { assetUrl } from '../../api/api';
 import { Alert, Avatar, Button, Card, Chip, Label, Modal, TextArea, TextField, toast } from "@heroui/react";
 import {
   AlertTriangle,
@@ -483,7 +484,7 @@ function TopCustomersCard({ tick }) {
         {error && !data ? (
           <CardError message={error} />
         ) : !data ? (
-          <p className="py-6 text-center text-sm font-medium text-muted">Carregando clientes</p>
+          <p className="py-6 text-center text-sm font-medium text-muted">Carregando clientes...</p>
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-6 text-center">
             <Trophy className="text-muted" />
@@ -499,9 +500,19 @@ function TopCustomersCard({ tick }) {
                 >
                   {c.rank === 1 ? <Trophy size={18} aria-hidden="true" /> : c.rank}
                 </span>
-                <Avatar className="size-9 shrink-0">
-                  <Avatar.Fallback>{initials(c.name)}</Avatar.Fallback>
+
+                <Avatar className="size-12 shrink-0 border border-border">
+                  {c.avatarUrl && (
+                    <Avatar.Image
+                      alt={c.name}
+                      src={assetUrl(c.avatarUrl)}
+                    />
+                  )}
+                  <Avatar.Fallback>
+                    {initials(c.name)}
+                  </Avatar.Fallback>
                 </Avatar>
+
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{c.name}</p>
                   <p className="truncate text-xs text-muted">{c.email ?? "—"}</p>

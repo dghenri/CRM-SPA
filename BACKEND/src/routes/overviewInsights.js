@@ -311,7 +311,15 @@ router.get('/admin/overview/top-customers', ...stockAuth, requirePermission('ove
       .slice(0, 5);
 
     const users = top.length
-      ? await prisma.user.findMany({ where: { id: { in: top.map((c) => c.userId) } }, select: { id: true, name: true, email: true } })
+      ? await prisma.user.findMany({
+          where: { id: { in: top.map((c) => c.userId) } },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatarUrl: true,
+          },
+        })
       : [];
     const userById = new Map(users.map((u) => [u.id, u]));
 
@@ -319,12 +327,17 @@ router.get('/admin/overview/top-customers', ...stockAuth, requirePermission('ove
       period,
       sort,
       totalCustomers: byCustomer.size,
-      items: top.map((c, i) => ({
-        rank: i + 1,
-        ...c,
-        name: userById.get(c.userId)?.name ?? "Cliente removido",
-        email: userById.get(c.userId)?.email ?? null,
-      })),
+      items: top.map((c, i) => {
+        const user = userById.get(c.userId);
+
+        return {
+          rank: i + 1,
+          ...c,
+          name: user?.name ?? "Cliente removido",
+          email: user?.email ?? null,
+          avatarUrl: user?.avatarUrl ?? null,
+        };
+      }),
     });
   } catch (error) {
     console.error(error);

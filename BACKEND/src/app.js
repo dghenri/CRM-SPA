@@ -18,6 +18,7 @@ import recipesRoutes from './routes/recipes.js';
 import daySummaryRoutes from './routes/daySummary.js';
 import notificationsRoutes from './routes/notifications.js';
 import professionsRoutes from './routes/professions.js';
+import sidebarBadgesRouter from './routes/sidebarBadges.js';
 import { UPLOADS_DIR } from './lib/uploads.js';
 
 export const app = express();
@@ -97,3 +98,4 @@ app.use(daySummaryRoutes);   // /staff/day-summary
 app.use(notificationsRoutes); // /notifications/me, /banners/me, /admin/notifications, /admin/banners
 app.use(passwordRecoveryRoutes); // /auth/password/*, /auth/sessions/revoke-others
 app.use(professionsRoutes); // /permissions/catalog, /professions
+app.use(sidebarBadgesRouter); //

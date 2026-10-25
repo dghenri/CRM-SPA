@@ -4,6 +4,7 @@ import ThemeSwitcher from "../components/ThemeSwitcher"
 import { useAuth } from "../context/AuthContext";
 import { assetUrl } from "../api/api";
 import KeyHint from "../components/KeyHint";
+import useSidebarBadges from "../hooks/useSidebarBadges";
 
 import {
   Avatar,
@@ -23,6 +24,7 @@ import {
   PanelLeft,
   LogOut as LogOutIcon,
   UserRoundCog,
+  Headset,
 } from 'lucide-react';
 
 import {
@@ -47,6 +49,45 @@ function SLabel({
       {children}
     </span>
   );
+}
+
+const BADGE_TONE = {
+  accent: "bg-accent text-accent-foreground",
+  warning: "bg-warning text-warning-foreground",
+  danger: "bg-danger text-white",
+};
+const DOT_TONE = { accent: "bg-accent", warning: "bg-warning", danger: "bg-danger" };
+
+// Pílulas de contagem do item (0 não aparece). Sidebar aberta: pílulas à direita; fechada: só um pontinho no ícone.
+function NavBadges({ badges, counts }) {
+  const active = (badges ?? [])
+    .map((b) => ({ ...b, value: Number(counts[b.key]) || 0 }))
+    .filter((b) => b.value > 0);
+  if (active.length === 0) return null;
+  return (
+    <span className="ml-auto flex items-center gap-1">
+      {active.map((b) => (
+        <span
+          key={b.key}
+          title={`${b.value} ${b.label ?? ""}`.trim()}
+          aria-label={`${b.value} ${b.label ?? ""}`.trim()}
+          className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs font-semibold ${
+            BADGE_TONE[b.tone] ?? BADGE_TONE.accent
+          }`}
+        >
+          {b.value > 99 ? "99+" : b.value}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+// Sidebar fechada: pontinho no canto do ícone (a cor mais urgente ganha: danger > warning > accent)
+function NavDot({ badges, counts }) {
+  const tones = (badges ?? []).filter((b) => Number(counts[b.key]) > 0).map((b) => b.tone);
+  const tone = ["danger", "warning", "accent"].find((t) => tones.includes(t));
+  if (!tone) return null;
+  return <span aria-hidden="true" className={`absolute -right-0.5 -top-0.5 size-2 rounded-full ${DOT_TONE[tone]}`} />;
 }
 
 // Gera as iniciais a partir do nome (ex: "Junior Garcia" -> "JG")
@@ -115,6 +156,7 @@ export default function Sidebar ({
   const isUsersRoute = usersRoutes.includes(location.pathname);
   const { user, logout, can } = useAuth();
   const navigate = useNavigate();
+  const { counts } = useSidebarBadges(!!user);
   // Item visível se: (sem "roles" OU o cargo está na lista) E (sem "permission" OU a pessoa tem a permissão)
   const canSee = (item) =>
     (!item.roles || item.roles.includes(user?.role)) && (!item.permission || can(item.permission));
@@ -270,7 +312,7 @@ export default function Sidebar ({
 
       {/* Main nav */}
       <div className="flex flex-col gap-2 p-2.5">
-        {visibleMainItems.map(({ key, label, tooltip, Icon, to, badge }) => (
+        {visibleMainItems.map(({ key, label, tooltip, Icon, to, badges }) => (
           <Tooltip
             key={key}
             isDisabled={showFull}
@@ -290,7 +332,10 @@ export default function Sidebar ({
                 }
               >
                 <div className="flex items-center gap-3">
-                  <Icon className="size-5 shrink-0" />
+                  <span className="relative">
+                    <Icon className="size-5 shrink-0" />
+                    {!showFull && <NavDot badges={badges} counts={counts} />}
+                  </span>
 
                   <SLabel
                     open={showFull}
@@ -300,12 +345,7 @@ export default function Sidebar ({
                   </SLabel>
                 </div>
 
-                {showFull && badge > 0 && (
-                  <span className="ml-auto flex min-w-5 h-5 items-center justify-center rounded-full
-                  bg-danger text-white text-xs font-semibold px-1">
-                    {badge}
-                  </span>
-                )}
+                {showFull && <NavBadges badges={badges} counts={counts} />}
 
               </NavLink>
             </Tooltip.Trigger>
@@ -367,7 +407,7 @@ export default function Sidebar ({
         )}
 
         <div className="ml-1 flex flex-col gap-0.5">
-          {visibleManagementItems.map(({ key, label, tooltip, Icon, to }) => (
+          {visibleManagementItems.map(({ key, label, tooltip, Icon, to, badges }) => (
             <Tooltip
               key={key}
               isDisabled={showFull}
@@ -385,7 +425,10 @@ export default function Sidebar ({
                     }`
                   }
                 >
-                  <Icon className="h-5 w-5 shrink-0" />
+                  <span className="relative">
+                    <Icon className="h-5 w-5 shrink-0" />
+                    {!showFull && <NavDot badges={badges} counts={counts} />}
+                  </span>
 
                   <SLabel
                     open={showFull}
@@ -393,6 +436,8 @@ export default function Sidebar ({
                   >
                     {label}
                   </SLabel>
+
+                  {showFull && <NavBadges badges={badges} counts={counts} />}
                 </NavLink>
               </Tooltip.Trigger>
               {tooltip && (
@@ -415,6 +460,11 @@ export default function Sidebar ({
 
       {/* USER */} 
       <div className=" p-1 mt-auto">
+       {/*  <Button className="w-full rounded-lg h-12">
+          <Headset />
+          Central de suporte
+        </Button> */}
+
         <Separator className="mb-1" />
         <Dropdown>
           <Dropdown.Trigger asChild className="w-full px-1 justify-start rounded-full">

@@ -26,6 +26,10 @@ import {
 export const ALL_STAFF_ROLES = ["Admin", "Manager", "Employee"];
 export const ADMIN_ONLY_ROLES = ["Admin"];
 
+// Badges: cada item pode ter `badges: [{ key, tone, label }]`. `key` é o contador vindo de
+// GET /staff/sidebar-badges; `tone`: accent (informativo), warning (amarelo) ou danger (vermelho);
+// `label` é o texto de acessibilidade/tooltip. Zero = não aparece.
+
 export const mainItems = [
   {
     key: "home",
@@ -33,7 +37,6 @@ export const mainItems = [
     tooltip: "Home",
     Icon: House,
     to: "/staff",
-    badge: 0,
     roles: ALL_STAFF_ROLES,
   },
   {
@@ -42,7 +45,7 @@ export const mainItems = [
     tooltip: "Cronograma",
     Icon: CalendarRange,
     to: "/staff/scheduling",
-    badge: 0,
+    badges: [{ key: "scheduling", tone: "accent", label: "sessões agendadas hoje" }],
     roles: ALL_STAFF_ROLES,
   },
   {
@@ -51,7 +54,7 @@ export const mainItems = [
     tooltip: "Procedimentos",
     Icon: Store,
     to: "/staff/services",
-    badge: 0,
+    badges: [{ key: "services", tone: "accent", label: "procedimentos ativos" }],
     roles: ALL_STAFF_ROLES,
   },
   {
@@ -60,7 +63,7 @@ export const mainItems = [
     tooltip: "Cupons",
     Icon: Ticket,
     to: "/staff/coupons",
-    badge: 0,
+    badges: [{ key: "coupons", tone: "accent", label: "cupons ativos" }],
     roles: ALL_STAFF_ROLES,
   },
   {
@@ -69,7 +72,7 @@ export const mainItems = [
     tooltip: "Estoque",
     Icon: ShelvingUnit,
     to: "/staff/storage",
-    badge: 0,
+    badges: [{ key: "stock", tone: "accent", label: "produtos ativos" }],
     roles: ALL_STAFF_ROLES,
   },
   {
@@ -78,7 +81,6 @@ export const mainItems = [
     tooltip: "Receita",
     Icon: Receipt,
     to: "/staff/revenue",
-    badge: 0,
     roles: ALL_STAFF_ROLES,
   },
   {
@@ -87,7 +89,7 @@ export const mainItems = [
     tooltip: "Comunicação",
     Icon: Megaphone,
     to: "/staff/communication",
-    badge: 0,
+    badges: [{ key: "communication", tone: "accent", label: "notificações e banners ativos" }],
     roles: ALL_STAFF_ROLES,
   },
 ];
@@ -117,14 +119,6 @@ export const usersItems = [
     to: "/staff/users",
     permission: "customers.manage",
   },
-  {
-    key: "logs",
-    label: "Logs",
-    group:"Logs",
-    Icon: Logs,
-    to: "/staff/logs",
-    roles: ADMIN_ONLY_ROLES,
-  },
 ];
 
 export const managementItems = [
@@ -133,18 +127,18 @@ export const managementItems = [
     label: "Overview",
     tooltip: "Overview",
     Icon: Target,
-    // TODO: ainda não existe rota "/staff/overview" em
-    // staffRoutes.jsx - link fica quebrado até essa rota ser criada
     to: "/staff/overview",
     permission: "overview.view",
+    badges: [
+      { key: "stockRequests", tone: "warning", label: "solicitações de estoque pendentes" },
+      { key: "stockAlerts", tone: "danger", label: "produtos com estoque baixo" },
+    ],
   },
   {
     key: "logs",
     label: "Logs",
     tooltip: "Logs",
     Icon: Logs,
-    // TODO: ainda não existe rota "/staff/logs" em
-    // staffRoutes.jsx - link fica quebrado até essa rota ser criada
     to: "/staff/logs",
     roles: ADMIN_ONLY_ROLES,
   },

@@ -1,3 +1,5 @@
+import { getEffectivePermissions } from './permissions.js';
+
 // Valores padrão pra `Staff.settings` quando o campo ainda não foi
 // definido (ex: contas criadas antes dessa configuração existir).
 // Qualquer preferência nova (ex: notificações, densidade da agenda) entra
@@ -9,10 +11,18 @@ export const DEFAULT_STAFF_SETTINGS = {
 };
 
 // Campos da equipe (Staff) que podem ir para o front (nunca inclua "password" aqui)
+// - `permissions`: lista personalizada (só vale se customPermissions = true)
+// - `effectivePermissions`: o que a pessoa realmente pode (cargo + personalização); o front usa pra mostrar/esconder telas
 export function toPublicStaff(staff) {
   if (!staff) return null;
   const { password, ...safeStaff } = staff;
-  return { ...safeStaff, settings: { ...DEFAULT_STAFF_SETTINGS, ...(staff.settings || {}) } };
+  return {
+    ...safeStaff,
+    customPermissions: staff.customPermissions === true,
+    permissions: staff.permissions || [],
+    effectivePermissions: getEffectivePermissions(staff),
+    settings: { ...DEFAULT_STAFF_SETTINGS, ...(staff.settings || {}) },
+  };
 }
 
 // Preferências de notificação do cliente quando ainda não escolheu nada.

@@ -43,7 +43,7 @@ async function api(path, { method = "GET", body } = {}) {
 
 /* ------------------------------ formatação ------------------------------- */
 const UNIT_LABEL = { Un: "un", Ml: "ml", G: "g" };
-const ROLE_LABEL = { MajorAdmin: "Admin", Farmaceutica: "Farmacêutica", Massoterapeuta: "Massoterapeuta" };
+const ROLE_LABEL = { Admin: "Admin", Manager: "Gerente", Employee: "Funcionário" };
 const REQUEST_VERB = {
   Purchase: "adicionar ao estoque",
   Loss: "registrar perda de",
@@ -541,7 +541,7 @@ function PendingRequestItem({ request, busy, onApprove, onReject }) {
         <div className="flex items-start justify-between gap-2">
           <p className="text-sm">
             <span className="font-semibold">{request.requestedBy?.name ?? "—"}</span>{" "}
-            <span className="text-muted">({ROLE_LABEL[request.requestedBy?.role] ?? "—"})</span> quer{" "}
+            <span className="text-muted">({request.requestedBy?.profession?.name ?? ROLE_LABEL[request.requestedBy?.role] ?? "—"})</span> quer{" "}
             {REQUEST_VERB[request.type]}:
           </p>
           <Chip size="sm" variant="soft" color={request.type === "Loss" ? "danger" : "default"}>

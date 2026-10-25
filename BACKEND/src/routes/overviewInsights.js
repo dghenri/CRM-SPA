@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { requireMajorAdmin, stockAuth } from '../middleware/auth.js';
+import { requirePermission, stockAuth } from '../middleware/auth.js';
 import { getStaffActor, scopeWhere } from '../lib/appointmentAccess.js';
 import {
   MONTH_LABELS,
@@ -123,7 +123,7 @@ export function saleValue(appointment) {
 }
 
 // Exportado: a página de Receita (todos os cargos de staff) reaproveita o mesmo gráfico
-// em outra rota (revenue.js), sem abrir o resto do Overview para quem não é MajorAdmin.
+// em outra rota (revenue.js), sem abrir o resto do Overview para quem não é Admin.
 export async function chartHandler(req, res) {
   try {
     const range = String(req.query.range || "1M").toUpperCase();
@@ -131,7 +131,7 @@ export async function chartHandler(req, res) {
       return res.status(400).json({ error: `Período inválido. Use: ${CHART_RANGES.join(", ")}.` });
     }
 
-    // escopo por profissional: MajorAdmin vê a clínica toda; as demais só o que é delas
+    // escopo por profissional: Admin vê a clínica toda; as demais só o que é delas
     // (este handler também serve a página de Receita, aberta a todos os cargos)
     const actor = await getStaffActor(req.user.id);
     if (!actor) return res.status(403).json({ error: "Acesso negado." });
@@ -201,7 +201,7 @@ export async function chartHandler(req, res) {
   }
 }
 
-router.get('/admin/overview/chart', ...stockAuth, requireMajorAdmin, chartHandler);
+router.get('/admin/overview/chart', ...stockAuth, requirePermission('overview.view'), chartHandler);
 
 //------------------------------------------------------------- CUPONS
 // Uso = resgate com `usedAt` preenchido (o cupom foi aplicado num agendamento).
@@ -212,7 +212,7 @@ const COUPON_SORTS = {
   average: (a, b) => b.averageDiscount - a.averageDiscount || b.uses - a.uses,
 };
 
-router.get('/admin/overview/coupons', ...stockAuth, requireMajorAdmin, async (req, res) => {
+router.get('/admin/overview/coupons', ...stockAuth, requirePermission('overview.view'), async (req, res) => {
   try {
     const period = String(req.query.period || "1M").toUpperCase();
     const sort = String(req.query.sort || "uses");
@@ -272,7 +272,7 @@ const CUSTOMER_SORTS = {
   spent: (a, b) => b.spent - a.spent || b.sessions - a.sessions,
 };
 
-router.get('/admin/overview/top-customers', ...stockAuth, requireMajorAdmin, async (req, res) => {
+router.get('/admin/overview/top-customers', ...stockAuth, requirePermission('overview.view'), async (req, res) => {
   try {
     const period = String(req.query.period || "1M").toUpperCase();
     const sort = String(req.query.sort || "sessions");

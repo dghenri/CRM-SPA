@@ -77,8 +77,13 @@ export function AuthProvider({ children }) {
     setUser(updatedUser);
   };
 
+  // Permissões (ver BACKEND/src/lib/permissions.js): o back-end devolve `effectivePermissions`
+  // (cargo + personalização do Admin). Aqui é só pra mostrar/esconder UI - quem protege de
+  // verdade é o back-end. Ex: can("stock.review")
+  const can = (permission) => !!user?.effectivePermissions?.includes(permission);
+
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, loading, updateUser }}>
+    <AuthContext.Provider value={{ user, token, login, logout, loading, updateUser, can }}>
       {children}
     </AuthContext.Provider>
   );

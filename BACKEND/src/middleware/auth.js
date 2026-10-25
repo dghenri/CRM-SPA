@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import { ACCESS_TOKEN_KEY } from '../lib/config.js';
 import { prisma } from '../lib/prisma.js';
-import { MAJOR_ADMIN } from '../services/stock.js';
+import { ADMIN_ROLE, hasPermission } from '../lib/permissions.js';
 import { isSessionRevoked } from '../lib/sessionRevocation.js';
 
 //------------------------------------------------------------- MIDDLEWARE (JWT AUTH)
@@ -63,11 +63,23 @@ async function loadStaff(req, res, next) {
 }
 
 // usar depois de authenticateToken, requireStaff, loadStaff
-export function requireMajorAdmin(req, res, next) {
-  if (req.staff?.role !== MAJOR_ADMIN) {
-    return res.status(403).json({ error: "Apenas o MajorAdmin pode fazer isso." });
+// Só o Admin (não delegável): gestão de equipe e de profissões.
+export function requireAdmin(req, res, next) {
+  if (req.staff?.role !== ADMIN_ROLE) {
+    return res.status(403).json({ error: "Apenas o Admin pode fazer isso." });
   }
   next();
 }
+
+// usar depois de authenticateToken, requireStaff, loadStaff
+// Exige uma permissão (ver lib/permissions.js). Vale pelo cargo, ou pela lista
+// personalizada que o Admin definiu para o funcionário. O Admin sempre passa.
+// Ex: router.get('/x', ...stockAuth, requirePermission('stock.review'), handler)
+export const requirePermission = (permission) => (req, res, next) => {
+  if (!hasPermission(req.staff, permission)) {
+    return res.status(403).json({ error: "Você não tem permissão para fazer isso." });
+  }
+  next();
+};
 
 export const stockAuth = [authenticateToken, requireStaff, loadStaff];

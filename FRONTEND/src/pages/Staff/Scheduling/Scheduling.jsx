@@ -266,16 +266,16 @@ export default function Agenda() {
   const [loadError, setLoadError] = useState(null);
   const [dragEnabled, setDragEnabled] = useState(false);
   const [staff, setStaff] = useState([]);
-  const isAdmin = user?.role === "MajorAdmin";
+  const isAdmin = !!user?.effectivePermissions?.includes("appointments.viewAll");
 
-  // Procedimentos que a pessoa logada pode agendar: o MajorAdmin qualquer um;
+  // Procedimentos que a pessoa logada pode agendar: o Admin qualquer um;
   // as demais só os vinculados a elas (a API também recusa os de outras profissionais).
   const selectableServices = useMemo(
     () => (isAdmin ? services : services.filter((s) => !!user?.id && (s.professionalId ?? s.professional?.id) === user.id)),
     [services, isAdmin, user?.id]
   );
 
-  // Lista de profissionais para o MajorAdmin atribuir o agendamento
+  // Lista de profissionais para o Admin atribuir o agendamento
   useEffect(() => {
     if (!isAdmin) return;
     let cancelled = false;

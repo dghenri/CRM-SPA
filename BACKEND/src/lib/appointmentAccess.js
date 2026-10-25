@@ -1,9 +1,10 @@
+import { hasPermission } from './permissions.js';
 import { prisma } from './prisma.js';
 
 //=============================================================== ACESSO A AGENDAMENTOS (POR PROFISSIONAL)
 //
 // Regra central de segurança da agenda:
-// - MajorAdmin enxerga e gerencia TODOS os agendamentos (inclusive os sem profissional).
+// - Admin enxerga e gerencia TODOS os agendamentos (inclusive os sem profissional).
 // - Funcionária comum só enxerga/edita/apaga/adia/inicia agendamentos em que
 //   `professionalId` é o id dela.
 // - Em acesso indevido a API responde 404 (e não 403), pra não revelar que o
@@ -16,10 +17,10 @@ import { prisma } from './prisma.js';
 export async function getStaffActor(staffId) {
   const staff = await prisma.staff.findUnique({
     where: { id: staffId },
-    select: { id: true, role: true, status: true },
+    select: { id: true, role: true, status: true, customPermissions: true, permissions: true },
   });
   if (!staff || staff.status === 'Inactive') return null;
-  return { id: staff.id, isAdmin: staff.role === 'MajorAdmin' };
+  return { id: staff.id, isAdmin: hasPermission(staff, 'appointments.viewAll') };
 }
 
 // Middleware: use DEPOIS de authenticateToken + requireStaff. Preenche req.actor.

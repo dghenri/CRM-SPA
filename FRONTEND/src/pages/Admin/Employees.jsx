@@ -59,6 +59,67 @@ function formatLabel(text) {
   return text.replace(/([a-z])([A-Z])/g, "$1 $2");
 }
 
+// Cargo = nível de acesso. A função/profissão (Farmacêutica, Massoterapeuta...) é outro campo.
+const ROLE_OPTIONS = [
+  { id: "Admin", label: "Admin", hint: "Acesso total" },
+  { id: "Manager", label: "Manager", hint: "Gerencia a operação" },
+  { id: "Employee", label: "Employee", hint: "Acesso operacional" },
+];
+
+const NO_PROFESSION = "__none__";
+
+function RoleSelect({ value, onChange }) {
+  return (
+    <Select selectedKey={value || null} onSelectionChange={onChange} placeholder="Selecione o cargo">
+      <Label className="text-muted">Role</Label>
+      <Select.Trigger className="font-semibold border-2 border-border">
+        <Select.Value />
+        <Select.Indicator />
+      </Select.Trigger>
+      <Select.Popover className="p-1">
+        <ListBox>
+          {ROLE_OPTIONS.map((r) => (
+            <ListBox.Item key={r.id} id={r.id} textValue={r.label}>
+              {r.label}
+              <span className="ml-2 text-xs font-semibold text-muted">{r.hint}</span>
+              <ListBox.ItemIndicator />
+            </ListBox.Item>
+          ))}
+        </ListBox>
+      </Select.Popover>
+    </Select>
+  );
+}
+
+function ProfessionSelect({ value, onChange, professions }) {
+  return (
+    <Select
+      selectedKey={value || NO_PROFESSION}
+      onSelectionChange={(key) => onChange(key === NO_PROFESSION ? "" : key)}
+    >
+      <Label className="text-muted">Profession</Label>
+      <Select.Trigger className="font-semibold border-2 border-border">
+        <Select.Value />
+        <Select.Indicator />
+      </Select.Trigger>
+      <Select.Popover className="p-1">
+        <ListBox>
+          <ListBox.Item id={NO_PROFESSION} textValue="Sem profissão">
+            Sem profissão
+            <ListBox.ItemIndicator />
+          </ListBox.Item>
+          {professions.map((p) => (
+            <ListBox.Item key={p.id} id={p.id} textValue={p.name}>
+              {p.name}
+              <ListBox.ItemIndicator />
+            </ListBox.Item>
+          ))}
+        </ListBox>
+      </Select.Popover>
+    </Select>
+  );
+}
+
 export default function Collaborators() {
   // Senha visível por padrão ao editar/criar um colaborador
   const [isVisible, setIsVisible] = useState(true);
@@ -74,6 +135,9 @@ export default function Collaborators() {
   const [workload, setWorkload] = useState({ futureAppointments: 0, services: 0 });
   const [selectedUser, setSelectedUser] = useState(null);
   const [users, setUsers] = useState([]);
+  // profissões cadastradas e catálogo de permissões (vem do back-end: fonte única da verdade)
+  const [professions, setProfessions] = useState([]);
+  const [catalog, setCatalog] = useState({ permissions: [], roleDefaults: {} });
   const [selected, setSelected] = useState(new Set(["news", "travel"]));
   const [sortDescriptor, setSortDescriptor] = useState({
     column: "name",
@@ -84,10 +148,30 @@ export default function Collaborators() {
   async function getUsers() {
     try {
       const data = await api.get('/staff');
-      setUsers(Array.isArray(data) ? data : []);
+      // professionName: campo plano pra ordenar a coluna Profession
+      setUsers(
+        Array.isArray(data)
+          ? data.map((u) => ({ ...u, professionName: u.profession?.name ?? "" }))
+          : []
+      );
     } catch (error) {
       console.error(error);
       setUsers([]);
+    }
+  }
+
+  /* GET professions + catálogo de permissões */
+  async function getAccessOptions() {
+    try {
+      const [profs, cat] = await Promise.all([
+        api.get('/professions'),
+        api.get('/permissions/catalog'),
+      ]);
+      setProfessions(Array.isArray(profs) ? profs : []);
+      setCatalog({ permissions: cat?.permissions ?? [], roleDefaults: cat?.roleDefaults ?? {} });
+    } catch (error) {
+      console.error(error);
+      toast.danger(error.message || "Não foi possível carregar profissões e permissões.");
     }
   }
 
@@ -117,6 +201,7 @@ export default function Collaborators() {
 
   useEffect(() => {
     getUsers();
+    getAccessOptions();
   }, []);
 
   /* Sort users */
@@ -173,6 +258,9 @@ export default function Collaborators() {
     email: "",
     password: "",
     role: "",
+    professionId: "",
+    customPermissions: false,
+    permissions: [],
     status: "",
     birthdate: null,
   });
@@ -182,6 +270,7 @@ export default function Collaborators() {
     email: "",
     password: "",
     role: "",
+    professionId: "",
     status: "Active",
     birthdate: null,
   });
@@ -193,6 +282,9 @@ export default function Collaborators() {
         email: selectedUser.email || "",
         password: "",
         role: selectedUser.role || "",
+        professionId: selectedUser.professionId || "",
+        customPermissions: !!selectedUser.customPermissions,
+        permissions: selectedUser.permissions || [],
         status: selectedUser.status || "",
         birthdate: selectedUser.birthdate
         ? parseDate(selectedUser.birthdate.split("T")[0])
@@ -213,6 +305,7 @@ export default function Collaborators() {
       email: "",
       password: "",
       role: "",
+      professionId: "",
       status: "Active",
       birthdate: null,
     });
@@ -235,6 +328,33 @@ export default function Collaborators() {
   };
 
 
+  /* PERMISSÕES (modal de edição) */
+  // Admin tem tudo (não editável). Sem personalização vale o padrão do cargo; com ela, a lista marcada.
+  const shownPermissions =
+    formData.role === "Admin"
+      ? catalog.permissions.map((p) => p.key)
+      : formData.customPermissions
+        ? formData.permissions
+        : catalog.roleDefaults[formData.role] ?? [];
+
+  const handleToggleCustomPermissions = (checked) => {
+    setFormData((prev) => ({
+      ...prev,
+      customPermissions: checked,
+      // ao ligar, parte do padrão do cargo atual pra o Admin só ajustar o que difere
+      permissions: checked ? [...(catalog.roleDefaults[prev.role] ?? [])] : [],
+    }));
+  };
+
+  const handleTogglePermission = (key, checked) => {
+    setFormData((prev) => ({
+      ...prev,
+      permissions: checked
+        ? [...new Set([...prev.permissions, key])]
+        : prev.permissions.filter((k) => k !== key),
+    }));
+  };
+
   /* UPDATE USER FUNCTION */
   const [isSaving, setIsSaving] = useState(false);
 
@@ -247,6 +367,10 @@ export default function Collaborators() {
         name: formData.name,
         email: formData.email,
         role: formData.role,
+        professionId: formData.professionId || null,
+        // null = volta ao padrão do cargo; lista = personalizado. Admin ignora (sempre tudo).
+        permissions:
+          formData.role !== "Admin" && formData.customPermissions ? formData.permissions : null,
         status: formData.status,
         birthdate: formData.birthdate ? formData.birthdate.toString() : undefined,
       };
@@ -285,6 +409,7 @@ export default function Collaborators() {
         email: newUser.email,
         password: newUser.password,
         role: newUser.role,
+        professionId: newUser.professionId || null,
         status: newUser.status || "Active",
         birthdate: newUser.birthdate.toString(),
       };
@@ -417,6 +542,13 @@ export default function Collaborators() {
                   </Table.SortableColumnHeader>
                 )}
               </Table.Column>
+              <Table.Column allowsSorting id="professionName">
+                {({sortDirection}) => (
+                  <Table.SortableColumnHeader sortDirection={sortDirection}>
+                    Profession
+                  </Table.SortableColumnHeader>
+                )}
+              </Table.Column>
               <Table.Column allowsSorting id="status">
                 {({sortDirection}) => (
                   <Table.SortableColumnHeader sortDirection={sortDirection}>
@@ -474,7 +606,12 @@ export default function Collaborators() {
                   </Table.Cell>
 
                   {/* TABLE USER ROLE */}
-                  <Table.Cell className="min-w-52 font-semibold">{formatLabel(user.role)}</Table.Cell>
+                  <Table.Cell className="min-w-28 font-semibold">{formatLabel(user.role)}</Table.Cell>
+
+                  {/* TABLE USER PROFESSION */}
+                  <Table.Cell className="min-w-40 font-semibold">
+                    {user.professionName || <span className="text-muted">—</span>}
+                  </Table.Cell>
 
                   {/* TABLE USER STATUS */}
                   <Table.Cell className="min-w-25">
@@ -633,34 +770,16 @@ export default function Collaborators() {
                         <FieldError />
                       </DateField>
 
-                      <Select
-                        selectedKey={formData.role}
-                        onSelectionChange={(key) =>
-                          handleInputChange("role", key)
-                        }
-                      >
-                        <Label className="text-muted">Role</Label>
-                        <Select.Trigger className="font-semibold border-2 border-border">
-                          <Select.Value />
-                          <Select.Indicator />
-                        </Select.Trigger>
-                        <Select.Popover className="p-1">
-                          <ListBox>
-                            <ListBox.Item id="MajorAdmin" textValue="Major Admin">
-                              <Label htmlFor="MajorAdmin">Major Admin</Label>
-                              <ListBox.ItemIndicator />
-                            </ListBox.Item>
-                            <ListBox.Item id="Farmaceutica" textValue="Farmacêutica">
-                              <Label htmlFor="Farmaceutica">Farmacêutica</Label>
-                              <ListBox.ItemIndicator />
-                            </ListBox.Item>
-                            <ListBox.Item id="Massoterapeuta" textValue="Massoterapeuta">
-                              <Label htmlFor="Massoterapeuta">Massoterapeuta</Label>
-                              <ListBox.ItemIndicator />
-                            </ListBox.Item>
-                          </ListBox>
-                        </Select.Popover>
-                      </Select>
+                      <RoleSelect
+                        value={formData.role}
+                        onChange={(key) => handleInputChange("role", key)}
+                      />
+
+                      <ProfessionSelect
+                        value={formData.professionId}
+                        onChange={(key) => handleInputChange("professionId", key)}
+                        professions={professions}
+                      />
 
                       <div className="flex flex-col gap-3">
                         <TagGroup
@@ -693,6 +812,55 @@ export default function Collaborators() {
                           </TagGroup.List>
                         </TagGroup>
                       </div>
+                    </div>
+
+                    {/* PERMISSIONS (largura total) */}
+                    <div className="col-span-2 flex flex-col gap-3">
+                      <Separator />
+                      <span className="text-sm font-semibold text-muted">Permissions</span>
+
+                      {formData.role === "Admin" ? (
+                        <p className="text-xs font-semibold text-muted">
+                          O Admin tem acesso total ao sistema. Isso não é configurável.
+                        </p>
+                      ) : (
+                        <>
+                          <Checkbox
+                            isSelected={formData.customPermissions}
+                            onChange={handleToggleCustomPermissions}
+                          >
+                            <Checkbox.Content className="flex items-start gap-3">
+                              <Checkbox.Control className="bg-surface-secondary">
+                                <Checkbox.Indicator />
+                              </Checkbox.Control>
+                              <span className="flex flex-col gap-0.5">
+                                <span className="text-sm font-semibold">Personalizar permissões</span>
+                                <span className="text-xs text-muted">
+                                  Desmarcado, vale o padrão do cargo ({formData.role || "—"}). Marcado, vale só o que você selecionar abaixo.
+                                </span>
+                              </span>
+                            </Checkbox.Content>
+                          </Checkbox>
+
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-xl border-2 border-border p-4">
+                            {catalog.permissions.map((perm) => (
+                              <Checkbox
+                                key={perm.key}
+                                isDisabled={!formData.customPermissions}
+                                isSelected={shownPermissions.includes(perm.key)}
+                                onChange={(checked) => handleTogglePermission(perm.key, checked)}
+                              >
+                                <Checkbox.Content className="flex items-start gap-3">
+                                  <Checkbox.Control className="bg-surface-secondary">
+                                    <Checkbox.Indicator />
+                                  </Checkbox.Control>
+                                  <span className="text-xs font-semibold leading-5">{perm.label}</span>
+                                </Checkbox.Content>
+                              </Checkbox>
+                            ))}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </>
                 )}
@@ -804,34 +972,16 @@ export default function Collaborators() {
                     <FieldError />
                   </DateField>
 
-                  <Select
-                    selectedKey={newUser.role}
-                    onSelectionChange={(key) =>
-                      handleNewUserChange("role", key)
-                    }
-                  >
-                    <Label className="text-muted">Role</Label>
-                    <Select.Trigger className="font-semibold border-2 border-border">
-                      <Select.Value />
-                      <Select.Indicator />
-                    </Select.Trigger>
-                    <Select.Popover className="p-1">
-                      <ListBox>
-                        <ListBox.Item id="MajorAdmin" textValue="Major Admin">
-                          <Label htmlFor="new-MajorAdmin">Major Admin</Label>
-                          <ListBox.ItemIndicator />
-                        </ListBox.Item>
-                        <ListBox.Item id="Farmaceutica" textValue="Farmacêutica">
-                          <Label htmlFor="new-Farmaceutica">Farmacêutica</Label>
-                          <ListBox.ItemIndicator />
-                        </ListBox.Item>
-                        <ListBox.Item id="Massoterapeuta" textValue="Massoterapeuta">
-                          <Label htmlFor="new-Massoterapeuta">Massoterapeuta</Label>
-                          <ListBox.ItemIndicator />
-                        </ListBox.Item>
-                      </ListBox>
-                    </Select.Popover>
-                  </Select>
+                  <RoleSelect
+                    value={newUser.role}
+                    onChange={(key) => handleNewUserChange("role", key)}
+                  />
+
+                  <ProfessionSelect
+                    value={newUser.professionId}
+                    onChange={(key) => handleNewUserChange("professionId", key)}
+                    professions={professions}
+                  />
 
                   <div className="flex flex-col gap-3">
                     <TagGroup
@@ -966,7 +1116,7 @@ export default function Collaborators() {
                       {transferReceivers.map((r) => (
                         <ListBox.Item key={r.id} id={r.id} textValue={r.name}>
                           {r.name}
-                          <span className="ml-2 text-xs font-semibold text-muted">{formatLabel(r.role)}</span>
+                          <span className="ml-2 text-xs font-semibold text-muted">{r.profession?.name ?? formatLabel(r.role)}</span>
                           <ListBox.ItemIndicator />
                         </ListBox.Item>
                       ))}

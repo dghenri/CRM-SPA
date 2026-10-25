@@ -21,6 +21,7 @@ import Overview from "../pages/Admin/Overview"
 import Employees from "../pages/Admin/Employees";
 import Users from "../pages/Admin/Users";
 import Logs from "../pages/Admin/Logs";
+import Professions from "../pages/Admin/Professions";
 
 /* OTHERS  ROUTES */
 import ErrorPageDash from "../pages/Error/ErrorPageDash";
@@ -42,12 +43,20 @@ export const staffRoutes = (
       <Route path="revenue" element={<Revenue />} />
       <Route path="communication" element={<Communication />} />
 
-      {/* ADMIN - só cargo MajorAdmin acessa; Farmaceutica/Massoterapeuta
-          que tentarem entrar direto pela URL voltam pra "/staff/dashboard" */}
-      <Route element={<RequireStaffRole allow={["MajorAdmin"]} />}>
+      {/* POR PERMISSÃO - Admin sempre entra; Manager/Employee só se tiverem a permissão
+          (padrão do cargo ou personalizada pelo Admin). Quem tentar entrar direto
+          pela URL volta pra "/staff". */}
+      <Route element={<RequireStaffRole permission="overview.view" />}>
         <Route path="overview" element={<Overview />} />
-        <Route path="employees" element={<Employees />} />
+      </Route>
+      <Route element={<RequireStaffRole permission="customers.manage" />}>
         <Route path="users" element={<Users />} />
+      </Route>
+
+      {/* SÓ ADMIN - gestão de equipe, profissões e logs (não delegável) */}
+      <Route element={<RequireStaffRole allow={["Admin"]} />}>
+        <Route path="employees" element={<Employees />} />
+        <Route path="professions" element={<Professions />} />
         <Route path="logs" element={<Logs />} />
       </Route>
 

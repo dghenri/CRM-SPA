@@ -73,6 +73,12 @@ model Staff {
   professionId String?     @db.ObjectId
   profession   Profession? @relation(fields: [professionId], references: [id])
 
+  // Permissões: o cargo (role) define o padrão (ver src/lib/permissions.js).
+  // customPermissions = true -> vale a lista `permissions` no lugar do padrão do cargo
+  // (o Admin sempre tem tudo, independente disto). null/false = usa o padrão do cargo.
+  customPermissions Boolean?
+  permissions       String[]
+
   // caminho da foto de perfil (ex: /uploads/avatars/staff-<id>-<ts>.jpg); null = sem foto
   avatarUrl String?
 

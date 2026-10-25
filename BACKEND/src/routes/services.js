@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { authenticateToken, requireMajorAdmin, requireStaff, stockAuth } from '../middleware/auth.js';
+import { authenticateToken, requirePermission, requireStaff, stockAuth } from '../middleware/auth.js';
 import { loadStaffActor } from '../lib/appointmentAccess.js';
 import { parseMinAge } from '../lib/serviceAge.js';
 import { CLINIC_TIMEZONE, getBookingSchedule } from '../lib/staffSchedule.js';
@@ -42,7 +42,7 @@ router.get('/services/:id/schedule', authenticateToken, async (req, res) => {
 });
 
 //------------------------------------------------------------- POST ROUTE (services - só equipe)
-// MajorAdmin escolhe o profissional responsável; para as demais o responsável
+// Admin escolhe o profissional responsável; para as demais o responsável
 // é sempre a própria criadora (o professionalId do body é ignorado).
 router.post('/services', authenticateToken, requireStaff, loadStaffActor, async (req, res) => {
   try {
@@ -79,7 +79,7 @@ router.post('/services', authenticateToken, requireStaff, loadStaffActor, async 
 });
 
 //------------------------------------------------------------- PATCH ROUTE (services - só equipe; edição e toggle de "available")
-// MajorAdmin edita qualquer procedimento e é o único que troca o profissional responsável.
+// Admin edita qualquer procedimento e é o único que troca o profissional responsável.
 // As demais só editam os procedimentos em que são a profissional responsável.
 router.patch('/services/:id', authenticateToken, requireStaff, loadStaffActor, async (req, res) => {
   try {
@@ -123,9 +123,9 @@ router.patch('/services/:id', authenticateToken, requireStaff, loadStaffActor, a
   }
 });
 
-//------------------------------------------------------------- DELETE ROUTE (services - só MajorAdmin)
+//------------------------------------------------------------- DELETE ROUTE (services - só Admin)
 // Excluir apaga a receita de insumos e desvincula as sessões antigas do serviço.
-router.delete('/services/:id', ...stockAuth, requireMajorAdmin, async (req, res) => {
+router.delete('/services/:id', ...stockAuth, requirePermission('services.manage'), async (req, res) => {
   try {
     // a receita (RecipeItem) depende do serviço: sai junto com ele
     await prisma.$transaction(async (tx) => {

@@ -12,14 +12,19 @@ import {
   ShelvingUnit,
   Receipt,
   Megaphone,
+  Briefcase,
 } from "lucide-react";
 
 // Cargos existentes em prisma.Staff.role - usados pra filtrar quais itens
 // de navegação cada colaborador logado enxerga na sidebar. Item sem
 // "roles" definido é tratado como visível para todos os cargos (ver
 // filtro em Sidebar.jsx).
-export const ALL_STAFF_ROLES = ["MajorAdmin", "Farmaceutica", "Massoterapeuta"];
-export const ADMIN_ONLY_ROLES = ["MajorAdmin"];
+//
+// Um item também pode ter `permission` (ex: "overview.view"): aí só aparece pra
+// quem tem essa permissão (Admin sempre tem). Se tiver `roles` E `permission`,
+// precisa passar nos dois.
+export const ALL_STAFF_ROLES = ["Admin", "Manager", "Employee"];
+export const ADMIN_ONLY_ROLES = ["Admin"];
 
 export const mainItems = [
   {
@@ -97,12 +102,20 @@ export const usersItems = [
     roles: ADMIN_ONLY_ROLES,
   },
   {
+    key: "professions",
+    label: "Professions",
+    group: "Users",
+    Icon: Briefcase,
+    to: "/staff/professions",
+    roles: ADMIN_ONLY_ROLES,
+  },
+  {
     key: "users",
     label: "Users",
     group:"Users",
     Icon: UsersRound,
     to: "/staff/users",
-    roles: ADMIN_ONLY_ROLES,
+    permission: "customers.manage",
   },
   {
     key: "logs",
@@ -123,7 +136,7 @@ export const managementItems = [
     // TODO: ainda não existe rota "/staff/overview" em
     // staffRoutes.jsx - link fica quebrado até essa rota ser criada
     to: "/staff/overview",
-    roles: ADMIN_ONLY_ROLES,
+    permission: "overview.view",
   },
   {
     key: "logs",

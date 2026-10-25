@@ -4,11 +4,56 @@ import bcrypt from "bcryptjs";
 import { ACCESS_TOKEN_KEY } from '../lib/config.js';
 import { prisma } from '../lib/prisma.js';
 import { DEFAULT_STAFF_SETTINGS, toPublicStaff } from '../lib/serializers.js';
-import { authenticateToken, requireMajorAdmin, requireStaff, stockAuth } from '../middleware/auth.js';
+import { PERMISSION_KEYS, STAFF_ROLES } from '../lib/permissions.js';
+import { authenticateToken, requireAdmin, requireStaff, stockAuth } from '../middleware/auth.js';
 import { broadcastAppointmentsChanged } from '../lib/realtime.js';
 import { deleteAvatarFile, detectImageExtension, receiveAvatar, saveAvatarFile } from '../lib/uploads.js';
 
 const router = Router();
+
+// profissão resumida que acompanha o staff nas respostas (nome na tabela, sidebar etc.)
+const withProfession = { profession: { select: { id: true, name: true, slug: true } } };
+
+// Valida e normaliza os campos de ACESSO enviados pelo Admin (cargo, profissão, permissões).
+// Só o que veio no body entra em `data`. Retorna { data } ou { error }.
+//   permissions: undefined = não mexe | null = volta ao padrão do cargo | [chaves] = personalizado
+async function parseAccessFields(body) {
+  const data = {};
+
+  if (body.role !== undefined) {
+    if (!STAFF_ROLES.includes(body.role)) return { error: "Cargo inválido (use Admin, Manager ou Employee)." };
+    data.role = body.role;
+  }
+
+  if (body.professionId !== undefined) {
+    if (!body.professionId) {
+      data.professionId = null;
+    } else {
+      let profession = null;
+      try {
+        profession = await prisma.profession.findUnique({ where: { id: String(body.professionId) } });
+      } catch (error) {
+        if (error.code !== "P2023") throw error; // id mal formado = "não existe"
+      }
+      if (!profession) return { error: "Profissão não encontrada." };
+      data.professionId = profession.id;
+    }
+  }
+
+  if (body.permissions !== undefined) {
+    if (body.permissions === null) {
+      data.customPermissions = false;
+      data.permissions = [];
+    } else if (Array.isArray(body.permissions) && body.permissions.every((k) => PERMISSION_KEYS.includes(k))) {
+      data.customPermissions = true;
+      data.permissions = [...new Set(body.permissions)];
+    } else {
+      return { error: "Permissões inválidas." };
+    }
+  }
+
+  return { data };
+}
 
 //------------------------------------------------------------- FOTO DE PERFIL (funcionária edita a própria)
 // Mesma infraestrutura da foto do cliente (lib/uploads.js): o front manda o arquivo já recortado
@@ -52,10 +97,14 @@ router.delete('/staff/me/avatar', authenticateToken, requireStaff, async (req, r
   }
 });
 
-//------------------------------------------------------------- POST ROUTE (CREATE STAFF - só MajorAdmin)
-// Antes essa rota não exigia login: qualquer um criava uma conta de equipe (inclusive MajorAdmin).
-router.post('/staff', ...stockAuth, requireMajorAdmin, async (req, res) => {
+//------------------------------------------------------------- POST ROUTE (CREATE STAFF - só Admin)
+// Antes essa rota não exigia login: qualquer um criava uma conta de equipe (inclusive Admin).
+router.post('/staff', ...stockAuth, requireAdmin, async (req, res) => {
   try {
+    const access = await parseAccessFields(req.body);
+    if (access.error) return res.status(400).json({ error: access.error });
+    if (!access.data.role) return res.status(400).json({ error: "Informe o cargo." });
+
     const hashedPassword = await bcrypt.hash(req.body.password, 10);
 
     const staff = await prisma.staff.create({
@@ -64,9 +113,10 @@ router.post('/staff', ...stockAuth, requireMajorAdmin, async (req, res) => {
         name: req.body.name,
         password: hashedPassword,
         phone: req.body.phone,
-        role: req.body.role,
         birthdate: new Date(req.body.birthdate),
-      }
+        ...access.data, // role, professionId, permissões
+      },
+      include: withProfession,
     })
 
     res.status(201).json(toPublicStaff(staff))
@@ -85,7 +135,7 @@ router.post('/auth/staff/login', async (req, res) => {
   try {
     const { email, password, rememberUser } = req.body;
 
-    const staff = await prisma.staff.findUnique({ where: { email } });
+    const staff = await prisma.staff.findUnique({ where: { email }, include: withProfession });
 
     // mesma mensagem tanto pra email inexistente quanto senha errada,
     // pra não dar dica de quais emails existem no banco
@@ -119,7 +169,7 @@ router.post('/auth/staff/login', async (req, res) => {
 //------------------------------------------------------------- GET ROUTE (STAFF LOGADO)
 router.get('/auth/staff/me', authenticateToken, requireStaff, async (req, res) => {
   try {
-    const staff = await prisma.staff.findUnique({ where: { id: req.user.id } });
+    const staff = await prisma.staff.findUnique({ where: { id: req.user.id }, include: withProfession });
 
     if (!staff) {
       return res.status(404).json({ error: "Usuário não encontrado." });
@@ -133,11 +183,11 @@ router.get('/auth/staff/me', authenticateToken, requireStaff, async (req, res) =
 });
 
 //------------------------------------------------------------- GET ROUTE (só equipe - clientes não listam a equipe)
-// MajorAdmin recebe o cadastro completo (email, telefone, nascimento...). As demais só
-// recebem id, nome, cargo e status - o suficiente pro seletor de profissional.
+// Admin recebe o cadastro completo (email, telefone, nascimento, permissões...). As demais só
+// recebem id, nome, cargo, profissão e status - o suficiente pro seletor de profissional.
 router.get('/staff', ...stockAuth, async (req, res) => {
   try {
-    const isAdmin = req.staff.role === "MajorAdmin";
+    const isAdmin = req.staff.role === "Admin";
     const hasFilters = req.query && Object.keys(req.query).length > 0;
 
     const staff = hasFilters
@@ -145,14 +195,15 @@ router.get('/staff', ...stockAuth, async (req, res) => {
           where: {
             name: req.query.name,
             email: req.query.email
-          }
+          },
+          include: withProfession,
         })
-      : await prisma.staff.findMany();
+      : await prisma.staff.findMany({ include: withProfession });
 
     res.status(200).json(
       isAdmin
         ? staff.map(toPublicStaff)
-        : staff.map(({ id, name, role, status }) => ({ id, name, role, status }))
+        : staff.map(({ id, name, role, status, professionId, profession }) => ({ id, name, role, status, professionId, profession }))
     )
   } catch (error) {
     console.error(error);
@@ -172,14 +223,14 @@ router.put('/staff/:id', authenticateToken, requireStaff, async (req, res) => {
       return res.status(401).json({ error: "Sessão expirada." });
     }
 
-    const isAdmin = requester.role === "MajorAdmin";
+    const isAdmin = requester.role === "Admin";
     const isSelf = requester.id === id;
 
     if (!isAdmin && !isSelf) {
       return res.status(403).json({ error: "Você só pode editar o seu próprio perfil." });
     }
 
-    const { name, email, password, phone, role, status, birthdate, settings } = req.body;
+    const { name, email, password, phone, status, birthdate, settings } = req.body;
 
     const data = { name, email, phone };
 
@@ -191,10 +242,18 @@ router.put('/staff/:id', authenticateToken, requireStaff, async (req, res) => {
       data.settings = { ...DEFAULT_STAFF_SETTINGS, ...(requester.settings || {}), ...settings };
     }
 
-    // role e status só podem ser alterados por admin - mesmo que um
+    // cargo, profissão, permissões e status só podem ser alterados por admin - mesmo que um
     // usuário comum edite o próprio perfil, esses campos são ignorados
     if (isAdmin) {
-      data.role = role;
+      const access = await parseAccessFields(req.body);
+      if (access.error) return res.status(400).json({ error: access.error });
+
+      // o Admin não se rebaixa (evita ficar sem nenhum Admin no sistema)
+      if (isSelf && access.data.role && access.data.role !== "Admin") {
+        return res.status(400).json({ error: "Você não pode rebaixar o seu próprio cargo." });
+      }
+
+      Object.assign(data, access.data);
       data.status = status;
     }
 
@@ -211,6 +270,7 @@ router.put('/staff/:id', authenticateToken, requireStaff, async (req, res) => {
     const updatedStaff = await prisma.staff.update({
       where: { id }, // ObjectId do Mongo é string, não Number
       data,
+      include: withProfession,
     });
 
     return res.status(200).json(toPublicStaff(updatedStaff));
@@ -259,12 +319,12 @@ const listAvailability = (staffId) =>
     orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
   });
 
-// só a própria funcionária ou o MajorAdmin acessam a agenda -
+// só a própria funcionária ou o Admin acessam a agenda -
 // role lida do banco, como no PUT acima
 async function canManageAvailability(req) {
   const requester = await prisma.staff.findUnique({ where: { id: req.user.id } });
   if (!requester) return false;
-  return requester.role === "MajorAdmin" || requester.id === req.params.id;
+  return requester.role === "Admin" || requester.id === req.params.id;
 }
 
 router.get('/staff/:id/availability', authenticateToken, requireStaff, async (req, res) => {
@@ -334,7 +394,7 @@ async function getStaffWorkload(staffId) {
 
 // A tela de equipe consulta isto ANTES de excluir: se houver trabalho vinculado,
 // abre o modal pra escolher quem vai receber.
-router.get('/staff/:id/workload', ...stockAuth, requireMajorAdmin, async (req, res) => {
+router.get('/staff/:id/workload', ...stockAuth, requireAdmin, async (req, res) => {
   try {
     const target = await prisma.staff.findUnique({ where: { id: req.params.id }, select: { id: true } });
     if (!target) return res.status(404).json({ error: "Funcionária não encontrada." });
@@ -346,18 +406,18 @@ router.get('/staff/:id/workload', ...stockAuth, requireMajorAdmin, async (req, r
   }
 });
 
-//------------------------------------------------------------- DELETE ROUTE (só MajorAdmin)
+//------------------------------------------------------------- DELETE ROUTE (só Admin)
 // Antes qualquer token válido (até de cliente) apagava qualquer funcionária.
 //
 // Excluir uma funcionária que ainda tem trabalho vinculado deixaria sessões e procedimentos
 // sem profissional (e eles sumiriam das agendas). Por isso:
 // - sem sessões futuras nem procedimentos: exclui normalmente;
 // - com algum deles: responde 409 e só exclui se vier ?transferTo=<id de outra funcionária
-//   ativa> (escolhida pelo MajorAdmin no modal). Aí as sessões futuras e os procedimentos
+//   ativa> (escolhida pelo Admin no modal). Aí as sessões futuras e os procedimentos
 //   passam pra ela e a exclusão segue, tudo na mesma transação.
 // - o histórico passado (sessões já realizadas/canceladas) fica com o NOME da ex-funcionária
 //   guardado em Appointment.professionalName, já que professionalId vira nulo.
-router.delete('/staff/:id', ...stockAuth, requireMajorAdmin, async (req, res) => {
+router.delete('/staff/:id', ...stockAuth, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const transferTo = req.query.transferTo ? String(req.query.transferTo) : null;

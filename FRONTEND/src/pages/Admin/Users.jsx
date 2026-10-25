@@ -1,5 +1,12 @@
 import { useMemo, useState, useEffect } from "react";
-import api from '../../api/api';
+import api, { assetUrl } from '../../api/api';
+import DetailDrawer, {
+  DetailField,
+  DetailSection,
+  calcAge,
+  formatDate,
+  formatDateTime,
+} from "../../components/DetailDrawer";
 import { parseDate } from "@internationalized/date";
 
 import {
@@ -62,11 +69,28 @@ function formatLabel(text) {
   return text.replace(/([a-z])([A-Z])/g, "$1 $2");
 }
 
+// 12345678900 -> 123.456.789-00 (se não tiver 11 dígitos, mostra como veio)
+function formatCpf(cpf) {
+  if (!cpf) return null;
+  const digits = String(cpf).replace(/\D/g, "");
+  return digits.length === 11 ? digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : String(cpf);
+}
+
+// preferências de notificação do cliente (User.notificationPrefs)
+const NOTIFICATION_LABELS = {
+  sessionReminders: "Lembretes de sessão",
+  promotions: "Promoções",
+  news: "Novidades",
+  viaEmail: "E-mail",
+  viaWhatsapp: "WhatsApp",
+};
+
 export default function Customers() {
   const [isVisible, setIsVisible] = useState(true);
   const [isCreateVisible, setIsCreateVisible] = useState(true);
   const [selectedKeys, setSelectedKeys] = useState(new Set());
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isViewOpen, setIsViewOpen] = useState(false); // drawer "ver detalhes" (ficha completa)
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -184,6 +208,11 @@ export default function Customers() {
       });
     }
   }, [selectedUser]);
+
+  const handleViewUser = (user) => {
+    setSelectedUser(user);
+    setIsViewOpen(true);
+  };
 
   const handleEditUser = (user) => {
     setSelectedUser(user);
@@ -464,7 +493,8 @@ export default function Customers() {
                        isIconOnly
                        size="sm"
                        variant="tertiary"
-                       /* onPress={} */
+                       aria-label="View details"
+                       onPress={() => handleViewUser(user)}
                       >
                         <Eye className="size-5" />
                       </Button>
@@ -859,6 +889,90 @@ export default function Customers() {
           </AlertDialog.Container>
         </AlertDialog.Backdrop>
       </AlertDialog>
+
+      {/* View customer drawer (ficha completa) */}
+      <DetailDrawer
+        isOpen={isViewOpen}
+        onOpenChange={setIsViewOpen}
+        person={selectedUser}
+        avatarSrc={assetUrl(selectedUser?.avatarUrl)}
+        onEdit={() => {
+          setIsViewOpen(false);
+          handleEditUser(selectedUser);
+        }}
+      >
+        {selectedUser && (
+          <>
+            <DetailSection title="Contact">
+              <DetailField label="Email" wide>{selectedUser.email}</DetailField>
+              <DetailField label="Phone">{selectedUser.phone}</DetailField>
+              <DetailField label="CPF">{formatCpf(selectedUser.cpf)}</DetailField>
+              <DetailField label="Birthdate">
+                {formatDate(selectedUser.birthdate) &&
+                  `${formatDate(selectedUser.birthdate)}${
+                    calcAge(selectedUser.birthdate) !== null ? ` · ${calcAge(selectedUser.birthdate)} anos` : ""
+                  }`}
+              </DetailField>
+              <DetailField label="Gender">
+                {selectedUser.gender && (
+                  <Chip color={genderColorMap[selectedUser.gender]} size="sm" variant="soft">
+                    {formatLabel(selectedUser.gender)}
+                  </Chip>
+                )}
+              </DetailField>
+            </DetailSection>
+
+            <DetailSection title="Account">
+              <DetailField label="Registered">{formatDateTime(selectedUser.createdAt)}</DetailField>
+              <DetailField label="Last login">
+                {formatDateTime(selectedUser.lastLogin) ?? <span className="text-muted">Nunca entrou</span>}
+              </DetailField>
+              <DetailField label="Last update">{formatDateTime(selectedUser.updatedAt)}</DetailField>
+              <DetailField label="Favorite services">
+                {Array.isArray(selectedUser.favoriteServiceIds) ? String(selectedUser.favoriteServiceIds.length) : null}
+              </DetailField>
+            </DetailSection>
+
+            {selectedUser.notificationPrefs && (
+              <DetailSection title="Notifications">
+                <DetailField label="Preferences" wide>
+                  <div className="flex flex-wrap gap-1.5">
+                    {Object.entries(NOTIFICATION_LABELS).map(([key, label]) => (
+                      <Chip
+                        key={key}
+                        size="sm"
+                        variant="soft"
+                        color={selectedUser.notificationPrefs[key] ? "success" : "danger"}
+                      >
+                        {label}: {selectedUser.notificationPrefs[key] ? "on" : "off"}
+                      </Chip>
+                    ))}
+                  </div>
+                </DetailField>
+              </DetailSection>
+            )}
+
+            {Array.isArray(selectedUser.addresses) && selectedUser.addresses.length > 0 && (
+              <DetailSection title="Addresses">
+                {selectedUser.addresses.map((a) => (
+                  <DetailField key={a.id} label={a.label || "Endereço"} wide>
+                    <div className="flex flex-col gap-0.5">
+                      <span>
+                        {a.street}, {a.number}
+                        {a.complement ? ` - ${a.complement}` : ""}
+                      </span>
+                      <span className="text-xs font-medium text-muted">
+                        {a.neighborhood} · {a.city}/{a.state} · CEP {a.zipCode}
+                        {a.isDefault ? " · principal" : ""}
+                      </span>
+                    </div>
+                  </DetailField>
+                ))}
+              </DetailSection>
+            )}
+          </>
+        )}
+      </DetailDrawer>
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
-import api from '../../api/api';
+import api, { assetUrl } from '../../api/api';
+import DetailDrawer, { DetailField, DetailSection, calcAge, formatDate } from "../../components/DetailDrawer";
 import { parseDate } from "@internationalized/date";
 
 import {
@@ -126,6 +127,9 @@ export default function Collaborators() {
   const [isCreateVisible, setIsCreateVisible] = useState(true);
   const [selectedKeys, setSelectedKeys] = useState(new Set());
   const [isEditOpen, setIsEditOpen] = useState(false);
+  // drawer "ver detalhes" (ficha completa) + carga de trabalho carregada ao abrir
+  const [isViewOpen, setIsViewOpen] = useState(false);
+  const [viewWorkload, setViewWorkload] = useState(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   // modal "transferir antes de excluir" (funcionária com sessões futuras / procedimentos)
@@ -292,6 +296,20 @@ export default function Collaborators() {
       });
     }
   }, [selectedUser]);
+
+  /* Abre o drawer de detalhes; a carga de trabalho (sessões futuras/procedimentos) chega logo depois */
+  const handleViewUser = (user) => {
+    setSelectedUser(user);
+    setViewWorkload(null);
+    setIsViewOpen(true);
+    api
+      .get(`/staff/${user.id}/workload`)
+      .then((load) => setViewWorkload({ id: user.id, ...load }))
+      .catch((error) => {
+        console.error(error);
+        setViewWorkload({ id: user.id, futureAppointments: "—", services: "—" });
+      });
+  };
 
   const handleEditUser = (user) => {
     setSelectedUser(user);
@@ -628,7 +646,8 @@ export default function Collaborators() {
                        isIconOnly
                        size="sm"
                        variant="tertiary"
-                       /* onPress={} */
+                       aria-label="View details"
+                       onPress={() => handleViewUser(user)}
                       >
                         <Eye className="size-5" />
                       </Button>
@@ -1154,6 +1173,88 @@ export default function Collaborators() {
           </Modal.Container>
         </Modal.Backdrop>
       </Modal>
+
+      {/* View employee drawer (ficha completa) */}
+      <DetailDrawer
+        isOpen={isViewOpen}
+        onOpenChange={setIsViewOpen}
+        person={selectedUser}
+        avatarSrc={assetUrl(selectedUser?.avatarUrl)}
+        onEdit={() => {
+          setIsViewOpen(false);
+          handleEditUser(selectedUser);
+        }}
+      >
+        {selectedUser && (
+          <>
+            <DetailSection title="Account">
+              <DetailField label="Role">
+                <div className="flex flex-col">
+                  <span>{formatLabel(selectedUser.role)}</span>
+                  <span className="text-xs font-medium text-muted">
+                    {ROLE_OPTIONS.find((r) => r.id === selectedUser.role)?.hint}
+                  </span>
+                </div>
+              </DetailField>
+              <DetailField label="Profession">{selectedUser.profession?.name}</DetailField>
+              <DetailField label="Status">
+                <Chip color={statusColorMap[selectedUser.status]} size="sm" variant="soft">
+                  {formatLabel(selectedUser.status)}
+                </Chip>
+              </DetailField>
+            </DetailSection>
+
+            <DetailSection title="Contact">
+              <DetailField label="Email" wide>{selectedUser.email}</DetailField>
+              <DetailField label="Phone">{selectedUser.phone}</DetailField>
+              <DetailField label="Birthdate">
+                {formatDate(selectedUser.birthdate) &&
+                  `${formatDate(selectedUser.birthdate)}${
+                    calcAge(selectedUser.birthdate) !== null ? ` · ${calcAge(selectedUser.birthdate)} anos` : ""
+                  }`}
+              </DetailField>
+            </DetailSection>
+
+            <DetailSection title="Permissions">
+              {selectedUser.role === "Admin" ? (
+                <DetailField label="Access" wide>Acesso total ao sistema (não configurável).</DetailField>
+              ) : (
+                <>
+                  <DetailField label="Mode" wide>
+                    {selectedUser.customPermissions
+                      ? "Personalizadas pelo Admin"
+                      : `Padrão do cargo (${formatLabel(selectedUser.role)})`}
+                  </DetailField>
+                  <DetailField label="Allowed" wide>
+                    {(selectedUser.effectivePermissions ?? []).length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {(selectedUser.effectivePermissions ?? []).map((key) => (
+                          <Chip key={key} size="sm" variant="soft" color="accent">
+                            {catalog.permissions.find((p) => p.key === key)?.label ?? key}
+                          </Chip>
+                        ))}
+                      </div>
+                    )}
+                  </DetailField>
+                </>
+              )}
+            </DetailSection>
+
+            <DetailSection title="Workload">
+              {viewWorkload?.id === selectedUser.id ? (
+                <>
+                  <DetailField label="Future sessions">{String(viewWorkload.futureAppointments)}</DetailField>
+                  <DetailField label="Procedures">{String(viewWorkload.services)}</DetailField>
+                </>
+              ) : (
+                <DetailField label="Loading" wide>
+                  <span className="text-muted">Carregando…</span>
+                </DetailField>
+              )}
+            </DetailSection>
+          </>
+        )}
+      </DetailDrawer>
     </>
   );
 }

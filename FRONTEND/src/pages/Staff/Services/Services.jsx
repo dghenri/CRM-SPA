@@ -265,7 +265,7 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, products, onSa
         `https://picsum.photos/seed/${encodeURIComponent(form.title)}/600/450`,
       available: form.available,
       minAge: minAgeNum, // null/0 = sem restrição (a API também valida)
-      // só o MajorAdmin define o profissional: para os demais o campo nem é enviado
+      // só quem tem a permissão appointments.viewAll (Admin/Manager) define o profissional: para os demais o campo nem é enviado
       // (a API também precisa recusar - o front sozinho não é barreira de segurança)
       ...(canChoosePro ? { professionalId: form.professionalId || null } : {}),
     }, recipeItems);
@@ -367,7 +367,7 @@ function ServiceFormModal({ isOpen, onOpenChange, initial, staff, products, onSa
                     <Label className="mb-1 block">Profissional responsável (opcional)</Label>
                     {!canChoosePro && (
                       <p className="mb-1 text-xs font-semibold text-muted">
-                        Somente o MajorAdmin pode escolher ou alterar o profissional responsável.
+                        Você não tem permissão para escolher ou alterar o profissional responsável.
                       </p>
                     )}
                     <Select
@@ -604,9 +604,11 @@ function ServiceCard({ service, recipe, onEdit, onDelete, onToggle, canEdit = fa
 
 export default function AdminServicesPage() {
   const { user } = useAuth();
-  const isMajorAdmin = user?.role === "MajorAdmin";
-  // MajorAdmin edita tudo; as demais só os procedimentos em que são a profissional responsável
-  const canEditService = (s) => isMajorAdmin || (!!user?.id && (s.professionalId ?? s.professional?.id) === user.id);
+  // appointments.viewAll (Admin/Manager por padrão): edita qualquer procedimento e escolhe o profissional responsável
+  const canManageAll = !!user?.effectivePermissions?.includes("appointments.viewAll");
+  const canDeleteService = !!user?.effectivePermissions?.includes("services.manage");
+  // quem gerencia tudo edita qualquer um; as demais só os procedimentos em que são a profissional responsável
+  const canEditService = (s) => canManageAll || (!!user?.id && (s.professionalId ?? s.professional?.id) === user.id);
   const [services, setServices] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -777,7 +779,7 @@ export default function AdminServicesPage() {
             onDelete={handleDelete}
             onToggle={handleToggle}
             canEdit={canEditService(service)}
-            canDelete={isMajorAdmin}
+            canDelete={canDeleteService}
           />
         ))}
 
@@ -789,7 +791,7 @@ export default function AdminServicesPage() {
         onOpenChange={setIsOpen}
         initial={editingService}
         staff={staff}
-        canChoosePro={isMajorAdmin}
+        canChoosePro={canManageAll}
         products={products}
         onSave={handleSave}
       />

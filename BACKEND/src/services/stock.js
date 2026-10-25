@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { hasPermission } from '../lib/permissions.js';
 
 //=============================================================== ESTOQUE (INSUMOS)
 //
@@ -6,13 +7,15 @@ import { prisma } from '../lib/prisma.js';
 // (Product.currentStock). Nada altera saldo sem passar por applyStockItems(),
 // sempre dentro de uma $transaction.
 //
-// - MajorAdmin aplica direto (a solicitação é gravada já como Approved, só
-//   pra manter a auditoria uniforme).
-// - Demais cargos criam uma StockRequest (Pending) e o MajorAdmin aprova/nega.
+// - Quem tem a permissão "stock.review" (Admin sempre; Manager por padrão) aplica
+//   direto (a solicitação é gravada já como Approved, só pra manter a auditoria uniforme).
+// - Os demais criam uma StockRequest (Pending) e quem tem "stock.review" aprova/nega.
 // - Entrada (Purchase), Loss e Adjustment passam por aprovação. Consumo por
 //   receita (fase 2) é automático e não passa por aqui.
 
-export const MAJOR_ADMIN = "MajorAdmin";
+// @deprecated - mantido só pra não quebrar imports antigos. Prefira hasPermission(staff, "stock.review")
+// (lib/permissions.js) para decidir quem aprova/aplica direto.
+export const MAJOR_ADMIN = "Admin";
 const REQUESTABLE_TYPES = ["Purchase", "Loss", "Adjustment"];
 const EXPIRING_SOON_DAYS = 30;
 
@@ -27,8 +30,11 @@ export class StockError extends Error {
 }
 
 
+// Quem pode SOLICITAR/mexer num produto: quem revisa estoque (Admin/Manager) em qualquer produto;
+// os demais só se a PROFISSÃO deles estiver em Product.allowedProfessionIds.
 export function canHandleProduct(staff, product) {
-  return staff.role === MAJOR_ADMIN || (product.allowedRoles || []).includes(staff.role);
+  if (hasPermission(staff, "stock.review")) return true;
+  return !!staff.professionId && (product.allowedProfessionIds || []).includes(staff.professionId);
 }
 
 // ordem FEFO: vence primeiro, sai primeiro. Lotes sem validade vão por último.
@@ -221,6 +227,6 @@ export async function serializeRequests(requests) {
 }
 
 export const requestInclude = {
-  requestedBy: { select: { id: true, name: true, role: true } },
+  requestedBy: { select: { id: true, name: true, role: true, profession: { select: { id: true, name: true } } } },
   reviewedBy: { select: { id: true, name: true } },
 };

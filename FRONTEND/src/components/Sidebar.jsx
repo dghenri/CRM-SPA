@@ -113,13 +113,15 @@ export default function Sidebar ({
   const location = useLocation();
   const usersRoutes = usersItems.map(item => item.to);
   const isUsersRoute = usersRoutes.includes(location.pathname);
-  const { user, logout } = useAuth();
+  const { user, logout, can } = useAuth();
   const navigate = useNavigate();
-  const isMajorAdmin = user?.role === "MajorAdmin";
-  // Item sem "roles" definido fica visível pra qualquer cargo
-  const visibleMainItems = mainItems.filter(
-    (item) => !item.roles || item.roles.includes(user?.role)
-  );
+  // Item visível se: (sem "roles" OU o cargo está na lista) E (sem "permission" OU a pessoa tem a permissão)
+  const canSee = (item) =>
+    (!item.roles || item.roles.includes(user?.role)) && (!item.permission || can(item.permission));
+  const visibleMainItems = mainItems.filter(canSee);
+  const visibleUsersItems = usersItems.filter(canSee);
+  const visibleManagementItems = managementItems.filter(canSee);
+  const showManagement = visibleUsersItems.length > 0 || visibleManagementItems.length > 0;
 
   useEffect(() => {
     if (!showFull) {
@@ -317,14 +319,15 @@ export default function Sidebar ({
         ))}
       </div>
 
-      {/* Spaces - seção inteira só aparece pra MajorAdmin */}
-      {isMajorAdmin && (
+      {/* Management - só aparece se a pessoa puder ver pelo menos um item (cargo/permissão) */}
+      {showManagement && (
       <>
       <SLabel open={showFull} className="mt-2 ml-2 px-2 text-xs font-medium uppercase tracking-wide text-muted">
         Management
       </SLabel>
 
       <div className="rounded-md px-2 py-1.5">
+        {visibleUsersItems.length > 0 && (
         <Disclosure
           isDisabled={!showFull}
           expanded={showFull && (isUsersRoute || expanded)}
@@ -342,7 +345,7 @@ export default function Sidebar ({
           </Disclosure.Heading>
           <Disclosure.Content className={!showFull ? "hidden" : ""}>
             <Disclosure.Body className="ml-3 flex flex-col gap-0.5">
-              {usersItems.map(({ key, label, Icon, to }) => (
+              {visibleUsersItems.map(({ key, label, Icon, to }) => (
                 <NavLink
                   key={key}
                   to={to}
@@ -361,9 +364,10 @@ export default function Sidebar ({
             </Disclosure.Body>
           </Disclosure.Content>
         </Disclosure>
+        )}
 
         <div className="ml-1 flex flex-col gap-0.5">
-          {managementItems.map(({ key, label, tooltip, Icon, to }) => (
+          {visibleManagementItems.map(({ key, label, tooltip, Icon, to }) => (
             <Tooltip
               key={key}
               isDisabled={showFull}

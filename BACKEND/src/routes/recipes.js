@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { requireMajorAdmin, stockAuth } from '../middleware/auth.js';
+import { requirePermission, stockAuth } from '../middleware/auth.js';
 import { loadRecipe, recipeCost } from '../services/recipes.js';
 import { round3 } from '../services/stock.js';
 
 const router = Router();
 
-//------------------------------------------------------------- GET ROUTE (resumo: nº de insumos e custo de cada procedimento - MajorAdmin)
-router.get('/admin/recipes/summary', ...stockAuth, requireMajorAdmin, async (req, res) => {
+//------------------------------------------------------------- GET ROUTE (resumo: nº de insumos e custo de cada procedimento - Admin)
+router.get('/admin/recipes/summary', ...stockAuth, requirePermission('recipes.manage'), async (req, res) => {
   try {
     const [items, products] = await Promise.all([prisma.recipeItem.findMany(), prisma.product.findMany()]);
     const byProduct = new Map(products.map((p) => [p.id, p]));
@@ -29,8 +29,8 @@ router.get('/admin/recipes/summary', ...stockAuth, requireMajorAdmin, async (req
   }
 });
 
-//------------------------------------------------------------- GET ROUTE (receita de um procedimento - MajorAdmin)
-router.get('/services/:id/recipe', ...stockAuth, requireMajorAdmin, async (req, res) => {
+//------------------------------------------------------------- GET ROUTE (receita de um procedimento - Admin)
+router.get('/services/:id/recipe', ...stockAuth, requirePermission('recipes.manage'), async (req, res) => {
   try {
     const service = await prisma.service.findUnique({ where: { id: req.params.id }, select: { id: true } });
     if (!service) return res.status(404).json({ error: "Serviço não encontrado." });
@@ -41,9 +41,9 @@ router.get('/services/:id/recipe', ...stockAuth, requireMajorAdmin, async (req, 
   }
 });
 
-//------------------------------------------------------------- PUT ROUTE (substitui a receita inteira - MajorAdmin)
+//------------------------------------------------------------- PUT ROUTE (substitui a receita inteira - Admin)
 // Não é retroativa: atendimentos já concluídos mantêm o consumo que tiveram.
-router.put('/services/:id/recipe', ...stockAuth, requireMajorAdmin, async (req, res) => {
+router.put('/services/:id/recipe', ...stockAuth, requirePermission('recipes.manage'), async (req, res) => {
   try {
     const { items } = req.body;
     if (!Array.isArray(items) || items.length > 30) {

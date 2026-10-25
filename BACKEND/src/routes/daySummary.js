@@ -19,7 +19,7 @@ const router = Router();
 //   Atendimento ainda não concluído mostra o custo PREVISTO pela receita
 //   (suppliesEstimated: true); concluído mostra o consumo real.
 
-// Escopo por profissional: MajorAdmin vê o dia da clínica inteira; as demais
+// Escopo por profissional: Admin vê o dia da clínica inteira; as demais
 // funcionárias só veem as sessões em que são a profissional responsável.
 const DAY_TZ_OFFSET_H = -3;
 const DAY_MS = 24 * 3600 * 1000;

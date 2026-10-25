@@ -279,8 +279,8 @@ export default function Profile() {
                   </InputGroup>
                 </TextField>
 
-                {/* só leitura: o cargo é alterado pelo MajorAdmin na tabela de funcionários */}
-                <TextField fullWidth isReadOnly isDisabled className="max-w-70" value={formatLabel(user.role)}>
+                {/* só leitura: o cargo e a profissão são alterados pelo Admin na tabela de funcionários */}
+                <TextField fullWidth isReadOnly isDisabled className="max-w-70" value={[formatLabel(user.role), user.profession?.name].filter(Boolean).join(" · ")}>
                   <Label className="text-muted">Cargo</Label>
                   <InputGroup className="border border-border">
                     <InputGroup.Input className="font-semibold" />

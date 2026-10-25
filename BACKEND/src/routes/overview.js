@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { requireMajorAdmin, stockAuth } from '../middleware/auth.js';
+import { requirePermission, stockAuth } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -35,7 +35,7 @@ const round2 = (n) => Math.round(n * 100) / 100;
 // variação percentual; sem base de comparação (mês anterior = 0) devolve null
 const pctChange = (cur, prev) => (prev > 0 ? round1(((cur - prev) / prev) * 100) : null);
 
-router.get('/admin/overview', ...stockAuth, requireMajorAdmin, async (req, res) => {
+router.get('/admin/overview', ...stockAuth, requirePermission('overview.view'), async (req, res) => {
   try {
     const months = Math.min(Math.max(parseInt(req.query.months, 10) || 12, 2), 24);
     const now = new Date();

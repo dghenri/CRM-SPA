@@ -13,10 +13,12 @@ enum StaffStatus {
   OnLeave
 }
 
+// Cargo = NÍVEL DE ACESSO/PERMISSÃO no sistema (hierarquia: Admin > Manager > Employee).
+// A função/profissão da pessoa (Farmacêutica, Massoterapeuta...) fica em `Profession`.
 enum StaffRole {
-  MajorAdmin
-  Farmaceutica
-  Massoterapeuta
+  Admin    // acesso total
+  Manager  // gerencia a operação (acesso intermediário)
+  Employee // acesso operacional
 }
 
 enum Gender {
@@ -62,9 +64,20 @@ model Staff {
   name      String
   password  String
   phone     String?
-  role      StaffRole
+  role      StaffRole // nível de acesso (permissões)
   birthdate DateTime
   status    StaffStatus  @default(Active)
+
+  // função/profissão exercida na clínica (Desenvolvedor, Suporte, Farmacêutica...).
+  // Opcional: contas migradas começam sem profissão até alguém definir.
+  professionId String?     @db.ObjectId
+  profession   Profession? @relation(fields: [professionId], references: [id])
+
+  // Permissões: o cargo (role) define o padrão (ver src/lib/permissions.js).
+  // customPermissions = true -> vale a lista `permissions` no lugar do padrão do cargo
+  // (o Admin sempre tem tudo, independente disto). null/false = usa o padrão do cargo.
+  customPermissions Boolean?
+  permissions       String[]
 
   // caminho da foto de perfil (ex: /uploads/avatars/staff-<id>-<ts>.jpg); null = sem foto
   avatarUrl String?
@@ -88,6 +101,19 @@ model Staff {
   executedMovements StockMovement[] @relation("MovementExecutor")
   stockRequests     StockRequest[]  @relation("RequestedBy")
   reviewedRequests  StockRequest[]  @relation("ReviewedBy")
+}
+
+// Função/profissão dos profissionais da clínica. É uma coleção (e não um enum)
+// para a equipe poder cadastrar novas funções sem alterar o schema.
+model Profession {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String   @unique // ex: "Farmacêutica(o)", "Massoterapeuta"
+  slug      String   @unique // ex: "farmaceutica", "massoterapeuta" (estável, usado em scripts/regras)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  staff Staff[]
 }
 
 // Disponibilidade semanal da funcionária. Um registro = um intervalo de
@@ -358,9 +384,10 @@ model Product {
   trackOpening            Boolean @default(false)
   shelfLifeAfterOpenHours Int? // validade depois de aberto (ex: 24)
 
-  // cargos que podem SOLICITAR movimentações deste produto. Vazio = só o
-  // MajorAdmin. O MajorAdmin sempre pode, independente desta lista.
-  allowedRoles StaffRole[]
+  // profissões que podem SOLICITAR movimentações deste produto. Vazio = só
+  // Admin/Manager. Admin e Manager sempre podem, independente desta lista.
+  // (sem relação formal: ids de Profession, mesmo padrão de Coupon.serviceIds)
+  allowedProfessionIds String[] @db.ObjectId
 
   batches     StockBatch[]
   movements   StockMovement[]
@@ -403,7 +430,7 @@ model StockMovement {
   requestId String?       @db.ObjectId
   request   StockRequest? @relation(fields: [requestId], references: [id])
 
-  // quem executou (quem aprovou, ou o próprio MajorAdmin quando aplica direto)
+  // quem executou (quem aprovou, ou o próprio Admin/Manager quando aplica direto)
   staffId String @db.ObjectId
   staff   Staff  @relation("MovementExecutor", fields: [staffId], references: [id])
 }

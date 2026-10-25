@@ -1,19 +1,20 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { broadcastStockChanged } from '../lib/realtime.js';
-import { requireMajorAdmin, stockAuth } from '../middleware/auth.js';
-import { MAJOR_ADMIN, StockError, applyStockItems, normalizeRequestItems, requestInclude, serializeRequests } from '../services/stock.js';
+import { requirePermission, stockAuth } from '../middleware/auth.js';
+import { hasPermission } from '../lib/permissions.js';
+import { StockError, applyStockItems, normalizeRequestItems, requestInclude, serializeRequests } from '../services/stock.js';
 
 const router = Router();
 
 //=============================================================== SOLICITAÇÕES DE ESTOQUE
 
-//------------------------------------------------------------- POST ROUTE (cria solicitação; MajorAdmin aplica direto)
+//------------------------------------------------------------- POST ROUTE (cria solicitação; Admin aplica direto)
 router.post('/stock/requests', ...stockAuth, async (req, res) => {
   try {
     const { type, items, reason } = req.body;
     const normalized = await normalizeRequestItems(type, items, req.staff);
-    const isAdmin = req.staff.role === MAJOR_ADMIN;
+    const isAdmin = hasPermission(req.staff, "stock.review");
 
     if (type !== "Purchase" && !reason?.trim()) {
       return res.status(400).json({ error: "Informe o motivo (perda/ajuste exigem justificativa)." });
@@ -48,11 +49,11 @@ router.post('/stock/requests', ...stockAuth, async (req, res) => {
   }
 });
 
-//------------------------------------------------------------- GET ROUTE (MajorAdmin vê todas; demais veem só as próprias)
+//------------------------------------------------------------- GET ROUTE (Admin vê todas; demais veem só as próprias)
 router.get('/stock/requests', ...stockAuth, async (req, res) => {
   try {
     const { status } = req.query;
-    const isAdmin = req.staff.role === MAJOR_ADMIN;
+    const isAdmin = hasPermission(req.staff, "stock.review");
 
     const requests = await prisma.stockRequest.findMany({
       where: {
@@ -71,8 +72,8 @@ router.get('/stock/requests', ...stockAuth, async (req, res) => {
   }
 });
 
-//------------------------------------------------------------- PATCH ROUTE (MajorAdmin aprova: aplica no estoque, tudo-ou-nada)
-router.patch('/stock/requests/:id/approve', ...stockAuth, requireMajorAdmin, async (req, res) => {
+//------------------------------------------------------------- PATCH ROUTE (Admin aprova: aplica no estoque, tudo-ou-nada)
+router.patch('/stock/requests/:id/approve', ...stockAuth, requirePermission('stock.review'), async (req, res) => {
   try {
     await prisma.$transaction(async (tx) => {
       // transição atômica Pending -> Approved: dois cliques não aplicam duas vezes
@@ -107,8 +108,8 @@ router.patch('/stock/requests/:id/approve', ...stockAuth, requireMajorAdmin, asy
   }
 });
 
-//------------------------------------------------------------- PATCH ROUTE (MajorAdmin nega)
-router.patch('/stock/requests/:id/reject', ...stockAuth, requireMajorAdmin, async (req, res) => {
+//------------------------------------------------------------- PATCH ROUTE (Admin nega)
+router.patch('/stock/requests/:id/reject', ...stockAuth, requirePermission('stock.review'), async (req, res) => {
   try {
     const r = await prisma.stockRequest.updateMany({
       where: { id: req.params.id, status: "Pending" },
@@ -152,8 +153,8 @@ router.patch('/stock/requests/:id/cancel', ...stockAuth, async (req, res) => {
   }
 });
 
-//------------------------------------------------------------- GET ROUTE (MajorAdmin: histórico/auditoria do ledger)
-router.get('/stock/movements', ...stockAuth, requireMajorAdmin, async (req, res) => {
+//------------------------------------------------------------- GET ROUTE (Admin: histórico/auditoria do ledger)
+router.get('/stock/movements', ...stockAuth, requirePermission('stock.review'), async (req, res) => {
   try {
     const { productId, type } = req.query;
     const limit = Math.min(Number(req.query.limit) || 100, 500);

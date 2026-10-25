@@ -1,14 +1,15 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { broadcastStockChanged } from '../lib/realtime.js';
-import { requireMajorAdmin, stockAuth } from '../middleware/auth.js';
-import { MAJOR_ADMIN, StockError, canHandleProduct, decorateBatch, optNumber, sortFefo } from '../services/stock.js';
+import { hasPermission } from '../lib/permissions.js';
+import { requirePermission, stockAuth } from '../middleware/auth.js';
+import { StockError, canHandleProduct, decorateBatch, optNumber, sortFefo } from '../services/stock.js';
 
 const router = Router();
 
 //=============================================================== PRODUTOS
 
-function parseProductBody(body, { partial = false } = {}) {
+async function parseProductBody(body, { partial = false } = {}) {
   const data = {};
   const has = (k) => body[k] !== undefined;
 
@@ -39,13 +40,17 @@ function parseProductBody(body, { partial = false } = {}) {
     const h = optNumber(body.shelfLifeAfterOpenHours);
     data.shelfLifeAfterOpenHours = h && h > 0 ? Math.round(h) : null;
   }
-  if (has("allowedRoles")) {
-    const valid = ["MajorAdmin", "Farmaceutica", "Massoterapeuta"];
-    if (!Array.isArray(body.allowedRoles) || body.allowedRoles.some((r) => !valid.includes(r))) {
-      throw new StockError("Cargos permitidos inválidos.");
+  if (has("allowedProfessionIds")) {
+    // profissões (Profession) que podem solicitar movimentações deste produto.
+    // Quem tem a permissão "stock.review" (Admin/Manager) sempre pode; não precisa ficar na lista.
+    const ids = body.allowedProfessionIds;
+    if (!Array.isArray(ids) || ids.some((id) => !/^[a-f\d]{24}$/i.test(String(id)))) {
+      throw new StockError("Profissões permitidas inválidas.");
     }
-    // MajorAdmin sempre pode; não precisa ficar na lista
-    data.allowedRoles = [...new Set(body.allowedRoles.filter((r) => r !== MAJOR_ADMIN))];
+    const unique = [...new Set(ids.map(String))];
+    const found = await prisma.profession.count({ where: { id: { in: unique } } });
+    if (found !== unique.length) throw new StockError("Alguma das profissões informadas não existe.");
+    data.allowedProfessionIds = unique;
   }
   return data;
 }
@@ -53,7 +58,7 @@ function parseProductBody(body, { partial = false } = {}) {
 //------------------------------------------------------------- GET ROUTE (lista produtos com saldo, lotes e alertas - toda a equipe vê)
 router.get('/products', ...stockAuth, async (req, res) => {
   try {
-    const includeInactive = req.staff.role === MAJOR_ADMIN && req.query.includeInactive === "true";
+    const includeInactive = hasPermission(req.staff, "products.manage") && req.query.includeInactive === "true";
     const products = await prisma.product.findMany({ orderBy: { name: 'asc' } });
     const visible = includeInactive ? products : products.filter((p) => p.active);
 
@@ -87,10 +92,10 @@ router.get('/products', ...stockAuth, async (req, res) => {
   }
 });
 
-//------------------------------------------------------------- POST ROUTE (MajorAdmin cadastra produto - saldo nasce zerado, entra só via movimentação)
-router.post('/products', ...stockAuth, requireMajorAdmin, async (req, res) => {
+//------------------------------------------------------------- POST ROUTE (products.manage cadastra produto - saldo nasce zerado, entra só via movimentação)
+router.post('/products', ...stockAuth, requirePermission('products.manage'), async (req, res) => {
   try {
-    const data = parseProductBody(req.body);
+    const data = await parseProductBody(req.body);
     const product = await prisma.product.create({ data });
     broadcastStockChanged();
     res.status(201).json(product);
@@ -102,10 +107,10 @@ router.post('/products', ...stockAuth, requireMajorAdmin, async (req, res) => {
   }
 });
 
-//------------------------------------------------------------- PUT ROUTE (MajorAdmin edita produto; currentStock NÃO é editável aqui)
-router.put('/products/:id', ...stockAuth, requireMajorAdmin, async (req, res) => {
+//------------------------------------------------------------- PUT ROUTE (products.manage edita produto; currentStock NÃO é editável aqui)
+router.put('/products/:id', ...stockAuth, requirePermission('products.manage'), async (req, res) => {
   try {
-    const data = parseProductBody(req.body, { partial: true });
+    const data = await parseProductBody(req.body, { partial: true });
     const product = await prisma.product.update({ where: { id: req.params.id }, data });
     broadcastStockChanged();
     res.json(product);

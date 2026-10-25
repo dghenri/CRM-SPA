@@ -18,7 +18,7 @@ const router = Router();
 //=============================================================== AGENDAMENTOS (APPOINTMENTS)
 //
 // ISOLAMENTO POR PROFISSIONAL (ver lib/appointmentAccess.js):
-// - MajorAdmin: vê e gerencia todos os agendamentos.
+// - Admin: vê e gerencia todos os agendamentos.
 // - Funcionária comum: só vê/edita/apaga/adia/inicia os agendamentos em que
 //   `professionalId` é o id dela. Acesso indevido responde 404.
 
@@ -62,7 +62,7 @@ async function createAppointmentWithUniqueCode(data, preferredCode, options, att
 // - Equipe logada: pode criar pra qualquer cliente (ou sem cliente/serviço vinculado -
 //   ex: evento avulso na agenda), com título e cor personalizados.
 //   Funcionária comum só cria na PRÓPRIA agenda (o professionalId do body é ignorado);
-//   só o MajorAdmin escolhe o profissional.
+//   só o Admin escolhe o profissional.
 // O cliente só marca horário que a profissional atende e que está livre na agenda DELA.
 // (O front já mostra só esses horários; aqui é a barreira de verdade.) A equipe pode
 // agendar fora do expediente / sobrepor de propósito, então não passa por aqui.
@@ -142,14 +142,14 @@ router.post('/appointments', authenticateToken, async (req, res) => {
     if (serviceId) data.service = { connect: { id: serviceId } };
 
     // profissional responsável. Cliente: sempre o do serviço (nunca confia no body).
-    // Equipe: MajorAdmin escolhe (ou herda do serviço); funcionária comum = ela mesma.
+    // Equipe: Admin escolhe (ou herda do serviço); funcionária comum = ela mesma.
     let resolvedProfessionalId = null;
 
     if (req.user.type === "user") {
       if (!serviceId || !service.available) {
         return res.status(400).json({ error: "Selecione um serviço disponível." });
       }
-      // sem profissional responsável a sessão nasceria "órfã" (só o MajorAdmin a veria)
+      // sem profissional responsável a sessão nasceria "órfã" (só o Admin a veria)
       if (!service.professionalId) {
         return res.status(400).json({ error: "Este procedimento ainda não tem profissional responsável." });
       }
@@ -196,7 +196,7 @@ router.post('/appointments', authenticateToken, async (req, res) => {
         ? professionalId || service?.professionalId || null
         : actor.id;
 
-      // funcionária comum só agenda procedimentos vinculados a ela (o MajorAdmin agenda qualquer um)
+      // funcionária comum só agenda procedimentos vinculados a ela (o Admin agenda qualquer um)
       if (!actor.isAdmin && service && service.professionalId !== actor.id) {
         return res.status(403).json({
           error: "Você só pode agendar procedimentos vinculados a você.",
@@ -232,7 +232,7 @@ const APPOINTMENT_STATUSES = ["Scheduled", "Confirmed", "Completed", "Cancelled"
 const APPOINTMENT_INCLUDE = { service: true, customer: true, professional: { select: { id: true, name: true } } };
 
 //------------------------------------------------------------- PUT ROUTE (equipe edita um agendamento completo)
-// Só o profissional responsável (ou o MajorAdmin) edita/adia. Só o MajorAdmin
+// Só o profissional responsável (ou o Admin) edita/adia. Só o Admin
 // pode trocar o profissional (senão uma funcionária "passaria" a sessão pra outra).
 router.put('/appointments/:id', authenticateToken, requireStaff, loadStaffActor, async (req, res) => {
   try {
@@ -262,7 +262,7 @@ router.put('/appointments/:id', authenticateToken, requireStaff, loadStaffActor,
     if (customerId !== undefined) {
       data.customer = customerId ? { connect: { id: customerId } } : { disconnect: true };
     }
-    // troca de profissional: só MajorAdmin (pra funcionária comum o campo é ignorado)
+    // troca de profissional: só Admin (pra funcionária comum o campo é ignorado)
     if (professionalId !== undefined && req.actor.isAdmin) {
       data.professional = professionalId ? { connect: { id: professionalId } } : { disconnect: true };
     }
@@ -323,7 +323,7 @@ router.get('/appointments/me', authenticateToken, requireUser, async (req, res) 
 });
 
 //------------------------------------------------------------- GET ROUTE (equipe lista os agendamentos da própria agenda, com filtros opcionais)
-// MajorAdmin recebe todos; funcionária comum só os dela.
+// Admin recebe todos; funcionária comum só os dela.
 router.get('/appointments', authenticateToken, requireStaff, loadStaffActor, async (req, res) => {
   try {
     const { status, customerId, serviceId } = req.query;
@@ -440,7 +440,7 @@ router.delete('/appointments/:id', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: "Você não pode cancelar este agendamento." });
     }
 
-    // equipe: só o profissional responsável (ou o MajorAdmin) pode apagar
+    // equipe: só o profissional responsável (ou o Admin) pode apagar
     if (isStaff) {
       const actor = await getStaffActor(req.user.id);
       if (!actor) return res.status(403).json({ error: "Acesso negado." });
@@ -484,7 +484,7 @@ router.delete('/appointments/:id', authenticateToken, async (req, res) => {
 //=============================================================== INICIAR ATENDIMENTO (HOME DO STAFF)
 //
 // Regras:
-// - Só o clique do profissional responsável (ou do MajorAdmin) inicia o
+// - Só o clique do profissional responsável (ou do Admin) inicia o
 //   atendimento: `startedAt` = agora. Nada começa sozinho pelo relógio.
 // - Só dá para iniciar (ou desfazer o início) enquanto o status é Scheduled ou
 //   Confirmed. Iniciar um "Agendado" também o marca como "Confirmed" (o cliente

@@ -10,8 +10,8 @@ const router = Router();
 
 //=============================================================== STAFF: RECEITA (FINANÇAS)
 //
-// Acesso: qualquer cargo de staff (MajorAdmin, Farmaceutica, Massoterapeuta).
-// Escopo: MajorAdmin vê a receita da clínica toda; as demais só a das sessões
+// Acesso: qualquer cargo de staff (Admin, Farmaceutica, Massoterapeuta).
+// Escopo: Admin vê a receita da clínica toda; as demais só a das sessões
 // em que são a profissional responsável (scopeWhere).
 //
 // Mesmas regras do Overview (overviewInsights.js):

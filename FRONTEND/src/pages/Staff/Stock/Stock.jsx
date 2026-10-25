@@ -54,7 +54,8 @@ async function api(path, { method = "GET", body } = {}) {
 
 /* ------------------------------ helpers ---------------------------------- */
 const UNIT_LABEL = { Un: "un", Ml: "ml", G: "g" };
-const ROLE_LABEL = { MajorAdmin: "Gerente", Farmaceutica: "Farmacêutica", Massoterapeuta: "Massoterapeuta" };
+// rótulo do CARGO (nível de acesso); quando a pessoa tem profissão, o nome dela é mostrado no lugar
+const ROLE_LABEL = { Admin: "Admin", Manager: "Gerente", Employee: "Funcionário" };
 const TYPE_LABEL = {
   Purchase: "Entrada",
   Loss: "Perda",
@@ -84,7 +85,7 @@ function describeItem(type, item) {
 }
 
 function describeRequest(r) {
-  const who = `${r.requestedBy?.name ?? "—"} (${ROLE_LABEL[r.requestedBy?.role] ?? "—"})`;
+  const who = `${r.requestedBy?.name ?? "—"} (${r.requestedBy?.profession?.name ?? ROLE_LABEL[r.requestedBy?.role] ?? "—"})`;
   const verb = { Purchase: "adicionar ao estoque", Loss: "registrar perda de", Adjustment: "ajustar o estoque de" }[r.type];
   return `${who} quer ${verb}:`;
 }
@@ -186,11 +187,11 @@ const EMPTY_PRODUCT = {
   minStock: "0",
   trackOpening: false,
   shelfLifeAfterOpenHours: "",
-  allowedRoles: [],
+  allowedProfessionIds: [],
   active: true,
 };
 
-function ProductModal({ product, onClose, onSaved }) {
+function ProductModal({ product, professions, onClose, onSaved }) {
   const isEdit = !!product?.id;
   const [form, setForm] = useState(EMPTY_PRODUCT);
   const [error, setError] = useState("");
@@ -210,6 +211,7 @@ function ProductModal({ product, onClose, onSaved }) {
             purchaseUnitSize: String(product.purchaseUnitSize ?? 1),
             minStock: String(product.minStock ?? 0),
             shelfLifeAfterOpenHours: product.shelfLifeAfterOpenHours ? String(product.shelfLifeAfterOpenHours) : "",
+            allowedProfessionIds: product.allowedProfessionIds ?? [],
           }
         : EMPTY_PRODUCT
     );
@@ -231,7 +233,7 @@ function ProductModal({ product, onClose, onSaved }) {
         minStock: Number(form.minStock) || 0,
         trackOpening: form.trackOpening,
         shelfLifeAfterOpenHours: form.trackOpening ? form.shelfLifeAfterOpenHours : "",
-        allowedRoles: form.allowedRoles,
+        allowedProfessionIds: form.allowedProfessionIds,
         active: form.active,
       };
       await api(isEdit ? `/products/${product.id}` : "/products", { method: isEdit ? "PUT" : "POST", body });
@@ -325,16 +327,22 @@ function ProductModal({ product, onClose, onSaved }) {
                     />
                   )}
 
-                  <CheckboxGroup value={form.allowedRoles} onChange={set("allowedRoles")}>
+                  <CheckboxGroup value={form.allowedProfessionIds} onChange={set("allowedProfessionIds")}>
                     <Label>Quem pode solicitar movimentações deste produto</Label>
-                    <Description>O Gerente sempre pode, direto e sem aprovação.</Description>
-                    {["Farmaceutica", "Massoterapeuta"].map((role) => (
-                      <Checkbox key={role} value={role} className="flex justify-c">
+                    <Description>
+                      Admin e Manager (quem revisa o estoque) sempre podem, direto e sem aprovação.
+                      Marque as profissões que também podem solicitar.
+                    </Description>
+                    {professions.length === 0 && (
+                      <Description>Nenhuma profissão cadastrada. O Admin cadastra em Users › Professions.</Description>
+                    )}
+                    {professions.map((p) => (
+                      <Checkbox key={p.id} value={p.id} className="flex justify-c">
                         <Checkbox.Content>
                           <Checkbox.Control className="size-5 bg-surface-secondary border border-border">
                             <Checkbox.Indicator/>
                           </Checkbox.Control>
-                          <Label>{ROLE_LABEL[role]}</Label>
+                          <Label>{p.name}</Label>
                         </Checkbox.Content>
                       </Checkbox>
                     ))}
@@ -783,7 +791,7 @@ function PendingApprovalsToast({ requests, isVisible, onReview }) {
 }
 
 /* ------------------------------ abas ------------------------------------- */
-function ProductsTab({ products, isAdmin, onEdit, onBatches }) {
+function ProductsTab({ products, canEdit, onEdit, onBatches }) {
   const [query, setQuery] = useState("");
   const filtered = products.filter((p) => p.name.toLowerCase().includes(query.trim().toLowerCase()));
 
@@ -830,7 +838,7 @@ function ProductsTab({ products, isAdmin, onEdit, onBatches }) {
                 )}
                 <div className="flex gap-2 border-t border-border pt-2">
                   <Button size="sm" variant="secondary" onPress={() => onBatches(p.id)}>Lotes</Button>
-                  {isAdmin && <Button size="sm" variant="ghost" onPress={() => onEdit(p)}>Editar</Button>}
+                  {canEdit && <Button size="sm" variant="ghost" onPress={() => onEdit(p)}>Editar</Button>}
                 </div>
               </div>
             );
@@ -891,7 +899,7 @@ function ProductsTab({ products, isAdmin, onEdit, onBatches }) {
                       <Button size="sm" variant="secondary" onPress={() => onBatches(p.id)}>
                         Lotes
                       </Button>
-                      {isAdmin && (
+                      {canEdit && (
                         <Button size="sm" variant="ghost" onPress={() => onEdit(p)}>
                           Editar
                         </Button>
@@ -908,7 +916,7 @@ function ProductsTab({ products, isAdmin, onEdit, onBatches }) {
   );
 }
 
-function RequestsTab({ requests, isAdmin, meId, onApprove, onReject, onCancel, busyId }) {
+function RequestsTab({ requests, canReview, meId, onApprove, onReject, onCancel, busyId }) {
   const [status, setStatus] = useState("all");
   const shown = requests.filter((r) => status === "all" || r.status === status);
 
@@ -964,9 +972,9 @@ function RequestsTab({ requests, isAdmin, meId, onApprove, onReject, onCancel, b
                 </p>
               )}
             </Card.Content>
-            {r.status === "Pending" && (isAdmin || r.requestedBy?.id === meId) && (
+            {r.status === "Pending" && (canReview || r.requestedBy?.id === meId) && (
               <Card.Footer className="flex flex-wrap gap-2">
-                {isAdmin && (
+                {canReview && (
                   <>
                     <Button onPress={() => onApprove(r)} isPending={busyId === r.id}>
                       Aprovar
@@ -1070,6 +1078,7 @@ function HistoryTab({ movements }) {
 export default function Storage() {
   const [me, setMe] = useState(null);
   const [products, setProducts] = useState([]);
+  const [professions, setProfessions] = useState([]);
   const [requests, setRequests] = useState([]);
   const [movements, setMovements] = useState([]);
   const [tab, setTab] = useState("products");
@@ -1082,18 +1091,26 @@ export default function Storage() {
   const [rejecting, setRejecting] = useState(null);
   const [busyId, setBusyId] = useState(null);
 
-  const isAdmin = me?.role === "MajorAdmin";
+  // canReview: aprova/nega solicitações, aplica movimentação direto e vê o histórico (Admin/Manager).
+  // canManageProducts: cadastra e edita produtos.
+  const perms = me?.effectivePermissions ?? [];
+  const canReview = perms.includes("stock.review");
+  const canManageProducts = perms.includes("products.manage");
 
   const load = useCallback(async () => {
     try {
       const staff = await api("/auth/staff/me");
       setMe(staff);
-      const [prods, reqs, movs] = await Promise.all([
-        api(`/products${staff.role === "MajorAdmin" ? "?includeInactive=true" : ""}`),
+      // o que a pessoa pode fazer vem do back-end (cargo + personalização do Admin)
+      const perms = staff.effectivePermissions ?? [];
+      const [prods, reqs, movs, profs] = await Promise.all([
+        api(`/products${perms.includes("products.manage") ? "?includeInactive=true" : ""}`),
         api("/stock/requests"),
-        staff.role === "MajorAdmin" ? api("/stock/movements?limit=200") : Promise.resolve([]),
+        perms.includes("stock.review") ? api("/stock/movements?limit=200") : Promise.resolve([]),
+        api("/professions"),
       ]);
       setProducts(prods);
+      setProfessions(profs);
       setRequests(reqs);
       setMovements(movs);
       setLoadError("");
@@ -1155,10 +1172,10 @@ export default function Storage() {
           </p>
         </div>
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-          {isAdmin && <Button variant="tertiary" className="rounded-lg" onPress={() => setProductModal({})}>Novo produto</Button>}
-          <Button className="rounded-lg" onPress={() => setRequestType("Purchase")}>{isAdmin ? "Dar entrada" : "Solicitar entrada"}</Button>
-          <Button className="rounded-lg" variant="danger-soft" onPress={() => setRequestType("Loss")}>{isAdmin ? "Registrar perda" : "Solicitar baixa"}</Button>
-          <Button className="rounded-lg" variant="outline" onPress={() => setRequestType("Adjustment")}>{isAdmin ? "Ajustar" : "Solicitar ajuste"}</Button>
+          {canManageProducts && <Button variant="tertiary" className="rounded-lg" onPress={() => setProductModal({})}>Novo produto</Button>}
+          <Button className="rounded-lg" onPress={() => setRequestType("Purchase")}>{canReview ? "Dar entrada" : "Solicitar entrada"}</Button>
+          <Button className="rounded-lg" variant="danger-soft" onPress={() => setRequestType("Loss")}>{canReview ? "Registrar perda" : "Solicitar baixa"}</Button>
+          <Button className="rounded-lg" variant="outline" onPress={() => setRequestType("Adjustment")}>{canReview ? "Ajustar" : "Solicitar ajuste"}</Button>
         </div>
       </div>
 
@@ -1180,7 +1197,7 @@ export default function Storage() {
               <Tabs.Indicator />
             </Tabs.Tab>
             <Tabs.Tab id="requests">
-              {isAdmin ? "Solicitações" : "Minhas solicitações"}
+              {canReview ? "Solicitações" : "Minhas solicitações"}
               {pendingCount > 0 && (
                 <Chip color="warning" variant="soft" size="sm" className="ml-2">
                   {pendingCount}
@@ -1188,7 +1205,7 @@ export default function Storage() {
               )}
               <Tabs.Indicator />
             </Tabs.Tab>
-            {isAdmin && (
+            {canReview && (
               <Tabs.Tab id="history">
                 Histórico
                 <Tabs.Indicator />
@@ -1198,12 +1215,12 @@ export default function Storage() {
         </Tabs.ListContainer>
 
         <Tabs.Panel id="products" className="pt-4">
-          <ProductsTab products={products} isAdmin={isAdmin} onEdit={setProductModal} onBatches={setBatchesProductId} />
+          <ProductsTab products={products} canEdit={canManageProducts} onEdit={setProductModal} onBatches={setBatchesProductId} />
         </Tabs.Panel>
         <Tabs.Panel id="requests" className="pt-4">
           <RequestsTab
             requests={requests}
-            isAdmin={isAdmin}
+            canReview={canReview}
             meId={me?.id}
             busyId={busyId}
             onApprove={approve}
@@ -1211,7 +1228,7 @@ export default function Storage() {
             onCancel={cancel}
           />
         </Tabs.Panel>
-        {isAdmin && (
+        {canReview && (
           <Tabs.Panel id="history" className="pt-4">
             <HistoryTab movements={movements} />
           </Tabs.Panel>
@@ -1220,12 +1237,12 @@ export default function Storage() {
 
       <PendingApprovalsToast
         requests={pendingRequests}
-        isVisible={isAdmin && tab !== "requests"}
+        isVisible={canReview && tab !== "requests"}
         onReview={() => setTab("requests")}
       />
 
-      <ProductModal product={productModal} onClose={() => setProductModal(null)} onSaved={load} />
-      <RequestModal type={requestType} products={products} isAdmin={isAdmin} onClose={() => setRequestType(null)} onSaved={load} />
+      <ProductModal product={productModal} professions={professions} onClose={() => setProductModal(null)} onSaved={load} />
+      <RequestModal type={requestType} products={products} isAdmin={canReview} onClose={() => setRequestType(null)} onSaved={load} />
       <BatchesModal product={batchesProduct} onClose={() => setBatchesProductId(null)} onChanged={load} />
       <RejectModal request={rejecting} onClose={() => setRejecting(null)} onDone={load} />
     </div>

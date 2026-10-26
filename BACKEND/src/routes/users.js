@@ -263,7 +263,8 @@ router.get('/users', authenticateToken, requireStaff, async (req, res) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    res.status(200).json(customers.map(toPublicUser));
+    // includeAvatar: a tabela e a ficha de clientes mostram a foto (sem isso o avatarUrl é removido)
+    res.status(200).json(customers.map((c) => toPublicUser(c, { includeAvatar: true })));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Erro ao buscar clientes." });
@@ -283,7 +284,7 @@ router.get('/users/:id', authenticateToken, requireStaff, loadStaffActor, async 
       return res.status(404).json({ error: "Cliente não encontrado." });
     }
 
-    res.json(toPublicUser(customer));
+    res.json(toPublicUser(customer, { includeAvatar: true }));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Erro ao buscar cliente." });
@@ -334,7 +335,7 @@ router.post('/users', authenticateToken, requireStaff, async (req, res) => {
       },
     });
 
-    res.status(201).json(toPublicUser(customer));
+    res.status(201).json(toPublicUser(customer, { includeAvatar: true }));
   } catch (error) {
     if (error.code === "P2002") {
       return res.status(409).json({ error: duplicateFieldMessage(error) });
@@ -387,7 +388,7 @@ router.put('/users/:id', ...stockAuth, requirePermission('customers.manage'), as
       data,
     });
 
-    res.status(200).json(toPublicUser(updatedCustomer));
+    res.status(200).json(toPublicUser(updatedCustomer, { includeAvatar: true }));
   } catch (error) {
     if (error.code === "P2002") {
       return res.status(409).json({ error: duplicateFieldMessage(error) });

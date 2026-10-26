@@ -188,7 +188,7 @@ router.get('/auth/staff/me', authenticateToken, requireStaff, async (req, res) =
 
 //------------------------------------------------------------- GET ROUTE (só equipe - clientes não listam a equipe)
 // Admin recebe o cadastro completo (email, telefone, nascimento, permissões...). As demais só
-// recebem id, nome, cargo, profissão e status - o suficiente pro seletor de profissional.
+// recebem id, nome, foto, cargo, profissão e status - o suficiente pro seletor de profissional.
 router.get('/staff', ...stockAuth, async (req, res) => {
   try {
     const isAdmin = req.staff.role === "Admin";
@@ -207,7 +207,7 @@ router.get('/staff', ...stockAuth, async (req, res) => {
     res.status(200).json(
       isAdmin
         ? staff.map(toPublicStaff)
-        : staff.map(({ id, name, role, status, professionId, profession }) => ({ id, name, role, status, professionId, profession }))
+        : staff.map(({ id, name, role, status, professionId, profession, avatarUrl }) => ({ id, name, role, status, professionId, profession, avatarUrl }))
     )
   } catch (error) {
     console.error(error);

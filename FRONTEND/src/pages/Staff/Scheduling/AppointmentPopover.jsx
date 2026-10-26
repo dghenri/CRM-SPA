@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Popover, Button, Avatar, Label, Select, ListBox } from "@heroui/react";
 import { UserRound, MessageCircle, IdCardLanyard, Calendar, Clock } from "lucide-react";
 import { fmtTime } from "./schedulingConstants";
+import { assetUrl } from "../../../api/api";
 
 // Iniciais do cliente pro fallback do Avatar quando não há foto
 function getInitials(name) {
@@ -61,6 +62,13 @@ export default function AppointmentPopover({ appointment, color, onStatusChange,
 
   const whatsAppUrl = buildClientWhatsAppUrl(appointment);
 
+  // Foto já resolvida (clientPhoto/professionalPhoto) ou, se o Cronograma só repassar o objeto da API,
+  // o caminho cru (customer.avatarUrl / professional.avatarUrl) convertido aqui
+  const clientPhoto =
+    appointment.clientPhoto || assetUrl(appointment.customer?.avatarUrl || appointment.clientAvatarUrl) || null;
+  const professionalPhoto =
+    appointment.professionalPhoto || assetUrl(appointment.professional?.avatarUrl || appointment.professionalAvatarUrl) || null;
+
   const commitNotes = () => {
     if (notes !== (appointment.notes ?? "")) onSaveNotes(notes);
   };
@@ -82,9 +90,7 @@ export default function AppointmentPopover({ appointment, color, onStatusChange,
         <Popover.Dialog>
           <Popover.Heading className="flex items-center gap-3">
             <Avatar size="lg">
-              {appointment.clientPhoto && (
-                <Avatar.Image alt={appointment.clientName} src={appointment.clientPhoto} />
-              )}
+              {clientPhoto && <Avatar.Image alt={appointment.clientName} src={clientPhoto} />}
               <Avatar.Fallback>{getInitials(appointment.clientName)}</Avatar.Fallback>
             </Avatar>
 
@@ -113,12 +119,19 @@ export default function AppointmentPopover({ appointment, color, onStatusChange,
 
           <div className="mt-4 flex flex-col gap-2 text-sm">
             <span className="flex items-center gap-2">
-               <div className="h-6 w-6 flex items-center justify-center bg-surface-secondary rounded-full"><IdCardLanyard size={14} /></div>
+              {appointment.professionalName && professionalPhoto ? (
+                <Avatar size="sm" className="size-6">
+                  <Avatar.Image alt={appointment.professionalName} src={professionalPhoto} />
+                  <Avatar.Fallback className="text-[10px]">{getInitials(appointment.professionalName)}</Avatar.Fallback>
+                </Avatar>
+              ) : (
+                <IdCardLanyard size={14} />
+              )}
               {appointment.professionalName || "Sem profissional definido"}
             </span>
             <div className="flex flex-wrap items-center gap-4">
               <span className="flex items-center gap-2">
-                <div className="h-6 w-6 flex items-center justify-center bg-surface-secondary rounded-full"><Calendar size={14} /></div>
+                <Calendar size={14} />
                 {appointment.start.toLocaleDateString("pt-BR", {
                   day: "2-digit",
                   month: "short",
@@ -126,7 +139,7 @@ export default function AppointmentPopover({ appointment, color, onStatusChange,
                 })}
               </span>
               <span className="flex items-center gap-2">
-                <div className="h-6 w-6 flex items-center justify-center bg-surface-secondary rounded-full"><Clock size={14} /></div>
+                <Clock size={14} />
                 {fmtTime(appointment.start)} – {fmtTime(appointment.end)}
               </span>
             </div>

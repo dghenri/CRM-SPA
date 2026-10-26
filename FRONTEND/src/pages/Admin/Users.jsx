@@ -455,7 +455,7 @@ export default function Customers() {
                     <div className="flex items-center gap-3">
 
                       <Avatar size="sm">
-                        <Avatar.Image src={/* user.image_url */ "https://heroui-assets.nyc3.cdn.digitaloceanspaces.com/avatars/orange.jpg"} />
+                        {user.avatarUrl && <Avatar.Image alt={user.name} src={assetUrl(user.avatarUrl)} />}
                         <Avatar.Fallback className="mb-0.5">
                           {getInitials(user.name) || <UserRound className="size-6" />}
                         </Avatar.Fallback>

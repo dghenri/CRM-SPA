@@ -216,12 +216,12 @@ router.post('/appointments', authenticateToken, async (req, res) => {
     if (resolvedProfessionalId) data.professional = { connect: { id: resolvedProfessionalId } };
 
     const appointment = await createAppointmentWithUniqueCode(data, code, {
-      include: { service: true, customer: true, professional: { select: { id: true, name: true } } },
+      include: { service: true, customer: true, professional: { select: { id: true, name: true, avatarUrl: true } } },
     });
 
     await notifyAppointmentCreated(appointment); // aparece no sino do cliente (além do toast)
     broadcastAppointmentsChanged();
-    res.status(201).json({ ...appointment, customer: toPublicUser(appointment.customer) });
+    res.status(201).json({ ...appointment, customer: toPublicUser(appointment.customer, { includeAvatar: true }) });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Erro ao criar agendamento." });
@@ -229,7 +229,7 @@ router.post('/appointments', authenticateToken, async (req, res) => {
 });
 
 const APPOINTMENT_STATUSES = ["Scheduled", "Confirmed", "Completed", "Cancelled", "NoShow"];
-const APPOINTMENT_INCLUDE = { service: true, customer: true, professional: { select: { id: true, name: true } } };
+const APPOINTMENT_INCLUDE = { service: true, customer: true, professional: { select: { id: true, name: true, avatarUrl: true } } };
 
 //------------------------------------------------------------- PUT ROUTE (equipe edita um agendamento completo)
 // Só o profissional responsável (ou o Admin) edita/adia. Só o Admin
@@ -293,7 +293,7 @@ router.put('/appointments/:id', authenticateToken, requireStaff, loadStaffActor,
     await notifyAppointmentStatus(appointment, previousStatus);
     broadcastAppointmentsChanged();
     if (stock.changed) broadcastStockChanged();
-    res.status(200).json({ ...appointment, customer: toPublicUser(appointment.customer), stockWarnings: stock.warnings });
+    res.status(200).json({ ...appointment, customer: toPublicUser(appointment.customer, { includeAvatar: true }), stockWarnings: stock.warnings });
   } catch (error) {
     if (error instanceof StockError) return res.status(error.status).json({ error: error.message });
     if (error.forbidden) return res.status(403).json({ error: error.forbidden, code: "SERVICE_NOT_YOURS" });
@@ -311,7 +311,7 @@ router.get('/appointments/me', authenticateToken, requireUser, async (req, res) 
   try {
     const appointments = await prisma.appointment.findMany({
       where: { customerId: req.user.id },
-      include: { service: true, professional: { select: { id: true, name: true } } },
+      include: { service: true, professional: { select: { id: true, name: true, avatarUrl: true } } },
       orderBy: { date: 'desc' },
     });
 
@@ -335,12 +335,12 @@ router.get('/appointments', authenticateToken, requireStaff, loadStaffActor, asy
         customerId: customerId || undefined,
         serviceId: serviceId || undefined,
       },
-      include: { service: true, customer: true, professional: { select: { id: true, name: true } } },
+      include: { service: true, customer: true, professional: { select: { id: true, name: true, avatarUrl: true } } },
       orderBy: { date: 'asc' },
     });
 
     res.json(
-      appointments.map((a) => ({ ...a, customer: toPublicUser(a.customer) }))
+      appointments.map((a) => ({ ...a, customer: toPublicUser(a.customer, { includeAvatar: true }) }))
     );
   } catch (error) {
     console.error(error);
@@ -414,7 +414,7 @@ router.patch('/appointments/:id/status', authenticateToken, requireStaff, loadSt
     await notifyAppointmentStatus(appointment, previousStatus);
     broadcastAppointmentsChanged();
     if (stock.changed) broadcastStockChanged();
-    res.status(200).json({ ...appointment, customer: toPublicUser(appointment.customer), stockWarnings: stock.warnings });
+    res.status(200).json({ ...appointment, customer: toPublicUser(appointment.customer, { includeAvatar: true }), stockWarnings: stock.warnings });
   } catch (error) {
     if (error instanceof StockError) return res.status(error.status).json({ error: error.message });
     if (error.code === "P2025") {
@@ -514,7 +514,7 @@ router.post('/appointments/:id/start', authenticateToken, requireStaff, loadStaf
     });
 
     broadcastAppointmentsChanged();
-    res.status(200).json({ ...appointment, customer: toPublicUser(appointment.customer) });
+    res.status(200).json({ ...appointment, customer: toPublicUser(appointment.customer, { includeAvatar: true }) });
   } catch (error) {
     if (error.code === "P2025") {
       return res.status(404).json({ error: "Agendamento não encontrado." });

@@ -3,7 +3,7 @@ import { parseDate, parseTime, today, getLocalTimeZone } from "@internationalize
 import { colorMap, colorForAppointment, SLOT_MIN, SLOT_PX, fmtTime } from "./schedulingConstants";
 import AppointmentCard from "./AppointmentCard";
 import { useAuth } from "../../../context/AuthContext";
-import api from "../../../api/api";
+import api, { assetUrl } from "../../../api/api";
 import KeyHint, { confirmOnEnter } from "../../../components/KeyHint";
 import {
   fetchSchedulingData,
@@ -170,10 +170,12 @@ function mapAppointmentFromApi(a) {
     clientId: a.customerId ?? a.customer?.id ?? null,
     clientName: a.customer?.name,
     clientPhone: a.customer?.phone,
-    clientPhoto: a.customer?.photo ?? a.customer?.avatar ?? null,
+    // a API manda o caminho em customer.avatarUrl; assetUrl monta a URL completa
+    clientPhoto: assetUrl(a.customer?.avatarUrl) ?? null,
     professionalId: a.professionalId ?? a.professional?.id ?? null,
     // professionalName = nome guardado quando a profissional foi excluída (sessões antigas)
     professionalName: a.professional?.name ?? a.professionalName ?? null,
+    professionalPhoto: assetUrl(a.professional?.avatarUrl) ?? null,
   };
 }
 // Converte o formato interno para o payload esperado por
@@ -1308,6 +1310,7 @@ function EditModal({ appointment, clients = [], services = [], staff = [], isAdm
       serviceId: serviceId || null,
       clientId: clientId || null,
       clientName: clientId ? clientsById[clientId]?.name : undefined,
+      clientPhoto: clientId ? assetUrl(clientsById[clientId]?.avatarUrl) ?? null : null,
       ...(isAdmin ? { professionalId } : {}),
     });
   };
@@ -1654,6 +1657,7 @@ function CreateModal({ defaultDate, clients = [], services = [], staff = [], isA
       serviceId: serviceId || null,
       clientId: clientId || null,
       clientName: clientId ? clientsById[clientId]?.name : undefined,
+      clientPhoto: clientId ? assetUrl(clientsById[clientId]?.avatarUrl) ?? null : null,
       ...(isAdmin ? { professionalId } : {}),
     });
   };

@@ -97,7 +97,7 @@ function RecommendedSection({ services, favorites, onToggleFavorite, onSelect })
       </div>
 
       <div
-        className="-mx-7 flex gap-4 overflow-x-auto pl-2.5 pr-2 pt-2 pb-3 snap-x snap-mandatory [&::-webkit-scrollbar]:hidden"
+        className="-mx-7 flex gap-4 overflow-x-auto pl-2.5 pr-2 pb-3 snap-x snap-mandatory [&::-webkit-scrollbar]:hidden"
         style={{ scrollbarWidth: "none" }}
       >
         {services.map((service) => (

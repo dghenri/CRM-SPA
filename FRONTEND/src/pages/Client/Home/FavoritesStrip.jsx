@@ -30,7 +30,9 @@ export default function FavoritesStrip() {
       </h2>
 
       <div
-        className="-mx-6 flex snap-x snap-mandatory gap-3 overflow-x-auto px-6 pb-2 [&::-webkit-scrollbar]:hidden"
+        // scroll-px-6: o "snap" alinha o card ao limite da área de rolagem e ignora o padding (px-6);
+        // sem o scroll-padding o primeiro card colava na borda esquerda da tela
+        className="-mx-6 flex snap-x snap-mandatory scroll-px-6 gap-3 overflow-x-auto px-6 pb-2 [&::-webkit-scrollbar]:hidden"
         style={{ scrollbarWidth: "none" }}
       >
         {favorites.map((service) => (

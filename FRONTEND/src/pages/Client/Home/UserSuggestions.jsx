@@ -20,7 +20,7 @@ function formatPrice(value) {
 function SuggestionCard({ service, favorited, onToggleFavorite, onSelect }) {
   return (
     <div className="group w-90 shrink-0 snap-center">
-      <div className="overflow-hidden rounded-[26px] bg-overlay shadow-md ring-1 ring-black/5 transition-shadow duration-300 group-hover:shadow-xl">
+      <div className="overflow-hidden rounded-[26px] bg-overlay shadow-md ring-1 ring-muted/5 transition-shadow duration-300 group-hover:shadow-xl">
         <div className="relative">
           <img
             src={service.image}

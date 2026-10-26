@@ -38,18 +38,16 @@ export default function FavoritesStrip() {
             key={service.id}
             type="button"
             onClick={() => navigate(`/user/services/${service.id}`)}
-            className="w-40 shrink-0 snap-start overflow-hidden rounded-2xl bg-overlay text-left drop-shadow-sm transition-transform active:scale-[0.98]"
+            className="w-60 shrink-0 snap-start overflow-hidden rounded-2xl bg-overlay text-left drop-shadow-sm transition-transform active:scale-[0.98]"
           >
-            <img src={service.image} alt={service.title} className="h-28 w-full object-cover" />
+            <img src={service.image} alt={service.title} className="h-36 w-full object-cover" />
             <div className="p-3">
               <p className="line-clamp-1 text-sm font-semibold">{service.title}</p>
-              <div className="mt-1 flex items-center gap-2 text-xs font-semibold text-default-600">
-                <span>{formatPrice(service.price)}</span>
-                <span className="flex items-center gap-0.5 text-muted">
-                  <Clock size={11} />
-                  {service.duration} min
-                </span>
-              </div>
+              <p className="mt-1 text-sm font-bold">{formatPrice(service.price)}</p>
+              <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-muted">
+                <Clock size={12} />
+                {service.duration} min
+              </p>
             </div>
           </button>
         ))}

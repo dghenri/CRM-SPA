@@ -140,6 +140,6 @@ export const managementItems = [
     tooltip: "Logs",
     Icon: Logs,
     to: "/staff/logs",
-    roles: ADMIN_ONLY_ROLES,
+    permission: "logs.view",
   },
 ]

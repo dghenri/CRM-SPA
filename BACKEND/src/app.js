@@ -19,6 +19,9 @@ import daySummaryRoutes from './routes/daySummary.js';
 import notificationsRoutes from './routes/notifications.js';
 import professionsRoutes from './routes/professions.js';
 import sidebarBadgesRouter from './routes/sidebarBadges.js';
+import logsRoutes from './routes/logs.js';
+import { auditContextMiddleware } from './lib/auditContext.js';
+import { startAuditRetention } from './lib/audit.js';
 import { UPLOADS_DIR } from './lib/uploads.js';
 
 export const app = express();
@@ -65,6 +68,10 @@ app.use(
 
 app.use(express.json())
 
+// Auditoria: guarda quem está agindo (autor, IP) durante a requisição. Fica DEPOIS do express.json()
+// de propósito: o body-parser perde o contexto assíncrono.
+app.use(auditContextMiddleware);
+
 // Verificação de saúde: serve para o Render saber que a API está de pé e para
 // um monitor externo (UptimeRobot) acordá-la. Não consulta o banco de propósito.
 app.get('/health', (req, res) => res.json({ ok: true }));
@@ -98,4 +105,8 @@ app.use(daySummaryRoutes);   // /staff/day-summary
 app.use(notificationsRoutes); // /notifications/me, /banners/me, /admin/notifications, /admin/banners
 app.use(passwordRecoveryRoutes); // /auth/password/*, /auth/sessions/revoke-others
 app.use(professionsRoutes); // /permissions/catalog, /professions
-app.use(sidebarBadgesRouter); //
+app.use(sidebarBadgesRouter); // /staff/sidebar-badges
+app.use(logsRoutes);         // /admin/logs (permissão logs.view)
+
+// apaga logs de auditoria com mais de RETENTION_DAYS (lib/audit.js)
+startAuditRetention();

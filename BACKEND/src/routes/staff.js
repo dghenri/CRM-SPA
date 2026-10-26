@@ -7,6 +7,7 @@ import { DEFAULT_STAFF_SETTINGS, toPublicStaff } from '../lib/serializers.js';
 import { PERMISSION_KEYS, STAFF_ROLES } from '../lib/permissions.js';
 import { authenticateToken, requireAdmin, requireStaff, stockAuth } from '../middleware/auth.js';
 import { broadcastAppointmentsChanged } from '../lib/realtime.js';
+import { logEvent } from '../lib/audit.js';
 import { deleteAvatarFile, detectImageExtension, receiveAvatar, saveAvatarFile } from '../lib/uploads.js';
 
 const router = Router();
@@ -140,11 +141,13 @@ router.post('/auth/staff/login', async (req, res) => {
     // mesma mensagem tanto pra email inexistente quanto senha errada,
     // pra não dar dica de quais emails existem no banco
     if (!staff) {
+      logEvent({ action: 'login_failed', summary: `Falha de login da equipe (e-mail não cadastrado): ${String(email).slice(0, 120)}` });
       return res.status(403).json({ error: "Email ou senha inválidos." });
     }
 
     const passwordMatches = await bcrypt.compare(password, staff.password);
     if (!passwordMatches) {
+      logEvent({ action: 'login_failed', summary: `Falha de login da equipe (senha incorreta): ${staff.name}`, actor: { type: 'staff', id: staff.id } });
       return res.status(403).json({ error: "Email ou senha inválidos." });
     }
 
@@ -159,6 +162,7 @@ router.post('/auth/staff/login', async (req, res) => {
       { expiresIn: rememberUser ? "30d" : "24h" }
     );
 
+    logEvent({ action: 'login', summary: `${staff.name} entrou no sistema`, actor: { type: 'staff', id: staff.id } });
     res.json({ token, staff: toPublicStaff(staff) });
   } catch (error) {
     console.error(error);

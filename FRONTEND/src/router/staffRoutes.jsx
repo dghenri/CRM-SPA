@@ -53,11 +53,14 @@ export const staffRoutes = (
         <Route path="users" element={<Users />} />
       </Route>
 
-      {/* SÓ ADMIN - gestão de equipe, profissões e logs (não delegável) */}
+      <Route element={<RequireStaffRole permission="logs.view" />}>
+        <Route path="logs" element={<Logs />} />
+      </Route>
+
+      {/* SÓ ADMIN - gestão de equipe e profissões (não delegável) */}
       <Route element={<RequireStaffRole allow={["Admin"]} />}>
         <Route path="employees" element={<Employees />} />
         <Route path="professions" element={<Professions />} />
-        <Route path="logs" element={<Logs />} />
       </Route>
 
       <Route path="*" element={<ErrorPageDash />} />

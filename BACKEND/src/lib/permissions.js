@@ -6,6 +6,8 @@
 // - O Admin SEMPRE tem todas as permissões e isso não é configurável.
 // - Gerenciar equipe (criar/editar/excluir funcionários) e profissões é exclusivo do Admin
 //   e NÃO é delegável (evita escalada de privilégio): essas rotas usam requireAdmin.
+// - Os logs (auditoria) são delegáveis ("logs.view"), mas NÃO fazem parte do padrão de nenhum
+//   cargo além do Admin: só vê quem o Admin marcar.
 
 export const ADMIN_ROLE = "Admin";
 export const STAFF_ROLES = ["Admin", "Manager", "Employee"];
@@ -13,12 +15,13 @@ export const STAFF_ROLES = ["Admin", "Manager", "Employee"];
 // chave -> descrição (a tela de edição do funcionário lista essas opções)
 export const PERMISSIONS = {
   "overview.view": "Ver o Overview (painel geral, gráficos, cupons e melhores clientes)",
-  "appointments.viewAll": "Ver e gerenciar os agendamentos de toda a clínica, a receita completa, e escolher o profissional responsável por sessões e procedimentos",
-  "services.manage": "Excluir procedimentos",
+  "appointments.viewAll": "Ver e gerenciar os agendamentos de toda a clínica, e a receita completa",
+  "services.manage": "Excluir procedimentos e escolher o profissional responsável",
   "products.manage": "Cadastrar e editar produtos do estoque",
   "recipes.manage": "Ver e editar receitas (insumos de cada procedimento)",
   "stock.review": "Aprovar/negar solicitações de estoque, aplicar movimentações direto e ver o histórico",
   "customers.manage": "Editar e excluir clientes",
+  "logs.view": "Visualizar os logs do sistema (quem alterou o quê e quando)",
 };
 
 export const PERMISSION_KEYS = Object.keys(PERMISSIONS);
@@ -26,7 +29,7 @@ export const PERMISSION_KEYS = Object.keys(PERMISSIONS);
 // padrão de cada cargo (Admin é tratado à parte: sempre tudo)
 export const ROLE_DEFAULT_PERMISSIONS = {
   Admin: PERMISSION_KEYS,
-  Manager: PERMISSION_KEYS.filter((k) => k !== "customers.manage"),
+  Manager: PERMISSION_KEYS.filter((k) => k !== "customers.manage" && k !== "logs.view"),
   Employee: [],
 };
 

@@ -1,0 +1,32 @@
+
+//=============================================================== AUDITORIA
+// Trilha de auditoria: quem mudou o quê e quando. Gravada automaticamente pela extensão do
+// Prisma (src/lib/prisma.js). Sem relação formal com Staff/User de propósito: o log precisa
+// sobreviver à exclusão de quem agiu (por isso guarda nome e cargo na hora). Apagado após RETENTION_DAYS.
+model AuditLog {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  createdAt   DateTime @default(now())
+
+  action      String // create | update | delete | login | login_failed
+  model       String? // Staff, Service, Coupon... (nulo em login)
+  entityId    String?
+  entityLabel String? // nome/título/código do registro, pra leitura humana
+  summary     String
+
+  before      Json? // campos que mudaram (valores antigos) ou o registro apagado
+  after       Json? // campos que mudaram (valores novos) ou o registro criado
+
+  actorType   String? // staff | user | system
+  actorId     String?
+  actorName   String?
+  actorRole   String?
+
+  ip          String?
+  method      String?
+  path        String?
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([model, entityId])
+  @@index([action, createdAt])
+}

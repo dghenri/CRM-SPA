@@ -3,6 +3,7 @@ import { ACCESS_TOKEN_KEY } from '../lib/config.js';
 import { prisma } from '../lib/prisma.js';
 import { ADMIN_ROLE, hasPermission } from '../lib/permissions.js';
 import { isSessionRevoked } from '../lib/sessionRevocation.js';
+import { setAuditActor } from '../lib/auditContext.js';
 
 //------------------------------------------------------------- MIDDLEWARE (JWT AUTH)
 export function authenticateToken(req, res, next) {
@@ -25,6 +26,7 @@ export function authenticateToken(req, res, next) {
     }
 
     req.user = decoded;
+    setAuditActor(decoded);
     next();
   });
 }

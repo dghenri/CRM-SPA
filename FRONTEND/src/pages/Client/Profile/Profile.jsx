@@ -196,7 +196,7 @@ const Profile = () => {
                 <AlertDialog.Body className="relative">
                   <p className="text-muted">
                     Você será desconectado deste dispositivo. Alterações não salvas no{" "}
-                    <strong className="text-foreground">Riviera</strong> serão perdidas.
+                    <strong className="text-foreground">Viva Bem SPA</strong> serão perdidas.
                   </p>
                 </AlertDialog.Body>
                 <AlertDialog.Footer>
@@ -236,7 +236,7 @@ const Profile = () => {
                   {loading ? "Carregando..." : user?.name || "Cliente"}
                   {!loading && pendingFields.gender && <PendingMark />}
                 </h2>
-                <span className="text-muted">{loading ? "" : user?.email}</span>
+                <span className="flex items-start text-muted">{loading ? "" : user?.email}</span>
               </div>
             </div>
             <div>

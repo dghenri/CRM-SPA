@@ -103,15 +103,15 @@ export default function AppointmentPopover({ appointment, color, onStatusChange,
                   <span className="text-xs text-muted">{appointment.clientPhone}</span>
                 )}
                 {whatsAppUrl && (
-                  <a
-                    href={whatsAppUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 rounded-lg bg-success/10 px-2.5 py-1 text-xs font-semibold text-success"
+                  <Button
+                    size="sm"
+                    variant="tertiary"
+                    className="gap-1.5 bg-success/10 text-success hover:bg-success/20"
+                    onPress={() => window.open(whatsAppUrl, "_blank", "noopener,noreferrer")}
                   >
                     <MessageCircle size={14} />
                     Confirmar sessão
-                  </a>
+                  </Button>
                 )}
               </div>
             </div>
@@ -125,13 +125,13 @@ export default function AppointmentPopover({ appointment, color, onStatusChange,
                   <Avatar.Fallback className="text-[10px]">{getInitials(appointment.professionalName)}</Avatar.Fallback>
                 </Avatar>
               ) : (
-                <IdCardLanyard size={14} />
+                <div className="h-6 w-6 flex items-center justify-center bg-surface-secondary rounded-full"><IdCardLanyard size={14} /></div>
               )}
               {appointment.professionalName || "Sem profissional definido"}
             </span>
             <div className="flex flex-wrap items-center gap-4">
               <span className="flex items-center gap-2">
-                <Calendar size={14} />
+                <div className="h-6 w-6 flex items-center justify-center bg-surface-secondary rounded-full"><Calendar size={14} /></div>
                 {appointment.start.toLocaleDateString("pt-BR", {
                   day: "2-digit",
                   month: "short",
@@ -139,7 +139,7 @@ export default function AppointmentPopover({ appointment, color, onStatusChange,
                 })}
               </span>
               <span className="flex items-center gap-2">
-                <Clock size={14} />
+                <div className="h-6 w-6 flex items-center justify-center bg-surface-secondary rounded-full"><Clock size={14} /></div>
                 {fmtTime(appointment.start)} – {fmtTime(appointment.end)}
               </span>
             </div>

@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import {
+  Avatar,
   Button,
   Chip,
   EmptyState,
-  Link,
   Popover,
   SearchField,
   Table,
@@ -12,9 +12,11 @@ import {
   Dropdown,
   Label,
 } from "@heroui/react";
-import { Check, ChevronDown, Inbox, MessageCircle } from "lucide-react";
+import { ChevronDown, Eye, Inbox, MessageCircle, UserRound } from "lucide-react";
 import { updateAppointmentStatus } from "../../../api/scheduling";
 import { notifyAppointmentsChanged } from "../Scheduling/Scheduling";
+import { assetUrl } from "../../../api/api";
+import DetailDrawer, { DetailField, DetailSection, formatDateTime } from "../../../components/DetailDrawer";
 
 /* ------------------------------ status meta ------------------------------ */
 // Mesmas chaves do enum AppointmentStatus do schema.prisma (ver SessionHistory,
@@ -72,30 +74,55 @@ function buildWhatsAppUrl(phoneDigits, message) {
 
 /* -------------------------------- actions -------------------------------- */
 
-function ContactAction({ row }) {
+// Link do WhatsApp com a mensagem certa pro status do agendamento (null se não há telefone)
+function getContactHref(row) {
   const phoneDigits = (row.phone || "").replace(/\D/g, "");
+  if (!phoneDigits) return null;
+  const buildMessage = CONTACT_MESSAGE_BY_STATUS[row.status] ?? CONTACT_MESSAGE_BY_STATUS.Scheduled;
+  return buildWhatsAppUrl(phoneDigits, buildMessage(row));
+}
 
-  if (!phoneDigits) {
+const openWhatsApp = (href) => window.open(href, "_blank", "noopener,noreferrer");
+
+// Botão do WhatsApp no padrão do HeroUI (mesmo tamanho/forma do botão de status ao lado).
+// Com `label`, vira um botão largo com texto (usado no drawer).
+function ContactAction({ row, label }) {
+  const href = getContactHref(row);
+
+  if (!href) {
     return <span className="text-xs font-medium text-muted">Sem telefone</span>;
   }
 
-  const buildMessage = CONTACT_MESSAGE_BY_STATUS[row.status] ?? CONTACT_MESSAGE_BY_STATUS.Scheduled;
-  const href = buildWhatsAppUrl(phoneDigits, buildMessage(row));
-
   return (
-    <Link
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-success/10 px-3 py-1.5 text-xs font-semibold text-success no-underline hover:bg-success/20"
+    <Button
+      size="sm"
+      isIconOnly={!label}
+      variant="tertiary"
+      aria-label={`Enviar mensagem no WhatsApp para ${row.name}`}
+      className="gap-1.5 bg-success/10 text-success hover:bg-success/20"
+      onPress={() => openWhatsApp(href)}
     >
       <MessageCircle size={14} />
-      Contatar
-    </Link>
+      {label}
+    </Button>
   );
 }
 
 // Popover pra mudar o status do agendamento direto na tabela.
+function ViewAction({ row, onView }) {
+  return (
+    <Button
+      size="sm"
+      isIconOnly
+      variant="tertiary"
+      aria-label={`Ver detalhes do agendamento de ${row.name}`}
+      onPress={() => onView(row.id)}
+    >
+      <Eye size={14} />
+    </Button>
+  );
+}
+
 function StatusPopover({ row }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -158,6 +185,9 @@ function StatusPopover({ row }) {
 export default function SessionTable({ appointments = [] }) {
   const [query, setQuery] = useState("");
   const [activeStatuses, setActiveStatuses] = useState(() => new Set());
+  // drawer de detalhes: guarda só o id e busca a linha em `rows`, assim o status
+  // mostrado acompanha a atualização feita pelo próprio drawer
+  const [viewId, setViewId] = useState(null);
 
   /* ----------------------------------- linhas ----------------------------------- */
   const rows = useMemo(() => {
@@ -173,6 +203,8 @@ export default function SessionTable({ appointments = [] }) {
         raw: a,
       }));
   }, [appointments]);
+
+  const viewRow = useMemo(() => rows.find((r) => r.id === viewId) ?? null, [rows, viewId]);
 
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -251,6 +283,7 @@ export default function SessionTable({ appointments = [] }) {
                 <span>{row.phone || "Sem telefone"}</span>
               </div>
               <div className="flex items-center gap-2 border-t border-border pt-2">
+                <ViewAction row={row} onView={setViewId} />
                 <StatusPopover row={row} />
                 <ContactAction row={row} />
               </div>
@@ -265,7 +298,7 @@ export default function SessionTable({ appointments = [] }) {
           <Table.Content aria-label="Agendamentos" className="min-w-[860px]">
             <Table.Header className="sticky top-0 z-10 bg-surface-secondary">
               {columns.map((col) => (
-                <Table.Column key={col.id} id={col.id} isRowHeader={col.id === "name"}>
+                <Table.Column key={col.id} id={col.id} isRowHeader={col.id === "name"} className={col.id === "actions" ? "text-end" : undefined}>
                   {col.name}
                 </Table.Column>
               ))}
@@ -291,7 +324,8 @@ export default function SessionTable({ appointments = [] }) {
                       </Chip>
                     </Table.Cell>
                     <Table.Cell>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-end gap-2">
+                        <ViewAction row={row} onView={setViewId} />
                         <StatusPopover row={row} />
                         <ContactAction row={row} />
                       </div>
@@ -303,6 +337,74 @@ export default function SessionTable({ appointments = [] }) {
           </Table.Content>
         </Table.ScrollContainer>
       </Table>
+
+      {/* drawer: ficha completa do agendamento */}
+      <DetailDrawer
+        isOpen={!!viewRow}
+        onOpenChange={(open) => !open && setViewId(null)}
+        person={viewRow && { id: viewRow.id, name: viewRow.name === "—" ? "Sem cliente vinculado" : viewRow.name, email: viewRow.phone || undefined }}
+        avatarSrc={assetUrl(viewRow?.raw.clientPhoto)}
+      >
+        {viewRow && (
+          <>
+            <DetailSection title="Sessão">
+              <DetailField label="Procedimento" wide>{viewRow.service}</DetailField>
+              <DetailField label="Código">
+                <span className="font-mono">{viewRow.code}</span>
+              </DetailField>
+              <DetailField label="Status">
+                <div className="flex items-center gap-2">
+                  <Chip size="sm" variant="soft" color={StatusMap[viewRow.status]?.color ?? "default"}>
+                    {StatusMap[viewRow.status]?.label ?? viewRow.status}
+                  </Chip>
+                  <StatusPopover row={viewRow} />
+                </div>
+              </DetailField>
+              <DetailField label="Início">{formatDateTime(viewRow.raw.start)}</DetailField>
+              <DetailField label="Término">{formatDateTime(viewRow.raw.end)}</DetailField>
+              <DetailField label="Duração">
+                {`${Math.round((viewRow.raw.end - viewRow.raw.start) / 60_000)} min`}
+              </DetailField>
+            </DetailSection>
+
+            <DetailSection title="Cliente">
+              <DetailField label="Nome">{viewRow.name === "—" ? null : viewRow.name}</DetailField>
+              <DetailField label="Telefone">{viewRow.phone}</DetailField>
+              {viewRow.phone && (
+                <div className="sm:col-span-2">
+                  <ContactAction row={viewRow} label="Falar no WhatsApp" />
+                </div>
+              )}
+            </DetailSection>
+
+            <DetailSection title="Profissional">
+              <DetailField label="Responsável" wide>
+                {viewRow.raw.professionalName && (
+                  <div className="flex items-center gap-2">
+                    <Avatar size="sm" className="size-7">
+                      {viewRow.raw.professionalPhoto && (
+                        <Avatar.Image alt={viewRow.raw.professionalName} src={assetUrl(viewRow.raw.professionalPhoto)} />
+                      )}
+                      <Avatar.Fallback>
+                        <UserRound className="size-4" />
+                      </Avatar.Fallback>
+                    </Avatar>
+                    {viewRow.raw.professionalName}
+                  </div>
+                )}
+              </DetailField>
+            </DetailSection>
+
+            {viewRow.raw.notes && (
+              <DetailSection title="Anotações">
+                <DetailField label="Observações" wide>
+                  <span className="whitespace-pre-wrap font-medium">{viewRow.raw.notes}</span>
+                </DetailField>
+              </DetailSection>
+            )}
+          </>
+        )}
+      </DetailDrawer>
     </div>
   );
 }

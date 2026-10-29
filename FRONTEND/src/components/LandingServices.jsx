@@ -13,27 +13,34 @@ function ClientServiceCard({ service }) {
   const navigate = useNavigate();
   const tiltRef = useRef(null);
   const imageRef = useRef(null);
+  const frameRef = useRef(0);
   const [loaded, setLoaded] = useState(false);
 
   // imagem que já estava no cache do navegador não dispara o onLoad
   useEffect(() => {
     if (imageRef.current?.complete) setLoaded(true);
+    return () => cancelAnimationFrame(frameRef.current);
   }, []);
 
+  // Inclinação 3D: só em aparelhos com mouse. O transform é escrito direto no elemento
+  // (no máximo 1x por frame), então no celular o card nem cria contexto 3D.
   function handlePointerMove(event) {
-    if (!canTilt()) return;
-    const element = tiltRef.current;
-    const rect = element.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / rect.width - 0.5;
-    const y = (event.clientY - rect.top) / rect.height - 0.5;
-    element.style.setProperty("--ry", `${(x * 7).toFixed(2)}deg`);
-    element.style.setProperty("--rx", `${(-y * 7).toFixed(2)}deg`);
+    if (event.pointerType !== "mouse" || !canTilt()) return;
+    const { clientX, clientY } = event;
+    cancelAnimationFrame(frameRef.current);
+    frameRef.current = requestAnimationFrame(() => {
+      const element = tiltRef.current;
+      if (!element) return;
+      const rect = element.getBoundingClientRect();
+      const x = (clientX - rect.left) / rect.width - 0.5;
+      const y = (clientY - rect.top) / rect.height - 0.5;
+      element.style.transform = `perspective(900px) rotateX(${(-y * 7).toFixed(2)}deg) rotateY(${(x * 7).toFixed(2)}deg)`;
+    });
   }
 
   function handlePointerLeave() {
-    const element = tiltRef.current;
-    element.style.setProperty("--ry", "0deg");
-    element.style.setProperty("--rx", "0deg");
+    cancelAnimationFrame(frameRef.current);
+    if (tiltRef.current) tiltRef.current.style.transform = "";
   }
 
   return (
@@ -42,11 +49,10 @@ function ClientServiceCard({ service }) {
       <div
         ref={tiltRef}
         className="rounded-[28px] bg-background p-1.5 shadow-lg ring-1 ring-black/5 transition-[transform,scale,box-shadow] duration-300 ease-out group-hover:scale-[1.03] group-hover:shadow-2xl"
-        style={{ transform: "perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg))" }}
       >
         <Card className="relative h-150 overflow-hidden rounded-[22px] border-none">
           {/* enquanto a foto não chega, um bloco pulsando ocupa o lugar */}
-          <div className={`absolute inset-0 animate-pulse bg-default transition-opacity duration-500 ${loaded ? "opacity-0" : "opacity-100"}`} />
+          {!loaded && <div className="absolute inset-0 animate-pulse bg-default" />}
 
           {/* Foto de fundo — ocupa o card inteiro como um background */}
           <img
@@ -62,20 +68,12 @@ function ClientServiceCard({ service }) {
           />
 
           {service.category && (
-            <span className="absolute left-4 top-4 z-10 rounded-full bg-black/35 px-3 py-1 text-xs font-medium text-white backdrop-blur-md">
+            <span className="absolute left-4 top-4 z-10 rounded-full bg-black/50 px-3 py-1 text-xs font-medium text-white">
               {service.category}
             </span>
           )}
 
-          {/* Blur do rodapé: uma cópia BORRADA da própria foto, revelada só embaixo por uma máscara.
-              Não usa backdrop-filter: ele + máscara + scale no hover renderiza com falhas (faixa dura, cantos). */}
-          <img
-            src={service.image}
-            alt=""
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 h-full w-full object-cover blur-xl [mask-image:linear-gradient(to_top,black_18%,transparent_36%)]"
-          />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-5 h-[40%] bg-linear-to-t from-black/85 via-black/45 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-5 h-[55%] bg-linear-to-t from-black/90 via-black/55 to-transparent" />
 
           {/* Conteúdo textual */}
           <Card.Content className="absolute inset-x-0 bottom-0 z-10 flex flex-col gap-3 p-5 text-white">

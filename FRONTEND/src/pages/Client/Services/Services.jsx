@@ -231,7 +231,7 @@ const Services = () => {
                       onPress={() => setFavoritesOnly((v) => !v)}
                       className={`rounded-full border-none ${
                         favoritesOnly
-                          ? "bg-black text-white"
+                          ? "bg-foreground text-background"
                           : "bg-surface-secondary text-foreground"
                       }`}
                     >

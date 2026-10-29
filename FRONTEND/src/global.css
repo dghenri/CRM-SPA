@@ -4,6 +4,12 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
 
+/* O variant dark: do Tailwind v4 segue por padrão o prefers-color-scheme do
+   sistema. Aqui ele passa a seguir o tema ESCOLHIDO no app (classe .dark ou
+   data-theme="dark" no <html>), senão quem escolhe "Escuro" com o aparelho em
+   modo claro (ou o contrário) ficava com os estilos dark: errados. */
+@custom-variant dark (&:is(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *));
+
 @theme {
   --color-brand: var(--brand);
   --color-live-clock-bg: var(--live-clock-bg);
@@ -68,6 +74,7 @@
 .default,
 [data-theme="light"],
 [data-theme="default"] {
+  color-scheme: light;
   /* Theme Colors (Light Mode) */
   --accent: oklch(62.04% 0.1950 253.83);
   --accent-foreground: oklch(99.11% 0 0);

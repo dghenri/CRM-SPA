@@ -37,7 +37,7 @@ export default function LocationCard({ name, address, query = address }) {
   const routeUrl = `https://www.google.com/maps/dir/?api=1&destination=${encoded}`;
 
   return (
-    <div ref={ref} className="overflow-hidden rounded-[28px] border border-border bg-surface shadow-xl ring-1 ring-black/5">
+    <div ref={ref} className="overflow-hidden rounded-[28px] border border-border bg-surface shadow-xl ring-1 ring-black/5 dark:ring-white/10">
       <div className="relative h-80 w-full bg-default sm:h-96">
         {near ? (
           <iframe

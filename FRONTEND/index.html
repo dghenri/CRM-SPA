@@ -2,6 +2,8 @@
 <html lang="pt-BR" translate="no">
   <head>
     <meta charset="UTF-8" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f7f7f7" />
     <!-- Aplica o tema salvo ANTES da primeira pintura (sem piscar claro->escuro).
          O useTheme do HeroUI guarda a escolha em localStorage ("heroui-theme"), mas só
          aplica no <html> enquanto um componente que usa o hook está na tela (o
@@ -20,6 +22,9 @@
             root.classList.remove("light", "dark");
             root.classList.add(resolved);
             root.setAttribute("data-theme", resolved);
+            // barra do navegador/PWA acompanha o tema
+            var meta = document.querySelector('meta[name="theme-color"]');
+            if (meta) meta.setAttribute("content", resolved === "dark" ? "#1f1f1f" : "#f7f7f7");
           };
           apply();
           // no modo "Sistema", acompanha a troca de tema do aparelho mesmo fora do Perfil

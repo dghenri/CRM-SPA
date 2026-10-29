@@ -33,7 +33,7 @@ function ServiceCard({ service, favorited, onToggleFavorite, onSelect }) {
       }}
       className="group w-full cursor-pointer"
     >
-      <div className="overflow-hidden rounded-[26px] bg-overlay shadow-md ring-1 ring-black/5 transition-shadow duration-300 group-hover:shadow-xl">
+      <div className="overflow-hidden rounded-[26px] bg-overlay shadow-md ring-1 ring-black/5 dark:ring-white/10 transition-shadow duration-300 group-hover:shadow-xl">
         <div className="relative">
           <img
             src={service.image}

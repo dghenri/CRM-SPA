@@ -13,6 +13,7 @@ import {
   Receipt,
   Megaphone,
   Briefcase,
+  TrendingUp,
 } from "lucide-react";
 
 // Cargos existentes em prisma.Staff.role - usados pra filtrar quais itens
@@ -46,6 +47,14 @@ export const mainItems = [
     Icon: CalendarRange,
     to: "/staff/scheduling",
     badges: [{ key: "scheduling", tone: "accent", label: "sessões agendadas hoje" }],
+    roles: ALL_STAFF_ROLES,
+  },
+  {
+    key: "performance",
+    label: "Progressão",
+    tooltip: "Progressão do funcionário",
+    Icon: TrendingUp,
+    to: "/staff/performance",
     roles: ALL_STAFF_ROLES,
   },
   {

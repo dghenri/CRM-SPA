@@ -11,6 +11,7 @@ import Services from "../pages/Staff/Services/Services";
 import Coupons from "../pages/Staff/Coupons/Coupons";
 import Storage from "../pages/Staff/Stock/Stock";
 import Revenue from "../pages/Staff/Revenue/Revenue";
+import StaffPerformance from "../pages/Staff/Performance/StaffPerformance";
 import Communication from "../pages/Staff/Communication/Communication";
 
 import Settings from "../pages/Staff/Profile/Settings";
@@ -41,6 +42,7 @@ export const staffRoutes = (
       <Route path="coupons" element={<Coupons />} />
       <Route path="storage" element={<Storage />} />
       <Route path="revenue" element={<Revenue />} />
+      <Route path="performance" element={<StaffPerformance />} />
       <Route path="communication" element={<Communication />} />
 
       {/* POR PERMISSÃO - Admin sempre entra; Manager/Employee só se tiverem a permissão

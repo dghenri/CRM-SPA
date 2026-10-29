@@ -1,0 +1,82 @@
+diff -ruN '--exclude=node_modules' '--exclude=dist' a/FRONTEND/index.html b/FRONTEND/index.html
+--- a/FRONTEND/index.html	2026-10-29 12:08:09.844151078 +0000
++++ b/FRONTEND/index.html	2026-10-29 12:08:13.433012159 +0000
+@@ -2,6 +2,8 @@
+ <html lang="pt-BR" translate="no">
+   <head>
+     <meta charset="UTF-8" />
++    <meta name="color-scheme" content="light dark" />
++    <meta name="theme-color" content="#f7f7f7" />
+     <!-- Aplica o tema salvo ANTES da primeira pintura (sem piscar claro->escuro).
+          O useTheme do HeroUI guarda a escolha em localStorage ("heroui-theme"), mas só
+          aplica no <html> enquanto um componente que usa o hook está na tela (o
+@@ -20,6 +22,9 @@
+             root.classList.remove("light", "dark");
+             root.classList.add(resolved);
+             root.setAttribute("data-theme", resolved);
++            // barra do navegador/PWA acompanha o tema
++            var meta = document.querySelector('meta[name="theme-color"]');
++            if (meta) meta.setAttribute("content", resolved === "dark" ? "#1f1f1f" : "#f7f7f7");
+           };
+           apply();
+           // no modo "Sistema", acompanha a troca de tema do aparelho mesmo fora do Perfil
+diff -ruN '--exclude=node_modules' '--exclude=dist' a/FRONTEND/src/components/LocationCard.jsx b/FRONTEND/src/components/LocationCard.jsx
+--- a/FRONTEND/src/components/LocationCard.jsx	2026-10-29 12:08:09.849188924 +0000
++++ b/FRONTEND/src/components/LocationCard.jsx	2026-10-29 12:08:09.899498604 +0000
+@@ -37,7 +37,7 @@
+   const routeUrl = `https://www.google.com/maps/dir/?api=1&destination=${encoded}`;
+ 
+   return (
+-    <div ref={ref} className="overflow-hidden rounded-[28px] border border-border bg-surface shadow-xl ring-1 ring-black/5">
++    <div ref={ref} className="overflow-hidden rounded-[28px] border border-border bg-surface shadow-xl ring-1 ring-black/5 dark:ring-white/10">
+       <div className="relative h-80 w-full bg-default sm:h-96">
+         {near ? (
+           <iframe
+diff -ruN '--exclude=node_modules' '--exclude=dist' a/FRONTEND/src/global.css b/FRONTEND/src/global.css
+--- a/FRONTEND/src/global.css	2026-10-29 12:08:09.849917620 +0000
++++ b/FRONTEND/src/global.css	2026-10-29 12:08:09.898495412 +0000
+@@ -4,6 +4,12 @@
+ @import "shadcn/tailwind.css";
+ @import "@fontsource-variable/geist";
+ 
++/* O variant dark: do Tailwind v4 segue por padrão o prefers-color-scheme do
++   sistema. Aqui ele passa a seguir o tema ESCOLHIDO no app (classe .dark ou
++   data-theme="dark" no <html>), senão quem escolhe "Escuro" com o aparelho em
++   modo claro (ou o contrário) ficava com os estilos dark: errados. */
++@custom-variant dark (&:is(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *));
++
+ @theme {
+   --color-brand: var(--brand);
+   --color-live-clock-bg: var(--live-clock-bg);
+@@ -68,6 +74,7 @@
+ .default,
+ [data-theme="light"],
+ [data-theme="default"] {
++  color-scheme: light;
+   /* Theme Colors (Light Mode) */
+   --accent: oklch(62.04% 0.1950 253.83);
+   --accent-foreground: oklch(99.11% 0 0);
+diff -ruN '--exclude=node_modules' '--exclude=dist' a/FRONTEND/src/pages/Client/Services/Services.jsx b/FRONTEND/src/pages/Client/Services/Services.jsx
+--- a/FRONTEND/src/pages/Client/Services/Services.jsx	2026-10-29 12:08:09.850508653 +0000
++++ b/FRONTEND/src/pages/Client/Services/Services.jsx	2026-10-29 12:08:09.899007996 +0000
+@@ -231,7 +231,7 @@
+                       onPress={() => setFavoritesOnly((v) => !v)}
+                       className={`rounded-full border-none ${
+                         favoritesOnly
+-                          ? "bg-black text-white"
++                          ? "bg-foreground text-background"
+                           : "bg-surface-secondary text-foreground"
+                       }`}
+                     >
+diff -ruN '--exclude=node_modules' '--exclude=dist' a/FRONTEND/src/pages/Client/Services/UserServices.jsx b/FRONTEND/src/pages/Client/Services/UserServices.jsx
+--- a/FRONTEND/src/pages/Client/Services/UserServices.jsx	2026-10-29 12:08:09.850528103 +0000
++++ b/FRONTEND/src/pages/Client/Services/UserServices.jsx	2026-10-29 12:08:09.899270899 +0000
+@@ -33,7 +33,7 @@
+       }}
+       className="group w-full cursor-pointer"
+     >
+-      <div className="overflow-hidden rounded-[26px] bg-overlay shadow-md ring-1 ring-black/5 transition-shadow duration-300 group-hover:shadow-xl">
++      <div className="overflow-hidden rounded-[26px] bg-overlay shadow-md ring-1 ring-black/5 dark:ring-white/10 transition-shadow duration-300 group-hover:shadow-xl">
+         <div className="relative">
+           <img
+             src={service.image}

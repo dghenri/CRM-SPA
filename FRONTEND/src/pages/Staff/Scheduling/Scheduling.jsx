@@ -263,7 +263,7 @@ export default function Agenda() {
   const [clients, setClients] = useState([]);
   const [services, setServices] = useState([]);
   const [editing, setEditing] = useState(null);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [dragEnabled, setDragEnabled] = useState(false);
@@ -463,7 +463,7 @@ export default function Agenda() {
         onPrev={() => navigate(-1)}
         onNext={() => navigate(1)}
         onToday={() => navigate(0)}
-        onNew={() => setCreating(true)}
+        onNew={() => setCreating({})}
       />
 
       {loadError && (
@@ -498,6 +498,12 @@ export default function Agenda() {
             onDelete={onDelete}
             onEdit={(a) => setEditing(a)}
             onStatusChange={onStatusChange}
+            onScheduleReturn={(appointment) => setCreating({
+              clientId: appointment.clientId,
+              serviceId: appointment.serviceId,
+              professionalId: appointment.professionalId,
+              defaultDate: startOfDay(new Date()),
+            })}
             dragEnabled={dragEnabled && !isMobile}
           />
         )}
@@ -524,22 +530,23 @@ export default function Agenda() {
 
       {creating && (
         <CreateModal
-          defaultDate={cursor}
           clients={clients}
           services={selectableServices}
           staff={staff}
           isAdmin={isAdmin}
-          onClose={() => setCreating(false)}
-          onSave={(a) => {
-            onCreate(a);
-            setCreating(false);
+          initialValues={creating}
+          defaultDate={creating.defaultDate ?? cursor}
+          onClose={() => setCreating(null)}
+          onSave={async (a) => {
+            const created = await onCreate(a);
+            if (created) setCreating(null);
           }}
         />
       )}
 
       <Button
         isIconOnly
-        onPress={() => setCreating(true)}
+        onPress={() => setCreating({})}
         aria-label="Novo agendamento"
         className="fixed bottom-5 right-5 z-30 h-13 w-13 sm:bottom-7 sm:right-7"
       >
@@ -832,7 +839,7 @@ function Header({ title, view, onViewChange, onPrev, onNext, onToday }) {
 }
 
 /* ------------------------------ TimeGrid ----------------------------- */
-function TimeGrid({ cursor, view, appointments, onCreate, onUpdate, onDelete, onEdit, onStatusChange, dragEnabled = false }) {
+function TimeGrid({ cursor, view, appointments, onCreate, onUpdate, onDelete, onEdit, onStatusChange, onScheduleReturn, dragEnabled = false }) {
   const days = useMemo(() => {
     if (view === "day") return [startOfDay(cursor)];
     const s = startOfWeek(cursor);
@@ -1158,6 +1165,7 @@ function TimeGrid({ cursor, view, appointments, onCreate, onUpdate, onDelete, on
                         onEdit={() => onEdit(a)}
                         onDelete={() => onDelete(a.id)} /* Abrir AlertDialog */
                         onStatusChange={onStatusChange}
+                        onScheduleReturn={onScheduleReturn}
                         onSaveNotes={(id, notes) => onUpdate({ ...a, notes })}
                         onDuplicate={() => {
                           const dur = a.end.getTime() - a.start.getTime();
@@ -1605,24 +1613,30 @@ function EditModal({ appointment, clients = [], services = [], staff = [], isAdm
 
 /* ------------------------------ CreateModal ---------------------------- */
 
-function CreateModal({ defaultDate, clients = [], services = [], staff = [], isAdmin = false, onClose, onSave }) {
-  const availableServices = useMemo(() => services.filter((s) => s.available), [services]);
+function CreateModal({ defaultDate, initialValues = {}, clients = [], services = [], staff = [], isAdmin = false, onClose, onSave }) {
+  const availableServices = useMemo(
+    () => services.filter((s) => s.available || s.id === initialValues.serviceId),
+    [services, initialValues.serviceId]
+  );
   const servicesById = useMemo(() => Object.fromEntries(services.map((s) => [s.id, s])), [services]);
   const clientsById = useMemo(() => Object.fromEntries(clients.map((c) => [c.id, c])), [clients]);
 
   const now = new Date();
   const initialStart = new Date(defaultDate);
-  initialStart.setHours(now.getHours(), 0, 0, 0);
-  const initialEnd = addMinutes(initialStart, 60);
+  initialStart.setHours(now.getHours() + (initialValues.clientId ? 1 : 0), 0, 0, 0);
+  const initialService = servicesById[initialValues.serviceId];
+  const initialEnd = addMinutes(initialStart, initialService?.duration ?? 60);
 
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(initialValues.title ?? initialService?.title ?? "");
   const [date, setDate] = useState(fmtDateInput(initialStart));
   const [endDate, setEndDate] = useState(fmtDateInput(initialEnd));
   const [startT, setStartT] = useState(fmtTimeInput(initialStart));
   const [endT, setEndT] = useState(fmtTimeInput(initialEnd));
-  const [serviceId, setServiceId] = useState(null);
-  const [clientId, setClientId] = useState(null);
-  const [professionalId, setProfessionalId] = useState(null);
+  const [serviceId, setServiceId] = useState(initialValues.serviceId ?? null);
+  const [clientId, setClientId] = useState(initialValues.clientId ?? null);
+  const [professionalId, setProfessionalId] = useState(
+    initialValues.professionalId ?? initialService?.professionalId ?? null
+  );
 
   // Ao selecionar um procedimento: preenche o título com o nome do procedimento e
   // pré-seleciona o horário de término somando a duração do procedimento ao
@@ -1669,7 +1683,8 @@ function CreateModal({ defaultDate, clients = [], services = [], staff = [], isA
          <div className="contents" onKeyDown={confirmOnEnter(save, false)}>
           <AlertDialog.Header>
             <AlertDialog.Heading className="flex items-center text-xl gap-2 mb-4">
-              <Plus />Novo evento
+              <Plus />
+              {initialValues.clientId ? "Programar retorno" : "Novo evento"}
             </AlertDialog.Heading>
           </AlertDialog.Header>
           <AlertDialog.Body>

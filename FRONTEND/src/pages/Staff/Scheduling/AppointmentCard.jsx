@@ -16,6 +16,7 @@ export default function AppointmentCard({
   onDelete,
   onDuplicate,
   onStatusChange,
+  onScheduleReturn,
   onSaveNotes,
   overlay = false,
   dragEnabled = true,
@@ -90,6 +91,7 @@ export default function AppointmentCard({
             appointment={appointment}
             color={c}
             onStatusChange={(status) => onStatusChange?.(appointment.id, status)}
+            onScheduleReturn={() => onScheduleReturn?.(appointment)}
             onSaveNotes={(notes) => onSaveNotes?.(appointment.id, notes)}
           />
         )}

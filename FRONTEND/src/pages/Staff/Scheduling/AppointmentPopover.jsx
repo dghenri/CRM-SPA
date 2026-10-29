@@ -51,7 +51,7 @@ function buildClientWhatsAppUrl(appointment) {
  * (confirmar por WhatsApp, mudar status, anotar algo) pra cada agendamento
  * da agenda do funcionário.
  */
-export default function AppointmentPopover({ appointment, color, onStatusChange, onSaveNotes }) {
+export default function AppointmentPopover({ appointment, color, onStatusChange, onScheduleReturn, onSaveNotes }) {
   const [notes, setNotes] = useState(appointment.notes ?? "");
 
   // se o popover for reaberto num agendamento diferente (ou as anotações
@@ -169,6 +169,17 @@ export default function AppointmentPopover({ appointment, color, onStatusChange,
               </Select.Popover>
             </Select>
           </div>
+
+          {appointment.status === "Completed" && appointment.clientId && (
+            <Button
+              variant="tertiary"
+              className="mt-3 w-full"
+              onPress={onScheduleReturn}
+            >
+              <Calendar size={16} />
+              Programar retorno
+            </Button>
+          )}
 
           <div className="mt-4">
             <Label htmlFor={`ap-notes-${appointment.id}`} className="mb-1 block text-muted">
